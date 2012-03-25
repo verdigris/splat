@@ -1,6 +1,8 @@
 #include <Python.h>
 #include <math.h>
 
+#define MAX_CHANNELS 16
+
 static PyObject *geomusic_sine(PyObject *self, PyObject *args)
 {
 	PyObject *data;
@@ -10,8 +12,8 @@ static PyObject *geomusic_sine(PyObject *self, PyObject *args)
 	PyObject *levels_tuple;
 
 	Py_ssize_t n_channels;
-	float levels[16];
-	PyObject *channels[16];
+	float levels[MAX_CHANNELS];
+	PyObject *channels[MAX_CHANNELS];
 	Py_ssize_t c, i;
 	float k;
 
@@ -21,7 +23,7 @@ static PyObject *geomusic_sine(PyObject *self, PyObject *args)
 
 	n_channels = PyTuple_Size(levels_tuple);
 
-	if (n_channels > 16) {
+	if (n_channels > MAX_CHANNELS) {
 		fprintf(stderr, "Too many channels: %zi\n", n_channels);
 		return NULL;
 	}
