@@ -1,5 +1,5 @@
 import math
-from data import Fragment
+from spam import sine
 
 class Generator(object):
     def __init__(self, frag):
@@ -28,14 +28,3 @@ class Generator(object):
     def _check_levels(self, levels):
         if len(levels) != self.frag.channels:
             raise Exception("Channels mismatch")
-
-
-def sine(sample_rate, freq, duration, levels):
-    k = 2 * math.pi * freq
-    frag = Fragment(len(levels), sample_rate)
-    n = frag.resize(duration)
-    for i in range(n):
-        s = math.sin(k * i / sample_rate)
-        for c, l in enumerate(levels):
-            frag.data[c][i] = s * l
-    return frag

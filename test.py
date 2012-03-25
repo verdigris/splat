@@ -5,7 +5,7 @@ sys.path.append('..')
 import geomusic as geo
 
 # Fixed parameters
-l = 7.0 # total length in seconds
+l = 2.0 # total length in seconds
 p = 8.0 # sounds per seconds
 b = 55.0 # base frequency in Hz
 m = 2 ** 7 # frequency span coeff
@@ -49,7 +49,11 @@ def main(argv):
     return True
 
 if __name__ == '__main__':
+    import time
+    start = time.time()
     ret = main(sys.argv)
+    stop = time.time()
+    print("Total time: {0:.3f}".format(stop - start))
     if ret is True:
         sys.exit(0)
     else:
