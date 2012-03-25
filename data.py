@@ -1,5 +1,30 @@
 import os
 import wave
+try:
+    import _geomusic
+    use_c = True
+except ImportError:
+    use_c = False
+
+def _py_make_raw_bytes(data, length, sample_width):
+    if sample_width != 2:
+        raise Exception("only 16 bits for now...")
+    raw_data = list()
+    for i in range(length):
+        for channel in data:
+            sample = channel[i]
+            if abs(sample) > 1.0:
+                sample /= abs(sample)
+            raw_sample = int(sample * 32767)
+            raw_data.append(raw_sample & 0xFF)
+            raw_data.append((raw_sample & 0xFF00) >> 8)
+    return bytearray(raw_data)
+
+if False: # use_c:
+    make_raw_bytes = _geomusic.make_raw_bytes
+else:
+    make_raw_bytes = _py_make_raw_bytes
+
 
 def open_audio_file(file_name, mode):
     ext = file_name.rpartition('.')[2]
@@ -60,15 +85,4 @@ class Fragment(object):
         f.close()
 
     def get_raw_bytes(self, sample_width):
-        if sample_width != 2:
-            raise Exception("only 16 bits for now...")
-        raw_data = list()
-        for i in range(self.length):
-            for channel in self.data:
-                sample = channel[i]
-                if abs(sample) > 1.0:
-                    sample /= abs(sample)
-                raw_sample = int(sample * 32767)
-                raw_data.append(raw_sample & 0xFF)
-                raw_data.append((raw_sample & 0xFF00) >> 8)
-        return bytearray(raw_data)
+        return make_raw_bytes(self.data, self.length, sample_width)
