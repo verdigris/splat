@@ -10,10 +10,11 @@
 
 struct Fragment_object {
 	PyObject_HEAD;
+	int init;
 	unsigned n_channels;
 	unsigned rate;
 	Py_ssize_t length;
-	float **data;
+	float *data[MAX_CHANNELS];
 	long sample_size;
 };
 typedef struct Fragment_object Fragment;
@@ -22,14 +23,13 @@ static PyTypeObject geomusic_FragmentType;
 
 static void Fragment_dealloc(Fragment *self)
 {
-	if (self->data) {
+	if (self->init) {
 		unsigned i;
 
 		for (i = 0; i < self->n_channels; ++i)
 			free(self->data[i]);
 
-		free(self->data);
-		self->data = NULL;
+		self->init = 0;
 	}
 
 	self->ob_type->tp_free((PyObject *)self);
@@ -48,15 +48,8 @@ static int Fragment_init(Fragment *self, PyObject *args, PyObject *kw)
 	if (!PyArg_ParseTuple(args, "IIf", &n_channels, &rate, &duration))
 		return -1;
 
-	if (duration < 0.0) {
-		/* invalid arguments */
-		return -1;
-	}
-
-	self->data = malloc(n_channels * sizeof(float *));
-
-	if (!self->data) {
-		/* memory error */
+	if ((duration < 0.0) || (n_channels > MAX_CHANNELS)) {
+		fprintf(stderr, "invalid arguments\n");
 		return -1;
 	}
 
@@ -77,6 +70,7 @@ static int Fragment_init(Fragment *self, PyObject *args, PyObject *kw)
 	self->n_channels = n_channels;
 	self->rate = rate;
 	self->length = length;
+	self->init = 1;
 
 	return 0;
 }
@@ -92,7 +86,7 @@ static PyObject *Fragment_new(PyTypeObject *type, PyObject *args, PyObject *kw)
 		return NULL;
 	}
 
-	self->data = NULL;
+	self->init = 0;
 	self->sample_size = 0;
 
 	return (PyObject *)self;
