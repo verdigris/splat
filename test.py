@@ -29,9 +29,9 @@ def main(argv):
 
     print("mode: {0}, file name: {1}".format(mode, file_name))
 
-    frag = geo.Fragment(2, 48000)
+    frag = geo.Fragment(2, 48000, l)
     gen = geo.Generator(frag)
-    gen.set_levels((0.7, 0.7))
+    gen.levels = (0.7, 0.7)
     k, func = modes[mode]
     n = int(l * p)
     t = 0.0

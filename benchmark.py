@@ -13,10 +13,8 @@ def bm(name, call, *args, **kw):
 
 def main(argv):
     time_s = 10.0
-    frag = bm('Fragment', geo.Fragment, 2, 48000)
-    bm('resize', frag.resize, time_s)
-    gen = bm('Generator', geo.Generator, frag)
-    bm('set_levels', gen.set_levels, ((0.7, 0.7)))
+    frag = bm('Fragment', geo.Fragment, 2, 48000, time_s)
+    gen = bm('Generator', geo.Generator, frag, ((0.7, 0.7)))
     bm('sine', gen.sine, 1000, 0, time_s)
     raw = bm('get_raw_bytes', frag.get_raw_bytes, 2)
     return True
