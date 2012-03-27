@@ -15,7 +15,6 @@ struct Fragment_object {
 	unsigned rate;
 	Py_ssize_t length;
 	float *data[MAX_CHANNELS];
-	long sample_size;
 };
 typedef struct Fragment_object Fragment;
 
@@ -87,7 +86,6 @@ static PyObject *Fragment_new(PyTypeObject *type, PyObject *args, PyObject *kw)
 	}
 
 	self->init = 0;
-	self->sample_size = 0;
 
 	return (PyObject *)self;
 }
@@ -126,6 +124,7 @@ static int Fragment_sq_ass_item(Fragment *self, Py_ssize_t i, PyObject *v)
 {
 	Py_ssize_t c;
 
+	/* ToDo: also accept a list, or even any sequence */
 	if (!PyTuple_CheckExact(v)) {
 		fprintf(stderr, "not a tuple\n");
 		return -1;
@@ -230,7 +229,7 @@ static PyObject *Fragment_resize(Fragment *self, PyObject *args)
 	Py_RETURN_NONE;
 }
 
-PyObject *Fragment_mix(Fragment *self, PyObject *args)
+static PyObject *Fragment_mix(Fragment *self, PyObject *args)
 {
 	Fragment *frag;
 	float start;
@@ -266,11 +265,75 @@ PyObject *Fragment_mix(Fragment *self, PyObject *args)
 	Py_RETURN_NONE;
 }
 
+static PyObject *Fragment_as_bytes(Fragment *self, PyObject *args)
+{
+	unsigned sample_width;
+
+	PyObject *py_buffer;
+	Py_ssize_t py_size;
+	void *buffer;
+	Py_ssize_t size;
+	const float *it[MAX_CHANNELS];
+	unsigned i;
+	unsigned c;
+	uint8_t *out;
+
+	if (!PyArg_ParseTuple(args, "I", &sample_width))
+		return NULL;
+
+	if (sample_width != 2) {
+		fprintf(stderr, "Unsupported sample width: %d\n",sample_width);
+		return NULL;
+	}
+
+	py_size = self->length * self->n_channels * sample_width;
+	py_buffer = PyBuffer_New(py_size);
+
+	if (!py_buffer) {
+		/* memory error */
+		return NULL;
+	}
+
+	if (PyObject_AsWriteBuffer(py_buffer, &buffer, &size))
+		return NULL;
+
+	if (size != py_size) {
+		fprintf(stderr, "size mismatch\n");
+		return NULL;
+	}
+
+	for (c = 0; c < self->n_channels; ++c)
+		it[c] = self->data[c];
+
+	out = buffer;
+
+	for (i = 0; i < self->length; ++i) {
+		for (c = 0; c < self->n_channels; ++c) {
+			const float z = *(it[c]++);
+			int16_t s;
+
+			if (z < -1.0)
+				s = -32767;
+			else if (z > 1.0)
+				s = 32767;
+			else
+				s = z * 32767;
+
+			*out++ = s & 0xFF;
+			*out++ = (s >> 8) & 0xFF;
+		}
+	}
+
+	return py_buffer;
+}
+
 static PyMethodDef Fragment_methods[] = {
 	{ "_resize", (PyCFunction)Fragment_resize, METH_VARARGS,
 	  "Resize the internal buffer" },
 	{ "mix", (PyCFunction)Fragment_mix, METH_VARARGS,
 	  "Mix two fragments together" },
+	{ "as_bytes", (PyCFunction)Fragment_as_bytes, METH_VARARGS,
+	  "Make a byte buffer with the data" },
 	{ NULL }
 };
 

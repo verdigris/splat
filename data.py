@@ -24,18 +24,5 @@ class Fragment(_geomusic.Fragment):
         f.setsampwidth(sample_width)
         f.setframerate(self.sample_rate)
         f.setnframes(len(self))
-        f.writeframes(self.get_raw_bytes(sample_width))
+        f.writeframes(self.as_bytes(sample_width))
         f.close()
-
-    def get_raw_bytes(self, sample_width):
-        if sample_width != 2:
-            raise Exception("only 16 bits for now...")
-        raw_data = list()
-        for s in self:
-            for z in s:
-                if abs(z) > 1.0:
-                    sample /= abs(z)
-                raw = int(z * 32767)
-                raw_data.append(raw & 0xFF)
-                raw_data.append((raw & 0xFF00) >> 8)
-        return bytearray(raw_data)
