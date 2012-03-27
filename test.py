@@ -5,7 +5,7 @@ sys.path.append('..')
 import geomusic as geo
 
 # Fixed parameters
-l = 2.0 # total length in seconds
+l = 3.0 # total length in seconds
 p = 8.0 # sounds per seconds
 b = 55.0 # base frequency in Hz
 m = 2 ** 7 # frequency span coeff
@@ -31,7 +31,6 @@ def main(argv):
 
     frag = geo.Fragment(2, 48000, l)
     gen = geo.Generator(frag)
-    gen.levels = (0.7, 0.7)
     k, func = modes[mode]
     n = int(l * p)
     t = 0.0
@@ -42,7 +41,7 @@ def main(argv):
         start = t
         stop = t + l / n
         t = stop
-        gen.sine(f, start, stop)
+        gen.sine(f, start, stop, (random.random(), random.random()))
 
     frag.save_to_file(file_name, 2)
 

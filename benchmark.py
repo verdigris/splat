@@ -16,7 +16,8 @@ def main(argv):
     frag = bm('Fragment', geo.Fragment, 2, 48000, time_s)
     gen = bm('Generator', geo.Generator, frag, ((0.7, 0.7)))
     bm('sine', gen.sine, 1000, 0, time_s)
-    raw = bm('get_raw_bytes', frag.get_raw_bytes, 2)
+    raw = bm('as_raw_bytes', frag.as_bytes, 2)
+    bm('save_to_file', frag.save_to_file, 'bm.wav', 2)
     return True
 
 if __name__ == '__main__':
