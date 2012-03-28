@@ -6,12 +6,11 @@ import geomusic as geo
 
 # Fixed parameters
 gap = 0.1 # silence gap
-l = 15.0 # total length in seconds
+l = 5.0 # total length in seconds
 p = 8.0 # sounds per seconds
 base = 110.0 # base frequency in Hz
 m = 2 ** 0.5 # frequency span coeff
 times = 5 # number of iterations
-gain = 0.8 / times # gain coef
 
 modes = {
     'lin': (m, lambda b, k, r: b * (1 + (k * r))),
@@ -49,9 +48,10 @@ def main(argv):
             start = min(t, end)
             t += (0.5 + rand()) / p
             stop = min(t, end)
-            gen.sine(f, start, stop, (rand()*gain, rand()*gain))
+            gen.sine(f, start, stop, (rand(), rand()))
         b *= 1.5
 
+    frag.normalize(0.4)
     frag.save_to_file(file_name, 2)
 
     return True
