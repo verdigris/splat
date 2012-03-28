@@ -5,10 +5,13 @@ sys.path.append('..')
 import geomusic as geo
 
 # Fixed parameters
-l = 3.0 # total length in seconds
+gap = 0.1 # silence gap
+l = 15.0 # total length in seconds
 p = 8.0 # sounds per seconds
-b = 55.0 # base frequency in Hz
-m = 2 ** 7 # frequency span coeff
+base = 110.0 # base frequency in Hz
+m = 2 ** 0.5 # frequency span coeff
+times = 5 # number of iterations
+gain = 0.8 / times # gain coef
 
 modes = {
     'lin': (m, lambda b, k, r: b * (1 + (k * r))),
@@ -29,19 +32,25 @@ def main(argv):
 
     print("mode: {0}, file name: {1}".format(mode, file_name))
 
-    frag = geo.Fragment(2, 48000, l)
+    frag = geo.Fragment(2, 48000, (l + (2 * gap)))
     gen = geo.Generator(frag)
+    gen.chain = geo.FilterChain([(geo.filters.linear_fade, (0.008,))])
     k, func = modes[mode]
-    n = int(l * p)
-    t = 0.0
     random.seed()
+    rand = random.random
+    end = l - gap
+    b = base
 
-    for i in range(n):
-        f = func(b, k, random.random())
-        start = t
-        stop = t + l / n
-        t = stop
-        gen.sine(f, start, stop, (random.random(), random.random()))
+    for i in xrange(times):
+        t = gap
+        while t < end:
+            f = func(b, k, rand())
+            t += (0.5 + rand()) / p
+            start = min(t, end)
+            t += (0.5 + rand()) / p
+            stop = min(t, end)
+            gen.sine(f, start, stop, (rand()*gain, rand()*gain))
+        b *= 1.5
 
     frag.save_to_file(file_name, 2)
 
