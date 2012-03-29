@@ -90,7 +90,7 @@ static PyObject *Fragment_new(PyTypeObject *type, PyObject *args, PyObject *kw)
 	return (PyObject *)self;
 }
 
-/* sequence interface */
+/* Fragment sequence interface */
 
 static Py_ssize_t Fragment_sq_length(Fragment *self)
 {
@@ -162,7 +162,7 @@ static PySequenceMethods Fragment_as_sequence = {
 	(ssizeargfunc)0, /* sq_inplace_repeat */
 };
 
-/* getsetters */
+/* Fragment getsetters */
 
 static PyObject *Fragment_get_sample_rate(Fragment *self, void *_)
 {
@@ -186,7 +186,7 @@ static PyGetSetDef Fragment_getsetters[] = {
 	{ NULL }
 };
 
-/* methods */
+/* Fragment methods */
 
 static int do_resize(Fragment *self, size_t length)
 {
@@ -236,7 +236,7 @@ static PyObject *Fragment_mix(Fragment *self, PyObject *args)
 
 	size_t start_sample;
 	size_t total_length;
-	Py_ssize_t c;
+	unsigned c;
 
 	if (!PyArg_ParseTuple(args, "O!f", &geomusic_FragmentType, &frag,
 			      &start))
@@ -256,7 +256,7 @@ static PyObject *Fragment_mix(Fragment *self, PyObject *args)
 	for (c = 0; c < self->n_channels; ++c) {
 		const float *src = frag->data[c];
 		float *dst =  &self->data[c][start_sample];
-		size_t i = frag->length;
+		Py_ssize_t i = frag->length;
 
 		while (i--)
 			*dst++ += *src++;
@@ -380,7 +380,7 @@ static PyTypeObject geomusic_FragmentType = {
 };
 
 /* ----------------------------------------------------------------------------
- * Sine wave
+ * _geomusic methods
  */
 
 static PyObject *geomusic_sine(PyObject *self, PyObject *args)
@@ -428,8 +428,77 @@ static PyObject *geomusic_sine(PyObject *self, PyObject *args)
 	Py_RETURN_NONE;
 }
 
+static PyObject *geomusic_normalize(PyObject *self, PyObject *args)
+{
+	Fragment *frag;
+	float level;
+
+	float average[MAX_CHANNELS];
+	unsigned c;
+	float peak;
+	float gain;
+
+	if (!PyArg_ParseTuple(args, "O!f", &geomusic_FragmentType, &frag,
+			      &level))
+		return NULL;
+
+	if (frag->n_channels > MAX_CHANNELS) {
+		fprintf(stderr, "Too many channels: %u\n", frag->n_channels);
+		return NULL;
+	}
+
+	peak = 0.0;
+
+	for (c = 0; c < frag->n_channels; ++c) {
+		float * const chan_data = frag->data[c];
+		const float * const end = &chan_data[frag->length];
+		const float *it;
+		float total = 0.0;
+		float neg = 0.0;
+		float pos = 0.0;
+		float chan_peak;
+
+		for (it = frag->data[c]; it != end; ++it) {
+			total += *it;
+
+			if (*it > pos)
+				pos = *it;
+
+			if (*it < neg)
+				neg = *it;
+		}
+
+		average[c] = total / frag->length;
+		neg += average[c];
+		neg = (neg < 0.0) ? -neg : neg;
+		pos += average[c];
+		pos = (pos < 0.0) ? -pos : pos;
+		chan_peak = (neg > pos) ? neg : pos;
+
+		if (chan_peak > peak)
+			peak = chan_peak;
+	}
+
+	gain = level / peak;
+
+	for (c = 0; c < frag->n_channels; ++c) {
+		const float chan_avg = average[c];
+		float * const chan_data = frag->data[c];
+		const float * const end = &chan_data[frag->length];
+		float *it;
+
+		for (it = chan_data; it != end; ++it) {
+			*it += chan_avg;
+			*it *= gain;
+		}
+	}
+
+	Py_RETURN_NONE;
+}
+
 static PyMethodDef geomusic_methods[] = {
 	{ "sine", geomusic_sine, METH_VARARGS, "Make a sine wave" },
+	{ "normalize", geomusic_normalize, METH_VARARGS, "Normalize" },
 	{ NULL, NULL, 0, NULL }
 };
 
