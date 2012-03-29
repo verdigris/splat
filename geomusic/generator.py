@@ -11,6 +11,7 @@ class Generator(object):
             levels = tuple([1.0 for x in range(self.frag.channels)])
         self.levels = levels
         self.chain = None
+        self.time_stretch = 1.0
 
     @property
     def levels(self):
@@ -34,6 +35,8 @@ class Generator(object):
         return self._frag.sample_rate
 
     def run(self, source, start, stop, *args, **kw):
+        start *= self.time_stretch
+        stop *= self.time_stretch
         frag = Fragment(self.channels, self.sample_rate, (stop - start))
         source(frag, *args, **kw)
         if self.chain:
