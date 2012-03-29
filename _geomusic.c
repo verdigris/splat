@@ -208,7 +208,7 @@ static int do_resize(Fragment *self, size_t length)
 			return -1;
 		}
 
-		memset(&self->data[i][start], 0, (data_size - start));
+		memset(&self->data[i][self->length], 0, (data_size - start));
 	}
 
 	self->length = length;
