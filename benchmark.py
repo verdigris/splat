@@ -1,6 +1,5 @@
 import sys
 import time
-sys.path.append('..')
 import geomusic as geo
 
 def bm(name, call, *args, **kw):

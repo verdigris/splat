@@ -1,7 +1,6 @@
 import sys
 import random
 import math
-sys.path.append('..')
 import geomusic as geo
 
 # Fixed parameters
