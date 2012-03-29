@@ -1,0 +1,78 @@
+import sys
+import geomusic as geo
+
+def main(argv):
+    gen = geo.Generator(geo.Fragment(2, 48000, 18.0))
+    gen.chain = geo.FilterChain([geo.filters.linear_fade])
+    gen.time_stretch = 1.8
+
+    # voice 1
+    gen.levels = (0.9, 0.9)
+    gen.sine(110.00, 0.00, 0.90)
+    gen.sine(146.72, 0.90, 1.80)
+    gen.sine(185.62, 1.80, 2.36)
+    gen.sine(165.00, 2.36, 3.26)
+    gen.sine(146.67, 3.26, 3.81)
+    gen.sine(185.62, 3.81, 4.72)
+    gen.sine(165.00, 4.72, 5.28)
+    gen.sine(123.75, 5.28, 6.18)
+    gen.sine(165.00, 6.18, 7.08)
+    gen.sine(110.00, 7.08, 7.64)
+    gen.sine(146.72, 7.64, 8.19)
+    gen.sine(165.00, 8.19, 9.10)
+    gen.sine(110.00, 9.10, 10.00)
+
+    # voice 2
+    gen.levels = (1.0, 0.7)
+    gen.sine(278.44, 0.00, 0.56)
+    gen.sine(330.00, 0.56, 0.90)
+    gen.sine(220.00, 0.90, 1.46)
+    gen.sine(185.62, 1.46, 1.80)
+    gen.sine(220.00, 1.80, 2.14)
+    gen.sine(278.44, 2.14, 2.36)
+    gen.sine(247.50, 2.36, 2.70)
+    gen.sine(293.43, 2.70, 3.26)
+    gen.sine(247.50, 3.26, 3.81)
+    gen.sine(278.44, 3.81, 4.36)
+    gen.sine(220.00, 4.36, 4.72)
+    gen.sine(208.83, 4.72, 5.28)
+    gen.sine(293.43, 5.28, 5.83)
+    gen.sine(371.25, 5.83, 6.18)
+    gen.sine(247.50, 6.18, 6.53)
+    gen.sine(293.43, 6.53, 7.08)
+    gen.sine(330.00, 7.08, 7.64)
+    gen.sine(371.25, 7.64, 7.98)
+    gen.sine(220.00, 7.98, 8.54)
+    gen.sine(293.43, 8.54, 9.10)
+    gen.sine(278.44, 9.10, 10.00)
+
+    # voice 3
+    gen.levels = (0.7, 1.0)
+    gen.sine(660.00, 0.00, 0.34)
+    gen.sine(586.87, 0.34, 0.56)
+    gen.sine(660.00, 0.56, 0.90)
+    gen.sine(586.87, 0.90, 1.24)
+    gen.sine(556.87, 1.80, 2.14)
+    gen.sine(440.00, 2.14, 2.36)
+    gen.sine(495.00, 2.36, 2.70)
+    gen.sine(586.87, 2.70, 2.92)
+    gen.sine(660.00, 2.92, 3.26)
+    gen.sine(742.50, 3.26, 3.81)
+    gen.sine(586.87, 4.72, 4.93)
+    gen.sine(660.00, 4.93, 5.28)
+    gen.sine(742.50, 5.28, 5.83)
+    gen.sine(440.00, 5.83, 6.18)
+    gen.sine(495.00, 6.18, 6.53)
+    gen.sine(556.87, 6.53, 6.74)
+    gen.sine(586.87, 6.74, 7.08)
+    gen.sine(556.87, 7.08, 7.64)
+    gen.sine(495.00, 7.98, 8.54)
+    gen.sine(417.66, 8.54, 9.10)
+    gen.sine(440.00, 9.10, 10.00)
+
+    geo.filters.normalize(gen.frag, 0.8)
+    gen.frag.save_to_file('dew_drop.wav', 2)
+
+if __name__ == '__main__':
+    main(sys.argv)
+    sys.exit(0)
