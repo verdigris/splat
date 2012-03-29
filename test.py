@@ -51,7 +51,7 @@ def main(argv):
             gen.sine(f, start, stop, (rand(), rand()))
         b *= 1.5
 
-    frag.normalize(0.4)
+    geo.filters.normalize(frag, 0.4)
     frag.save_to_file(file_name, 2)
 
     return True
