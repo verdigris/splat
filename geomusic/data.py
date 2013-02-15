@@ -112,11 +112,18 @@ class Fragment(_geomusic.Fragment):
     def s2n(self, s):
         return int(s * self.sample_rate)
 
-    def save_to_file(self, file_name, sample_width):
+    def save_to_file(self, file_name, sample_width, start=0, end=None):
         f = wave.open(file_name, 'w')
         f.setnchannels(self.channels)
         f.setsampwidth(sample_width)
         f.setframerate(self.sample_rate)
         f.setnframes(len(self))
-        f.writeframes(self.as_bytes(sample_width))
+        bytes = self.as_bytes(sample_width)
+        k = self.channels * 2
+        start_n = start * k
+        if end is not None:
+            end_n = end * k
+        else:
+            end_n = len(self) * k
+        f.writeframes(bytes[start_n:end_n])
         f.close()
