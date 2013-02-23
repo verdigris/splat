@@ -188,6 +188,7 @@ static PyGetSetDef Fragment_getsetters[] = {
 
 /* Fragment methods */
 
+/* ToDo: use PyMem_* instead ? */
 static int do_resize(Fragment *self, size_t length)
 {
 	size_t start;
@@ -265,6 +266,74 @@ static PyObject *Fragment_mix(Fragment *self, PyObject *args)
 	Py_RETURN_NONE;
 }
 
+static PyObject *Fragment_import_bytes(Fragment *self, PyObject *args)
+{
+	PyObject *bytes_obj;
+	int start;
+	unsigned sample_width;
+	unsigned sample_rate;
+	unsigned n_channels;
+
+	const char *bytes;
+	Py_ssize_t n_bytes;
+	unsigned bytes_per_sample;
+	unsigned n_samples;
+	unsigned end;
+	unsigned ch;
+
+	if (!PyArg_ParseTuple(args, "O!iIII", &PyByteArray_Type, &bytes_obj,
+			      &start, &sample_width, &sample_rate,
+			      &n_channels))
+		return NULL;
+
+	if (sample_width != 2) {
+		fprintf(stderr, "unsupported sample width: %d\n",
+			sample_width);
+		return NULL;
+	}
+
+	if (n_channels != self->n_channels) {
+		fprintf(stderr, "wrong number of channels: %d instead of %d\n",
+			n_channels, self->n_channels);
+		return NULL;
+	}
+
+	if (sample_rate != self->rate) {
+		fprintf(stderr, "wrong sample rate: %d instead of %d\n",
+			sample_rate, self->rate);
+		return NULL;
+	}
+
+	n_bytes = PyByteArray_Size(bytes_obj);
+	bytes_per_sample = n_channels * sample_width;
+
+	if (n_bytes % bytes_per_sample) {
+		fprintf(stderr, "invalid buffer length: %zi\n", n_bytes);
+		return NULL;
+	}
+
+	bytes = PyByteArray_AsString(bytes_obj);
+	n_samples = n_bytes / bytes_per_sample;
+	end = start + n_samples;
+
+	if (do_resize(self, end) < 0)
+		return NULL;
+
+	for (ch = 0; ch < self->n_channels; ++ch) {
+		const void *in = bytes + (sample_width * ch);
+		float *out = &self->data[ch][start];
+		unsigned s;
+
+		for (s = start; s < end; ++s) {
+			*out++ = *(int16_t *)in / 32678.0;
+			in += bytes_per_sample;
+		}
+	}
+
+	Py_RETURN_NONE;
+}
+
+/* ToDo: return bytearray instead of buffer */
 static PyObject *Fragment_as_bytes(Fragment *self, PyObject *args)
 {
 	unsigned sample_width;
@@ -332,6 +401,8 @@ static PyMethodDef Fragment_methods[] = {
 	  "Resize the internal buffer" },
 	{ "mix", (PyCFunction)Fragment_mix, METH_VARARGS,
 	  "Mix two fragments together" },
+	{ "import_bytes", (PyCFunction)Fragment_import_bytes, METH_VARARGS,
+	  "Import data as raw bytes" },
 	{ "as_bytes", (PyCFunction)Fragment_as_bytes, METH_VARARGS,
 	  "Make a byte buffer with the data" },
 	{ NULL }
