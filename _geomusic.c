@@ -523,13 +523,13 @@ static PyObject *geomusic_normalize(PyObject *self, PyObject *args)
 		float * const chan_data = frag->data[c];
 		const float * const end = &chan_data[frag->length];
 		const float *it;
-		float total = 0.0;
-		float neg = 0.0;
-		float pos = 0.0;
+		float avg = 0.0;
+		float neg = 1.0;
+		float pos = -1.0;
 		float chan_peak;
 
 		for (it = frag->data[c]; it != end; ++it) {
-			total += *it;
+			avg += *it / frag->length;
 
 			if (*it > pos)
 				pos = *it;
@@ -538,11 +538,11 @@ static PyObject *geomusic_normalize(PyObject *self, PyObject *args)
 				neg = *it;
 		}
 
-		average[c] = total / frag->length;
-		neg += average[c];
-		neg = (neg < 0.0) ? -neg : neg;
-		pos += average[c];
-		pos = (pos < 0.0) ? -pos : pos;
+		average[c] = avg;
+		neg -= avg;
+		neg = fabsf(neg);
+		pos -= avg;
+		pos = fabsf(pos);
 		chan_peak = (neg > pos) ? neg : pos;
 
 		if (chan_peak > peak)
@@ -558,7 +558,7 @@ static PyObject *geomusic_normalize(PyObject *self, PyObject *args)
 		float *it;
 
 		for (it = chan_data; it != end; ++it) {
-			*it += chan_avg;
+			*it -= chan_avg;
 			*it *= gain;
 		}
 	}
