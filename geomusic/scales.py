@@ -67,6 +67,9 @@ class Scale(object):
         degree, cycle = self.get_note(note)
         return self.get_freq(degree, cycle)
 
+    def __getitem__(self, note):
+        return self.get_note_freq(note)
+
 
 class LogScale(Scale):
     def _init_degrees(self):
