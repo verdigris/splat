@@ -128,9 +128,13 @@ static int Fragment_sq_ass_item(Fragment *self, Py_ssize_t i, PyObject *v)
 {
 	Py_ssize_t c;
 
-	/* ToDo: also accept a list, or even any sequence */
 	if (!PyTuple_CheckExact(v)) {
 		PyErr_SetString(PyExc_TypeError, "item must be a tuple");
+		return -1;
+	}
+
+	if (PyTuple_GET_SIZE(v) != self->n_channels) {
+		PyErr_SetString(PyExc_ValueError, "channels number mismatch");
 		return -1;
 	}
 
@@ -139,7 +143,7 @@ static int Fragment_sq_ass_item(Fragment *self, Py_ssize_t i, PyObject *v)
 		return -1;
 	}
 
-	for (c = 0; c < PyTuple_GET_SIZE(v); ++c) {
+	for (c = 0; c < self->n_channels; ++c) {
 		PyObject *s = PyTuple_GET_ITEM(v, c);
 
 		if (!PyFloat_CheckExact(s)) {
