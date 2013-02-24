@@ -334,19 +334,16 @@ static PyObject *Fragment_import_bytes(Fragment *self, PyObject *args)
 	Py_RETURN_NONE;
 }
 
-/* ToDo: return bytearray instead of buffer */
 static PyObject *Fragment_as_bytes(Fragment *self, PyObject *args)
 {
 	unsigned sample_width;
 
-	PyObject *py_buffer;
-	Py_ssize_t py_size;
-	void *buffer;
-	Py_ssize_t size;
+	PyObject *bytes_obj;
+	Py_ssize_t bytes_size;
 	const float *it[MAX_CHANNELS];
 	unsigned i;
 	unsigned c;
-	uint8_t *out;
+	char *out;
 
 	if (!PyArg_ParseTuple(args, "I", &sample_width))
 		return NULL;
@@ -356,24 +353,20 @@ static PyObject *Fragment_as_bytes(Fragment *self, PyObject *args)
 		return NULL;
 	}
 
-	py_size = self->length * self->n_channels * sample_width;
-	py_buffer = PyBuffer_New(py_size);
+	bytes_obj = PyByteArray_FromStringAndSize("", 0);
 
-	if (!py_buffer)
+	if (!bytes_obj)
 		return PyErr_NoMemory();
 
-	if (PyObject_AsWriteBuffer(py_buffer, &buffer, &size))
-		return NULL;
+	bytes_size = self->length * self->n_channels * sample_width;
 
-	if (size != py_size) {
-		PyErr_SetString(PyExc_AssertionError, "buffer size mismatch");
-		return NULL;
-	}
+	if (PyByteArray_Resize(bytes_obj, bytes_size))
+		return PyErr_NoMemory();
 
 	for (c = 0; c < self->n_channels; ++c)
 		it[c] = self->data[c];
 
-	out = buffer;
+	out = PyByteArray_AS_STRING(bytes_obj);
 
 	for (i = 0; i < self->length; ++i) {
 		for (c = 0; c < self->n_channels; ++c) {
@@ -392,7 +385,7 @@ static PyObject *Fragment_as_bytes(Fragment *self, PyObject *args)
 		}
 	}
 
-	return py_buffer;
+	return bytes_obj;
 }
 
 static PyMethodDef Fragment_methods[] = {
