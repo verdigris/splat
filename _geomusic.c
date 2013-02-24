@@ -26,7 +26,7 @@ static void Fragment_dealloc(Fragment *self)
 		unsigned i;
 
 		for (i = 0; i < self->n_channels; ++i)
-			free(self->data[i]);
+			PyMem_Free(self->data[i]);
 
 		self->init = 0;
 	}
@@ -47,8 +47,14 @@ static int Fragment_init(Fragment *self, PyObject *args, PyObject *kw)
 	if (!PyArg_ParseTuple(args, "IIf", &n_channels, &rate, &duration))
 		return -1;
 
-	if ((duration < 0.0) || (n_channels > MAX_CHANNELS)) {
-		fprintf(stderr, "invalid arguments\n");
+	if (duration < 0.0) {
+		PyErr_SetString(PyExc_ValueError, "negative duration");
+		return -1;
+	}
+
+	if (n_channels > MAX_CHANNELS) {
+		PyErr_SetString(PyExc_ValueError,
+				"exceeding maximum number of channels");
 		return -1;
 	}
 
@@ -56,10 +62,10 @@ static int Fragment_init(Fragment *self, PyObject *args, PyObject *kw)
 	data_size = length * sizeof(float);
 
 	for (i = 0; i < n_channels; ++i) {
-		self->data[i] = malloc(data_size);
+		self->data[i] = PyMem_Malloc(data_size);
 
 		if (!self->data[i]) {
-			/* memory error */
+			PyErr_NoMemory();
 			return -1;
 		}
 
@@ -80,10 +86,8 @@ static PyObject *Fragment_new(PyTypeObject *type, PyObject *args, PyObject *kw)
 
 	self = (Fragment *)type->tp_alloc(type, 0);
 
-	if (!self) {
-		/* memory error */
-		return NULL;
-	}
+	if (!self)
+		return PyErr_NoMemory();
 
 	self->init = 0;
 
@@ -102,15 +106,15 @@ static PyObject *Fragment_sq_item(Fragment *self, Py_ssize_t i)
 	PyObject *sample;
 	unsigned c;
 
-	if (i >= self->length)
+	if ((i < 0) || (i >= self->length)) {
+		PyErr_SetString(PyExc_IndexError, "index out of range");
 		return NULL;
+	}
 
 	sample = PyTuple_New(self->n_channels);
 
-	if (!sample) {
-		/* alloc error */
-		return NULL;
-	}
+	if (!sample)
+		return PyErr_NoMemory();
 
 	for (c = 0; c < self->n_channels; ++c) {
 		const double s = (double)self->data[c][i];
@@ -126,12 +130,12 @@ static int Fragment_sq_ass_item(Fragment *self, Py_ssize_t i, PyObject *v)
 
 	/* ToDo: also accept a list, or even any sequence */
 	if (!PyTuple_CheckExact(v)) {
-		fprintf(stderr, "not a tuple\n");
+		PyErr_SetString(PyExc_TypeError, "item must be a tuple");
 		return -1;
 	}
 
-	if (i >= self->length) {
-		fprintf(stderr, "set index error\n");
+	if ((i < 0) || (i >= self->length)) {
+		PyErr_SetString(PyExc_IndexError, "set index error");
 		return -1;
 	}
 
@@ -139,7 +143,8 @@ static int Fragment_sq_ass_item(Fragment *self, Py_ssize_t i, PyObject *v)
 		PyObject *s = PyTuple_GET_ITEM(v, c);
 
 		if (!PyFloat_CheckExact(s)) {
-			fprintf(stderr, "not a float\n");
+			PyErr_SetString(PyExc_TypeError,
+					"item must contain floats");
 			return -1;
 		}
 
@@ -188,7 +193,6 @@ static PyGetSetDef Fragment_getsetters[] = {
 
 /* Fragment methods */
 
-/* ToDo: use PyMem_* instead ? */
 static int do_resize(Fragment *self, size_t length)
 {
 	size_t start;
@@ -202,10 +206,10 @@ static int do_resize(Fragment *self, size_t length)
 	data_size = length * sizeof(float);
 
 	for (i = 0; i < self->n_channels; ++i) {
-		self->data[i] = realloc(self->data[i], data_size);
+		self->data[i] = PyMem_Realloc(self->data[i], data_size);
 
 		if (!self->data[i]) {
-			/* memory error */
+			PyErr_NoMemory();
 			return -1;
 		}
 
@@ -244,7 +248,7 @@ static PyObject *Fragment_mix(Fragment *self, PyObject *args)
 		return NULL;
 
 	if (frag->n_channels != self->n_channels) {
-		fprintf(stderr, "channels mismatch\n");
+		PyErr_SetString(PyExc_ValueError, "channels number mismatch");
 		return NULL;
 	}
 
@@ -287,20 +291,17 @@ static PyObject *Fragment_import_bytes(Fragment *self, PyObject *args)
 		return NULL;
 
 	if (sample_width != 2) {
-		fprintf(stderr, "unsupported sample width: %d\n",
-			sample_width);
+		PyErr_SetString(PyExc_ValueError, "unsupported sample width");
 		return NULL;
 	}
 
 	if (n_channels != self->n_channels) {
-		fprintf(stderr, "wrong number of channels: %d instead of %d\n",
-			n_channels, self->n_channels);
+		PyErr_SetString(PyExc_ValueError, "wrong number of channels");
 		return NULL;
 	}
 
 	if (sample_rate != self->rate) {
-		fprintf(stderr, "wrong sample rate: %d instead of %d\n",
-			sample_rate, self->rate);
+		PyErr_SetString(PyExc_ValueError, "wrong sample rate");
 		return NULL;
 	}
 
@@ -308,7 +309,7 @@ static PyObject *Fragment_import_bytes(Fragment *self, PyObject *args)
 	bytes_per_sample = n_channels * sample_width;
 
 	if (n_bytes % bytes_per_sample) {
-		fprintf(stderr, "invalid buffer length: %zi\n", n_bytes);
+		PyErr_SetString(PyExc_ValueError, "invalid buffer length");
 		return NULL;
 	}
 
@@ -351,23 +352,21 @@ static PyObject *Fragment_as_bytes(Fragment *self, PyObject *args)
 		return NULL;
 
 	if (sample_width != 2) {
-		fprintf(stderr, "Unsupported sample width: %d\n",sample_width);
+		PyErr_SetString(PyExc_ValueError, "unsupported sample width");
 		return NULL;
 	}
 
 	py_size = self->length * self->n_channels * sample_width;
 	py_buffer = PyBuffer_New(py_size);
 
-	if (!py_buffer) {
-		/* memory error */
-		return NULL;
-	}
+	if (!py_buffer)
+		return PyErr_NoMemory();
 
 	if (PyObject_AsWriteBuffer(py_buffer, &buffer, &size))
 		return NULL;
 
 	if (size != py_size) {
-		fprintf(stderr, "size mismatch\n");
+		PyErr_SetString(PyExc_AssertionError, "buffer size mismatch");
 		return NULL;
 	}
 
@@ -428,7 +427,7 @@ static PyTypeObject geomusic_FragmentType = {
 	0,                                 /* tp_str */
 	0,                                 /* tp_getattro */
 	0,                                 /* tp_setattro */
-	0, /*&Fragment_as_buffer,*/               /* tp_as_buffer */
+	0,                                 /* tp_as_buffer */
 	BASE_TYPE_FLAGS,                   /* tp_flags */
 	"Geomusic Fragment",               /* tp_doc */
 	0,                                 /* tp_traverse */
@@ -472,12 +471,12 @@ static PyObject *geomusic_sine(PyObject *self, PyObject *args)
 	n_channels = PyTuple_Size(levels_tuple);
 
 	if (n_channels > MAX_CHANNELS) {
-		fprintf(stderr, "Too many channels: %zi\n", n_channels);
+		PyErr_SetString(PyExc_ValueError, "too many channels");
 		return NULL;
 	}
 
 	if (n_channels != frag->n_channels) {
-		fprintf(stderr, "Channels mismatch\n");
+		PyErr_SetString(PyExc_ValueError, "channels number mismatch");
 		return NULL;
 	}
 
@@ -514,7 +513,7 @@ static PyObject *geomusic_normalize(PyObject *self, PyObject *args)
 		return NULL;
 
 	if (frag->n_channels > MAX_CHANNELS) {
-		fprintf(stderr, "Too many channels: %u\n", frag->n_channels);
+		PyErr_SetString(PyExc_ValueError, "too many channels");
 		return NULL;
 	}
 
