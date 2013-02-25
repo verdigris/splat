@@ -256,6 +256,11 @@ static PyObject *Fragment_mix(Fragment *self, PyObject *args)
 		return NULL;
 	}
 
+	if (frag->rate != self->rate) {
+		PyErr_SetString(PyExc_ValueError, "sample rate mismatch");
+		return NULL;
+	}
+
 	start_sample = start * self->rate;
 	total_length = start_sample + frag->length;
 
