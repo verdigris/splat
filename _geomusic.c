@@ -241,13 +241,13 @@ static PyObject *Fragment_resize(Fragment *self, PyObject *args)
 static PyObject *Fragment_mix(Fragment *self, PyObject *args)
 {
 	Fragment *frag;
-	float start;
+	float start = 0.0;
 
 	size_t start_sample;
 	size_t total_length;
 	unsigned c;
 
-	if (!PyArg_ParseTuple(args, "O!f", &geomusic_FragmentType, &frag,
+	if (!PyArg_ParseTuple(args, "O!|f", &geomusic_FragmentType, &frag,
 			      &start))
 		return NULL;
 
