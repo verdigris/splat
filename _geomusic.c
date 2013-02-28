@@ -500,6 +500,125 @@ static PyObject *geomusic_sine(PyObject *self, PyObject *args)
 	Py_RETURN_NONE;
 }
 
+static PyObject *geomusic_overtones(PyObject *self, PyObject *args)
+{
+	struct overtone {
+		float freq;
+		float levels[MAX_CHANNELS];
+	};
+
+	Fragment *frag;
+	float freq;
+	PyObject *levels_obj;
+	PyObject *overtones_obj;
+
+	struct overtone *overtones;
+	struct overtone *ot;
+	const struct overtone *ot_end;
+	Py_ssize_t n_overtones;
+	PyObject *ot_freq;
+	PyObject *ot_levels;
+	float levels[MAX_CHANNELS];
+	Py_ssize_t pos;
+	size_t i;
+	size_t c;
+	float k;
+	int stat = 0;
+
+	if (!PyArg_ParseTuple(args, "O!fO!O!", &geomusic_FragmentType, &frag,
+			      &freq, &PyTuple_Type, &levels_obj,
+			      &PyDict_Type, &overtones_obj))
+		return NULL;
+
+	if (PyTuple_GET_SIZE(levels_obj) != frag->n_channels) {
+		PyErr_SetString(PyExc_ValueError, "channels number mismatch");
+		return NULL;
+	}
+
+	for (i = 0; i < frag->n_channels; ++i) {
+		PyObject *l = PyTuple_GET_ITEM(levels_obj, i);
+		levels[i] = (float)PyFloat_AsDouble(l);
+	}
+
+	n_overtones = PyDict_Size(overtones_obj);
+	overtones = PyMem_Malloc(n_overtones * sizeof(struct overtone));
+
+	if (overtones == NULL)
+		return PyErr_NoMemory();
+
+	ot = overtones;
+	ot_end = &overtones[n_overtones];
+	pos = 0;
+
+	while (PyDict_Next(overtones_obj, &pos, &ot_freq, &ot_levels)) {
+		if (!PyFloat_Check(ot_freq)) {
+			PyErr_SetString(PyExc_TypeError,
+					"overtone key must be a float");
+			stat = -1;
+			goto free_overtones;
+		}
+
+		if (!PyTuple_Check(ot_levels)) {
+			PyErr_SetString(PyExc_TypeError,
+					"overtone levels must be a tuple");
+			stat = -1;
+			goto free_overtones;
+		}
+
+		if (PyTuple_GET_SIZE(ot_levels) != frag->n_channels) {
+			PyErr_SetString(PyExc_ValueError,
+					"channels number mismatch");
+			stat = -1;
+			goto free_overtones;
+		}
+
+		ot->freq = (float)PyFloat_AS_DOUBLE(ot_freq);
+
+		for (c = 0; c < frag->n_channels; ++c) {
+			PyObject *l = PyTuple_GET_ITEM(ot_levels, c);
+
+			if (!PyFloat_Check(l)) {
+				PyErr_SetString(
+					PyExc_TypeError,
+					"overtone level must be a float");
+				stat = -1;
+				goto free_overtones;
+			}
+
+			ot->levels[c] = (float)PyFloat_AS_DOUBLE(l) *levels[c];
+		}
+
+		++ot;
+	}
+
+	k = 2 * M_PI * freq / frag->rate;
+
+	/* Silence harmonics above rate / 2 to avoid spectrum overlap */
+	for (ot = overtones; ot != ot_end; ++ot)
+		if ((ot->freq * freq) >= (frag->rate / 2))
+			for (c = 0; c < frag->n_channels; ++c)
+				ot->levels[c] = 0.0f;
+
+	for (i = 0; i < frag->length; ++i) {
+		const float m = k * i;
+
+		for (ot = overtones; ot != ot_end; ++ot) {
+			const float s = sin(m * ot->freq);
+
+			for (c = 0; c < frag->n_channels; ++c)
+				frag->data[c][i] += s * ot->levels[c];
+		}
+	}
+
+free_overtones:
+	PyMem_Free(overtones);
+
+	if (stat < 0)
+		return NULL;
+
+	Py_RETURN_NONE;
+}
+
 static PyObject *geomusic_normalize(PyObject *self, PyObject *args)
 {
 	Fragment *frag;
@@ -570,6 +689,8 @@ static PyObject *geomusic_normalize(PyObject *self, PyObject *args)
 
 static PyMethodDef geomusic_methods[] = {
 	{ "sine", geomusic_sine, METH_VARARGS, "Make a sine wave" },
+	{ "overtones", geomusic_overtones, METH_VARARGS,
+	  "Add a series of overtones" },
 	{ "normalize", geomusic_normalize, METH_VARARGS, "Normalize" },
 	{ NULL, NULL, 0, NULL }
 };
