@@ -1,1 +1,1 @@
-from _geomusic import sine
+from _geomusic import sine, overtones

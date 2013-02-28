@@ -34,7 +34,7 @@ class Generator(object):
     def sample_rate(self):
         return self._frag.sample_rate
 
-    def run(self, source, start, stop, *args, **kw):
+    def _run(self, source, start, stop, *args, **kw):
         start *= self.time_stretch
         stop *= self.time_stretch
         frag = Fragment(self.channels, self.sample_rate, (stop - start))
@@ -43,10 +43,8 @@ class Generator(object):
             self.chain.run(frag)
         self.frag.mix(frag, start)
 
-    def sine(self, freq, start, stop, levels=None):
-        if levels is None:
-            levels = self._levels
-        self.run(sources.sine, start, stop, freq, levels)
+    def run(self, start, stop, *args, **kw):
+        raise NotImplementedError
 
     def _check_levels(self, levels):
         if len(levels) != self.frag.channels:
@@ -77,3 +75,17 @@ class FilterChain(collections.Sequence):
     def run(self, frag):
         for f, args in self:
             f(frag, *args)
+
+
+class SineGenerator(Generator):
+    def run(self, freq, start, stop, levels=None):
+        if levels is None:
+            levels = self._levels
+        self._run(sources.sine, start, stop, freq, levels)
+
+
+class OvertonesGenerator(Generator):
+    def run(self, freq, start, stop, levels=None):
+        if levels is None:
+            levels = self._levels
+        self._run(sources.overtones, start, stop, freq, levels, self.overtones)
