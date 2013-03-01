@@ -4,6 +4,9 @@
 #define BASE_TYPE_FLAGS (Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE)
 #define MAX_CHANNELS 16
 
+#define lin2dB(level) (20 * log10(level))
+#define dB2lin(dB) (pow10((dB) / 20))
+
 /* ----------------------------------------------------------------------------
  * Fragment implementation
  */
@@ -455,6 +458,26 @@ static PyTypeObject geomusic_FragmentType = {
  * _geomusic methods
  */
 
+static PyObject *geomusic_lin2dB(PyObject *self, PyObject *args)
+{
+	float level;
+
+	if (!PyArg_ParseTuple(args, "f", &level))
+		return NULL;
+
+	return PyFloat_FromDouble(lin2dB(level));
+}
+
+static PyObject *geomusic_dB2lin(PyObject *self, PyObject *args)
+{
+	float dB;
+
+	if (!PyArg_ParseTuple(args, "f", &dB))
+		return NULL;
+
+	return PyFloat_FromDouble(dB2lin(dB));
+}
+
 static PyObject *geomusic_sine(PyObject *self, PyObject *args)
 {
 	Fragment *frag;
@@ -482,10 +505,9 @@ static PyObject *geomusic_sine(PyObject *self, PyObject *args)
 		return NULL;
 	}
 
-	/* ToDo: levels in dB */
 	for (c = 0; c < n_channels; ++c) {
 		PyObject *level = PyTuple_GetItem(levels_tuple, c);
-		levels[c] = (float)PyFloat_AsDouble(level);
+		levels[c] = (float)dB2lin(PyFloat_AsDouble(level));
 	}
 
 	k = 2 * M_PI * freq / frag->rate;
@@ -537,7 +559,7 @@ static PyObject *geomusic_overtones(PyObject *self, PyObject *args)
 
 	for (i = 0; i < frag->n_channels; ++i) {
 		PyObject *l = PyTuple_GET_ITEM(levels_obj, i);
-		levels[i] = (float)PyFloat_AsDouble(l);
+		levels[i] = (float)dB2lin(PyFloat_AsDouble(l));
 	}
 
 	n_overtones = PyDict_Size(overtones_obj);
@@ -585,7 +607,8 @@ static PyObject *geomusic_overtones(PyObject *self, PyObject *args)
 				goto free_overtones;
 			}
 
-			ot->levels[c] = (float)PyFloat_AS_DOUBLE(l) *levels[c];
+			ot->levels[c] = ((float)dB2lin(PyFloat_AS_DOUBLE(l))
+					 * levels[c]);
 		}
 
 		++ot;
@@ -638,6 +661,7 @@ static PyObject *geomusic_normalize(PyObject *self, PyObject *args)
 		return NULL;
 	}
 
+	level = dB2lin(level);
 	peak = 0.0;
 
 	for (c = 0; c < frag->n_channels; ++c) {
@@ -688,6 +712,10 @@ static PyObject *geomusic_normalize(PyObject *self, PyObject *args)
 }
 
 static PyMethodDef geomusic_methods[] = {
+	{ "lin2dB", geomusic_lin2dB, METH_VARARGS,
+	  "Convert linear value to dB" },
+	{ "dB2lin", geomusic_dB2lin, METH_VARARGS,
+	  "Convert dB value to linear" },
 	{ "sine", geomusic_sine, METH_VARARGS, "Make a sine wave" },
 	{ "overtones", geomusic_overtones, METH_VARARGS,
 	  "Add a series of overtones" },
