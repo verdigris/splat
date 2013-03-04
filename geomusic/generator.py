@@ -85,6 +85,16 @@ class SineGenerator(Generator):
 
 
 class OvertonesGenerator(Generator):
+    def __init__(self, *args, **kw):
+        super(OvertonesGenerator, self).__init__(*args, **kw)
+        self.overtones = { 1.0: tuple(0.0 for i in range(self.frag.channels)) }
+
+    def ot_decexp(self, ratio=1.0, n=24):
+        self.overtones = dict()
+        for j in (float(i) for i in range(1, n)):
+            level = _geomusic.lin2dB(1.0 / (math.exp((j - 1) / ratio)))
+            self.overtones[j] = tuple(level for i in range(self.frag.channels))
+
     def run(self, freq, start, stop, levels=None):
         if levels is None:
             levels = self._levels
