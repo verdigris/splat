@@ -3,3 +3,4 @@
 *.o
 *.so
 build
+doc/_build
