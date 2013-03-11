@@ -241,6 +241,13 @@ static PyObject *Fragment_resize(Fragment *self, PyObject *args)
 	Py_RETURN_NONE;
 }
 
+PyDoc_STRVAR(Fragment_mix_doc,
+"mix(fragment, start=0.0)\n"
+"\n"
+"Mix the given other ``fragment`` data into this instance by simply adding "
+"the data together.  If specified, the other ``fragment`` data can be offset "
+"to the given ``start`` time in seconds.\n");
+
 static PyObject *Fragment_mix(Fragment *self, PyObject *args)
 {
 	Fragment *frag;
@@ -400,15 +407,89 @@ static PyObject *Fragment_as_bytes(Fragment *self, PyObject *args)
 	return bytes_obj;
 }
 
+PyDoc_STRVAR(Fragment_normalize_doc,
+"normalize(level)\n"
+"\n"
+"Normalize the fragment data to the given ``level`` in dB.\n");
+
+static PyObject *Fragment_normalize(Fragment *self, PyObject *args)
+{
+	float level;
+
+	float average[MAX_CHANNELS];
+	unsigned c;
+	float peak;
+	float gain;
+
+	if (!PyArg_ParseTuple(args, "f", &level))
+		return NULL;
+
+	if (self->n_channels > MAX_CHANNELS) {
+		PyErr_SetString(PyExc_ValueError, "too many channels");
+		return NULL;
+	}
+
+	level = dB2lin(level);
+	peak = 0.0;
+
+	for (c = 0; c < self->n_channels; ++c) {
+		float * const chan_data = self->data[c];
+		const float * const end = &chan_data[self->length];
+		const float *it;
+		float avg = 0.0;
+		float neg = 1.0;
+		float pos = -1.0;
+		float chan_peak;
+
+		for (it = self->data[c]; it != end; ++it) {
+			avg += *it / self->length;
+
+			if (*it > pos)
+				pos = *it;
+
+			if (*it < neg)
+				neg = *it;
+		}
+
+		average[c] = avg;
+		neg -= avg;
+		neg = fabsf(neg);
+		pos -= avg;
+		pos = fabsf(pos);
+		chan_peak = (neg > pos) ? neg : pos;
+
+		if (chan_peak > peak)
+			peak = chan_peak;
+	}
+
+	gain = level / peak;
+
+	for (c = 0; c < self->n_channels; ++c) {
+		const float chan_avg = average[c];
+		float * const chan_data = self->data[c];
+		const float * const end = &chan_data[self->length];
+		float *it;
+
+		for (it = chan_data; it != end; ++it) {
+			*it -= chan_avg;
+			*it *= gain;
+		}
+	}
+
+	Py_RETURN_NONE;
+}
+
 static PyMethodDef Fragment_methods[] = {
 	{ "_resize", (PyCFunction)Fragment_resize, METH_VARARGS,
 	  "Resize the internal buffer" },
 	{ "mix", (PyCFunction)Fragment_mix, METH_VARARGS,
-	  "Mix two fragments together" },
+	  Fragment_mix_doc },
 	{ "import_bytes", (PyCFunction)Fragment_import_bytes, METH_VARARGS,
 	  "Import data as raw bytes" },
 	{ "as_bytes", (PyCFunction)Fragment_as_bytes, METH_VARARGS,
 	  "Make a byte buffer with the data" },
+	{ "normalize", (PyCFunction)Fragment_normalize, METH_VARARGS,
+	  Fragment_normalize_doc },
 	{ NULL }
 };
 
@@ -434,7 +515,7 @@ static PyTypeObject geomusic_FragmentType = {
 	0,                                 /* tp_setattro */
 	0,                                 /* tp_as_buffer */
 	BASE_TYPE_FLAGS,                   /* tp_flags */
-	"Geomusic Fragment",               /* tp_doc */
+	"Fragment of audio data",          /* tp_doc */
 	0,                                 /* tp_traverse */
 	0,                                 /* tp_clear */
 	0,                                 /* tp_richcompare */
@@ -477,6 +558,12 @@ static PyObject *geomusic_dB2lin(PyObject *self, PyObject *args)
 
 	return PyFloat_FromDouble(dB2lin(dB));
 }
+
+PyDoc_STRVAR(geomusic_sine_doc,
+"sine(fragment, frequency, levels)\n"
+"\n"
+"Generate a sine wave with constant ``levels`` at the given ``frequency`` "
+"into the entirety of the provided ``fragment``.\n");
 
 static PyObject *geomusic_sine(PyObject *self, PyObject *args)
 {
@@ -521,6 +608,16 @@ static PyObject *geomusic_sine(PyObject *self, PyObject *args)
 
 	Py_RETURN_NONE;
 }
+
+PyDoc_STRVAR(geomusic_overtones_doc,
+"overtones(fragment, frequency, levels, overtones)\n"
+"\n"
+"Generate a sum of overtones as pure sine waves with the given fundamental "
+"``frequency`` and ``levels`` in dB.  The ``overtones`` are described with "
+"a dictionary which keys are floating point numbers multiplied by the "
+"fundamental to get the overtone frequency, and values are tuples with "
+"levels for each channel of the fragment.  The generation is performed over "
+"all of the fragment data.\n");
 
 static PyObject *geomusic_overtones(PyObject *self, PyObject *args)
 {
@@ -642,84 +739,15 @@ free_overtones:
 	Py_RETURN_NONE;
 }
 
-static PyObject *geomusic_normalize(PyObject *self, PyObject *args)
-{
-	Fragment *frag;
-	float level;
-
-	float average[MAX_CHANNELS];
-	unsigned c;
-	float peak;
-	float gain;
-
-	if (!PyArg_ParseTuple(args, "O!f", &geomusic_FragmentType, &frag,
-			      &level))
-		return NULL;
-
-	if (frag->n_channels > MAX_CHANNELS) {
-		PyErr_SetString(PyExc_ValueError, "too many channels");
-		return NULL;
-	}
-
-	level = dB2lin(level);
-	peak = 0.0;
-
-	for (c = 0; c < frag->n_channels; ++c) {
-		float * const chan_data = frag->data[c];
-		const float * const end = &chan_data[frag->length];
-		const float *it;
-		float avg = 0.0;
-		float neg = 1.0;
-		float pos = -1.0;
-		float chan_peak;
-
-		for (it = frag->data[c]; it != end; ++it) {
-			avg += *it / frag->length;
-
-			if (*it > pos)
-				pos = *it;
-
-			if (*it < neg)
-				neg = *it;
-		}
-
-		average[c] = avg;
-		neg -= avg;
-		neg = fabsf(neg);
-		pos -= avg;
-		pos = fabsf(pos);
-		chan_peak = (neg > pos) ? neg : pos;
-
-		if (chan_peak > peak)
-			peak = chan_peak;
-	}
-
-	gain = level / peak;
-
-	for (c = 0; c < frag->n_channels; ++c) {
-		const float chan_avg = average[c];
-		float * const chan_data = frag->data[c];
-		const float * const end = &chan_data[frag->length];
-		float *it;
-
-		for (it = chan_data; it != end; ++it) {
-			*it -= chan_avg;
-			*it *= gain;
-		}
-	}
-
-	Py_RETURN_NONE;
-}
-
 static PyMethodDef geomusic_methods[] = {
 	{ "lin2dB", geomusic_lin2dB, METH_VARARGS,
 	  "Convert linear value to dB" },
 	{ "dB2lin", geomusic_dB2lin, METH_VARARGS,
 	  "Convert dB value to linear" },
-	{ "sine", geomusic_sine, METH_VARARGS, "Make a sine wave" },
+	{ "sine", geomusic_sine, METH_VARARGS,
+	  geomusic_sine_doc },
 	{ "overtones", geomusic_overtones, METH_VARARGS,
-	  "Add a series of overtones" },
-	{ "normalize", geomusic_normalize, METH_VARARGS, "Normalize" },
+	  geomusic_overtones_doc },
 	{ NULL, NULL, 0, NULL }
 };
 
