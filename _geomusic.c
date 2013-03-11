@@ -8,7 +8,7 @@
 #define dB2lin(dB) (pow10((dB) / 20))
 
 /* ----------------------------------------------------------------------------
- * Fragment implementation
+ * Fragment class
  */
 
 struct Fragment_object {
@@ -539,6 +539,11 @@ static PyTypeObject geomusic_FragmentType = {
  * _geomusic methods
  */
 
+PyDoc_STRVAR(geomusic_lin2dB_doc,
+"lin2dB(value)\n"
+"\n"
+"Convert linear ``value`` to dB.\n");
+
 static PyObject *geomusic_lin2dB(PyObject *self, PyObject *args)
 {
 	float level;
@@ -548,6 +553,11 @@ static PyObject *geomusic_lin2dB(PyObject *self, PyObject *args)
 
 	return PyFloat_FromDouble(lin2dB(level));
 }
+
+PyDoc_STRVAR(geomusic_dB2lin_doc,
+"dB2lin(value)\n"
+"\n"
+"Convert dB ``value`` to linear.\n");
 
 static PyObject *geomusic_dB2lin(PyObject *self, PyObject *args)
 {
@@ -741,9 +751,9 @@ free_overtones:
 
 static PyMethodDef geomusic_methods[] = {
 	{ "lin2dB", geomusic_lin2dB, METH_VARARGS,
-	  "Convert linear value to dB" },
+	  geomusic_lin2dB_doc },
 	{ "dB2lin", geomusic_dB2lin, METH_VARARGS,
-	  "Convert dB value to linear" },
+	  geomusic_dB2lin_doc },
 	{ "sine", geomusic_sine, METH_VARARGS,
 	  geomusic_sine_doc },
 	{ "overtones", geomusic_overtones, METH_VARARGS,
