@@ -84,35 +84,71 @@ class WaveFile(AudioFile):
 
 
 class Fragment(_geomusic.Fragment):
+    """A fragment of sound data.
+
+    Create an empty sound fragment with the given number of ``channels``,
+    sample ``rate`` in Hertz and initial ``duration`` in seconds.  All the
+    samples are initialised to 0 (silence).
+
+    All Geomusic sound data is contained in ``Fragment`` objects.  They are
+    accessible as a mutable sequence of tuples of floating point values to
+    represent the samples of the audio channels.  It is based on the C class
+    ``_geomusic.Fragment`` for improved performance.  The length of each sample
+    tuple is equal to the number of channels of the fragment, the maximum being
+    fixed to 16.
+    """
+
     @classmethod
     def open(cls, file_name, mode='r'):
-        file = AudioFile.open(file_name, mode)
-        frag = cls(file.channels, file.sample_rate, file.duration)
+        """Open a file to create a sound fragment
+
+        Open a sound file specified by ``file_name`` and imports its contents
+        into a new ``Fragment`` instance, which is then returned.
+
+        Only ``WAV`` files are currently supported.
+        """
+        af = AudioFile.open(file_name, mode)
+        frag = cls(af.channels, af.sample_rate, af.duration)
         rem = len(frag)
         cur = 0
-        chunk_size = (64 * 1024) / (file.sample_width * file.channels)
+        chunk_size = (64 * 1024) / (af.sample_width * af.channels)
         while rem > 0:
             n = chunk_size if (rem >= chunk_size) else rem
-            bytes = file.get_bytearray(cur, n)
-            frag.import_bytes(bytes, cur, file.sample_width,
-                              file.sample_rate, file.channels)
+            raw_bytes = af.get_bytearray(cur, n)
+            frag.import_bytes(raw_bytes, cur, af.sample_width,
+                              af.sample_rate, af.channels)
             rem -= n
             cur += n
-        file.close
+        af.close
         return frag
 
     def resize(self, duration):
+        """Resize the fragment to the specified ``duration`` in seconds."""
         n = int(duration * self.sample_rate)
         self._resize(n)
         return n
 
     def n2s(self, n):
+        """Convert a sample index number ``n`` into a time in seconds."""
         return float(n) / self.sample_rate
 
     def s2n(self, s):
+        """Convert a time in seconds ``s`` to a sample index number."""
         return int(s * self.sample_rate)
 
-    def save_to_file(self, file_name, sample_width, start=0, end=None):
+    def save_to_file(self, file_name, sample_width=2, start=0, end=None):
+        """Save the contents of the audio fragment to an audio file.
+
+        A file is created with the provided name ``file_name``, and the
+        contents of the audio fragment are written to it.  The ``sample_width``
+        argument contains the resolution in bytes for each channels, which by
+        default is 2 (16 bits).
+
+        Only ``WAV`` files are currently supported.
+
+        It's also possible to only save a part of the fragment using the
+        ``start`` and ``end`` arguments with times in seconds.
+        """
         f = wave.open(file_name, 'w')
         f.setnchannels(self.channels)
         f.setsampwidth(sample_width)
