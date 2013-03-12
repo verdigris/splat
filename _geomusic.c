@@ -623,11 +623,13 @@ PyDoc_STRVAR(geomusic_overtones_doc,
 "overtones(fragment, frequency, levels, overtones)\n"
 "\n"
 "Generate a sum of overtones as pure sine waves with the given fundamental "
-"``frequency`` and ``levels`` in dB.  The ``overtones`` are described with "
-"a dictionary which keys are floating point numbers multiplied by the "
-"fundamental to get the overtone frequency, and values are tuples with "
-"levels for each channel of the fragment.  The generation is performed over "
-"all of the fragment data.\n");
+"``frequency`` and ``levels`` in dB.\n"
+"\n"
+"The ``overtones`` are described with a dictionary which keys are "
+"floating point numbers multiplied by the fundamental frequency to get the "
+"overtone frequencies, and values are tuples with levels for each channel "
+"of the fragment.  The generation is performed over all of the fragment "
+"data.\n");
 
 static PyObject *geomusic_overtones(PyObject *self, PyObject *args)
 {
@@ -749,6 +751,45 @@ free_overtones:
 	Py_RETURN_NONE;
 }
 
+PyDoc_STRVAR(geomusic_dec_envelope_doc,
+"dec_envelope(frag, k=1.0, p=1.0)\n"
+"\n"
+"This filter applies a decreasing envelope with ``k`` and ``p`` arguments "
+"as follows, for a sound signal ``s`` at index ``i``:\n"
+"\n"
+".. math::\n"
+"\n"
+"   s[i] = \\frac{s[i]}{(1 + \\frac{i}{k})^p}\n"
+"\n");
+
+static PyObject *geomusic_dec_envelope(PyObject *self, PyObject *args)
+{
+	Fragment *frag;
+	double k = 1.0;
+	double p = 1.0;
+
+	size_t i;
+	size_t c;
+
+	if (!PyArg_ParseTuple(args, "O!|dd", &geomusic_FragmentType, &frag,
+			      &k, &p))
+		return NULL;
+
+	if (k == 0.0) {
+		PyErr_SetString(PyExc_ValueError, "k must not be 0");
+		return NULL;
+	}
+
+	for (c = 0; c < frag->n_channels; ++c) {
+		for (i = 0; i < frag->length; ++i) {
+			const double m = pow(1.0 + ((double)i / k), p);
+			frag->data[c][i] /= m;
+		}
+	}
+
+	Py_RETURN_NONE;
+}
+
 static PyMethodDef geomusic_methods[] = {
 	{ "lin2dB", geomusic_lin2dB, METH_VARARGS,
 	  geomusic_lin2dB_doc },
@@ -758,6 +799,8 @@ static PyMethodDef geomusic_methods[] = {
 	  geomusic_sine_doc },
 	{ "overtones", geomusic_overtones, METH_VARARGS,
 	  geomusic_overtones_doc },
+	{ "dec_envelope", geomusic_dec_envelope, METH_VARARGS,
+	  geomusic_dec_envelope_doc },
 	{ NULL, NULL, 0, NULL }
 };
 
