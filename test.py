@@ -1,67 +1,63 @@
 import sys
-import random
-import math
-import geomusic as geo
+import md5
+try:
+    from cStringIO import StringIO
+except ImportError:
+    from StringIO import StringIO
+import geomusic
 
-# Fixed parameters
-gap = 0.1 # silence gap
-l = 5.0 # total length in seconds
-p = 8.0 # sounds per seconds
-base = 110.0 # base frequency in Hz
-m = 2 ** 0.5 # frequency span coeff
-times = 5 # number of iterations
+# -----------------------------------------------------------------------------
+# utilities
 
-modes = {
-    'lin': (m, lambda b, k, r: b * (1 + (k * r))),
-    'log': ((2 ** m), lambda b, k, r: b * math.log((k * r), 2)),
-    'exp': (math.log(m, 2), lambda b, k, r: b * 2 ** (k * r)),
-}
+def check_md5(frag, hexdigest):
+    md5sum = md5.new(frag.as_bytes(2))
+    if md5sum.hexdigest() != hexdigest:
+        print("MD5 mismatch: {0}".format(md5sum.hexdigest()))
+        return False
+    else:
+        return True
+
+# -----------------------------------------------------------------------------
+# test functions
+
+def test_frag():
+    frag = geomusic.Fragment(2, 48000, 1.0)
+    return check_md5(frag, 'fe384f668da282694c29a84ebd33481d')
+test_frag.test_name = 'Fragment'
+
+def test_sine():
+    gen = geomusic.SineGenerator(geomusic.Fragment(2, 48000, 1.0))
+    gen.run(1000, 0.0, 1.0)
+    return check_md5(gen.frag, 'e34be36a9b609c910744bd399b90709c')
+test_sine.test_name = "SineGenerator"
+
+# -----------------------------------------------------------------------------
+# main function
 
 def main(argv):
-    if len(argv) > 1:
-        mode = argv[1]
+    tests = []
+    for name, value in globals().iteritems():
+        if name.startswith('test_'):
+            tests.append(value)
+    failures = []
+    n = len(tests)
+    for i, t in enumerate(tests):
+        res = t()
+        print("{0:03d}/{1:03d} {2:4s} - {3}".format(
+                i + 1, n, 'OK' if res is True else 'FAIL', t.test_name))
+        if res is False:
+            failures.append(t.test_name)
+
+    print("--------------------------------------------------")
+    print("Results: {0}/{1} passed".format((n - len(failures)), n))
+    if failures:
+        print("SOME TESTS FAILED:")
+        for f in failures:
+            print("    {0}".format(f))
     else:
-        mode = 'exp'
-
-    if len(argv) > 2:
-        file_name = argv[2]
-    else:
-        file_name = 'test.wav'
-
-    print("mode: {0}, file name: {1}".format(mode, file_name))
-
-    frag = geo.Fragment(2, 48000, (l + (2 * gap)))
-    gen = geo.Generator(frag)
-    gen.chain = geo.FilterChain([(geo.filters.linear_fade, (0.008,))])
-    k, func = modes[mode]
-    random.seed()
-    rand = random.random
-    end = l - gap
-    b = base
-
-    for i in xrange(times):
-        t = gap
-        while t < end:
-            f = func(b, k, rand())
-            t += (0.5 + rand()) / p
-            start = min(t, end)
-            t += (0.5 + rand()) / p
-            stop = min(t, end)
-            gen.sine(f, start, stop, (rand(), rand()))
-        b *= 1.5
-
-    geo.filters.normalize(frag, 0.4)
-    frag.save_to_file(file_name, 2)
-
-    return True
+        print("All good.")
+    return (len(failures) == 0)
 
 if __name__ == '__main__':
-    import time
-    start = time.time()
     ret = main(sys.argv)
-    stop = time.time()
-    print("Total time: {0:.3f}".format(stop - start))
-    if ret is True:
-        sys.exit(0)
-    else:
-        sys.exit(1)
+    sys.exit(0 if ret is True else 1)
