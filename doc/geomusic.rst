@@ -50,6 +50,7 @@ of the fragment.  Filter functions can be combined into a series via the
 
 .. autofunction:: geomusic.filters.linear_fade
 .. autofunction:: geomusic.filters.dec_envelope
+.. autofunction:: geomusic.filters.reverse
 
 
 General purpose functions

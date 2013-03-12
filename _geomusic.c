@@ -790,6 +790,35 @@ static PyObject *geomusic_dec_envelope(PyObject *self, PyObject *args)
 	Py_RETURN_NONE;
 }
 
+PyDoc_STRVAR(geomusic_reverse_doc,
+"reverse(frag)\n"
+"\n"
+"Reverse the order of all the samples.\n");
+
+static PyObject *geomusic_reverse(PyObject *self, PyObject *args)
+{
+	Fragment *frag;
+
+	size_t c;
+
+	if (!PyArg_ParseTuple(args, "O!", &geomusic_FragmentType, &frag))
+		return NULL;
+
+	for (c = 0; c < frag->n_channels; ++c) {
+		size_t i;
+		size_t j;
+
+		for (i = 0, j = (frag->length - 1); i < j; ++i, --j) {
+			const float s = frag->data[c][i];
+
+			frag->data[c][i] = frag->data[c][j];
+			frag->data[c][j] = s;
+		}
+	}
+
+	Py_RETURN_NONE;
+}
+
 static PyMethodDef geomusic_methods[] = {
 	{ "lin2dB", geomusic_lin2dB, METH_VARARGS,
 	  geomusic_lin2dB_doc },
@@ -801,6 +830,8 @@ static PyMethodDef geomusic_methods[] = {
 	  geomusic_overtones_doc },
 	{ "dec_envelope", geomusic_dec_envelope, METH_VARARGS,
 	  geomusic_dec_envelope_doc },
+	{ "reverse", geomusic_reverse, METH_VARARGS,
+	  geomusic_reverse_doc },
 	{ NULL, NULL, 0, NULL }
 };
 
