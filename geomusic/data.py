@@ -5,6 +5,7 @@ import wave
 import _geomusic
 
 class AudioFile(collections.Sequence):
+
     """Audio file factory"""
 
     @staticmethod
@@ -37,6 +38,9 @@ class AudioFile(collections.Sequence):
 
 
 class WaveFile(AudioFile):
+
+    """Wave file implementation of :py:class:`geomusic.data.AudioFile`"""
+
     def __init__(self, file_name, mode):
         self._file = wave.open(file_name, mode)
         self._sampwidth = self._file.getsampwidth()
@@ -84,6 +88,7 @@ class WaveFile(AudioFile):
 
 
 class Fragment(_geomusic.Fragment):
+
     """A fragment of sound data.
 
     Create an empty sound fragment with the given number of ``channels``,
@@ -92,8 +97,7 @@ class Fragment(_geomusic.Fragment):
 
     All Geomusic sound data is contained in ``Fragment`` objects.  They are
     accessible as a mutable sequence of tuples of floating point values to
-    represent the samples of the audio channels.  It is based on the C class
-    ``_geomusic.Fragment`` for improved performance.  The length of each sample
+    represent the samples of the audio channels.  The length of each sample
     tuple is equal to the number of channels of the fragment, the maximum being
     fixed to 16.
     """
@@ -104,8 +108,6 @@ class Fragment(_geomusic.Fragment):
 
         Open a sound file specified by ``file_name`` and imports its contents
         into a new ``Fragment`` instance, which is then returned.
-
-        Only ``WAV`` files are currently supported.
         """
         af = AudioFile.open(file_name, mode)
         frag = cls(af.channels, af.sample_rate, af.duration)
@@ -144,7 +146,7 @@ class Fragment(_geomusic.Fragment):
         argument contains the resolution in bytes for each channels, which by
         default is 2 (16 bits).
 
-        Only ``WAV`` files are currently supported.
+        Note: Only ``WAV`` files are currently supported.
 
         It's also possible to only save a part of the fragment using the
         ``start`` and ``end`` arguments with times in seconds.
