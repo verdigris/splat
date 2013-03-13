@@ -251,13 +251,13 @@ PyDoc_STRVAR(Fragment_mix_doc,
 static PyObject *Fragment_mix(Fragment *self, PyObject *args)
 {
 	Fragment *frag;
-	float start = 0.0;
+	double start = 0.0;
 
 	size_t start_sample;
 	size_t total_length;
 	unsigned c;
 
-	if (!PyArg_ParseTuple(args, "O!|f", &geomusic_FragmentType, &frag,
+	if (!PyArg_ParseTuple(args, "O!|d", &geomusic_FragmentType, &frag,
 			      &start))
 		return NULL;
 
@@ -414,14 +414,14 @@ PyDoc_STRVAR(Fragment_normalize_doc,
 
 static PyObject *Fragment_normalize(Fragment *self, PyObject *args)
 {
-	float level;
+	double level;
 
-	float average[MAX_CHANNELS];
+	double average[MAX_CHANNELS];
 	unsigned c;
-	float peak;
-	float gain;
+	double peak;
+	double gain;
 
-	if (!PyArg_ParseTuple(args, "f", &level))
+	if (!PyArg_ParseTuple(args, "d", &level))
 		return NULL;
 
 	if (self->n_channels > MAX_CHANNELS) {
@@ -436,7 +436,7 @@ static PyObject *Fragment_normalize(Fragment *self, PyObject *args)
 		float * const chan_data = self->data[c];
 		const float * const end = &chan_data[self->length];
 		const float *it;
-		float avg = 0.0;
+		double avg = 0.0;
 		float neg = 1.0;
 		float pos = -1.0;
 		float chan_peak;
@@ -465,7 +465,7 @@ static PyObject *Fragment_normalize(Fragment *self, PyObject *args)
 	gain = level / peak;
 
 	for (c = 0; c < self->n_channels; ++c) {
-		const float chan_avg = average[c];
+		const double chan_avg = average[c];
 		float * const chan_data = self->data[c];
 		const float * const end = &chan_data[self->length];
 		float *it;
@@ -546,9 +546,9 @@ PyDoc_STRVAR(geomusic_lin2dB_doc,
 
 static PyObject *geomusic_lin2dB(PyObject *self, PyObject *args)
 {
-	float level;
+	double level;
 
-	if (!PyArg_ParseTuple(args, "f", &level))
+	if (!PyArg_ParseTuple(args, "d", &level))
 		return NULL;
 
 	return PyFloat_FromDouble(lin2dB(level));
@@ -561,9 +561,9 @@ PyDoc_STRVAR(geomusic_dB2lin_doc,
 
 static PyObject *geomusic_dB2lin(PyObject *self, PyObject *args)
 {
-	float dB;
+	double dB;
 
-	if (!PyArg_ParseTuple(args, "f", &dB))
+	if (!PyArg_ParseTuple(args, "d", &dB))
 		return NULL;
 
 	return PyFloat_FromDouble(dB2lin(dB));
@@ -578,15 +578,15 @@ PyDoc_STRVAR(geomusic_sine_doc,
 static PyObject *geomusic_sine(PyObject *self, PyObject *args)
 {
 	Fragment *frag;
-	float freq;
+	double freq;
 	PyObject *levels_tuple;
 
 	Py_ssize_t n_channels;
-	float levels[MAX_CHANNELS];
+	double levels[MAX_CHANNELS];
 	Py_ssize_t c, i;
-	float k;
+	double k;
 
-	if (!PyArg_ParseTuple(args, "O!fO!", &geomusic_FragmentType, &frag,
+	if (!PyArg_ParseTuple(args, "O!dO!", &geomusic_FragmentType, &frag,
 			      &freq, &PyTuple_Type, &levels_tuple))
 		return NULL;
 
@@ -604,13 +604,13 @@ static PyObject *geomusic_sine(PyObject *self, PyObject *args)
 
 	for (c = 0; c < n_channels; ++c) {
 		PyObject *level = PyTuple_GetItem(levels_tuple, c);
-		levels[c] = (float)dB2lin(PyFloat_AsDouble(level));
+		levels[c] = dB2lin(PyFloat_AsDouble(level));
 	}
 
 	k = 2 * M_PI * freq / frag->rate;
 
 	for (i = 0; i < frag->length; ++i) {
-		const float s = sin(k * i);
+		const double s = sin(k * i);
 
 		for (c = 0; c < n_channels; ++c)
 			frag->data[c][i] = s * levels[c];
@@ -634,12 +634,12 @@ PyDoc_STRVAR(geomusic_overtones_doc,
 static PyObject *geomusic_overtones(PyObject *self, PyObject *args)
 {
 	struct overtone {
-		float freq;
-		float levels[MAX_CHANNELS];
+		double freq;
+		double levels[MAX_CHANNELS];
 	};
 
 	Fragment *frag;
-	float freq;
+	double freq;
 	PyObject *levels_obj;
 	PyObject *overtones_obj;
 
@@ -649,14 +649,14 @@ static PyObject *geomusic_overtones(PyObject *self, PyObject *args)
 	Py_ssize_t n_overtones;
 	PyObject *ot_freq;
 	PyObject *ot_levels;
-	float levels[MAX_CHANNELS];
+	double levels[MAX_CHANNELS];
 	Py_ssize_t pos;
 	size_t i;
 	size_t c;
-	float k;
+	double k;
 	int stat = 0;
 
-	if (!PyArg_ParseTuple(args, "O!fO!O!", &geomusic_FragmentType, &frag,
+	if (!PyArg_ParseTuple(args, "O!dO!O!", &geomusic_FragmentType, &frag,
 			      &freq, &PyTuple_Type, &levels_obj,
 			      &PyDict_Type, &overtones_obj))
 		return NULL;
@@ -668,7 +668,7 @@ static PyObject *geomusic_overtones(PyObject *self, PyObject *args)
 
 	for (i = 0; i < frag->n_channels; ++i) {
 		PyObject *l = PyTuple_GET_ITEM(levels_obj, i);
-		levels[i] = (float)dB2lin(PyFloat_AsDouble(l));
+		levels[i] = dB2lin(PyFloat_AsDouble(l));
 	}
 
 	n_overtones = PyDict_Size(overtones_obj);
@@ -703,7 +703,7 @@ static PyObject *geomusic_overtones(PyObject *self, PyObject *args)
 			goto free_overtones;
 		}
 
-		ot->freq = (float)PyFloat_AS_DOUBLE(ot_freq);
+		ot->freq = PyFloat_AS_DOUBLE(ot_freq);
 
 		for (c = 0; c < frag->n_channels; ++c) {
 			PyObject *l = PyTuple_GET_ITEM(ot_levels, c);
@@ -716,8 +716,8 @@ static PyObject *geomusic_overtones(PyObject *self, PyObject *args)
 				goto free_overtones;
 			}
 
-			ot->levels[c] = ((float)dB2lin(PyFloat_AS_DOUBLE(l))
-					 * levels[c]);
+			ot->levels[c] =
+				dB2lin(PyFloat_AS_DOUBLE(l)) * levels[c];
 		}
 
 		++ot;
@@ -732,10 +732,10 @@ static PyObject *geomusic_overtones(PyObject *self, PyObject *args)
 				ot->levels[c] = 0.0f;
 
 	for (i = 0; i < frag->length; ++i) {
-		const float m = k * i;
+		const double m = k * i;
 
 		for (ot = overtones; ot != ot_end; ++ot) {
-			const float s = sin(m * ot->freq);
+			const double s = sin(m * ot->freq);
 
 			for (c = 0; c < frag->n_channels; ++c)
 				frag->data[c][i] += s * ot->levels[c];
@@ -768,7 +768,6 @@ static PyObject *geomusic_dec_envelope(PyObject *self, PyObject *args)
 	double k = 1.0;
 	double p = 1.0;
 
-	size_t i;
 	size_t c;
 
 	if (!PyArg_ParseTuple(args, "O!|dd", &geomusic_FragmentType, &frag,
@@ -781,6 +780,8 @@ static PyObject *geomusic_dec_envelope(PyObject *self, PyObject *args)
 	}
 
 	for (c = 0; c < frag->n_channels; ++c) {
+		size_t i;
+
 		for (i = 0; i < frag->length; ++i) {
 			const double m = pow(1.0 + ((double)i / k), p);
 			frag->data[c][i] /= m;
@@ -809,7 +810,7 @@ static PyObject *geomusic_reverse(PyObject *self, PyObject *args)
 		size_t j;
 
 		for (i = 0, j = (frag->length - 1); i < j; ++i, --j) {
-			const float s = frag->data[c][i];
+			const double s = frag->data[c][i];
 
 			frag->data[c][i] = frag->data[c][j];
 			frag->data[c][j] = s;
