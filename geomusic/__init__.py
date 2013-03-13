@@ -5,3 +5,7 @@ from filters import FilterChain
 import filters
 import sources
 import scales
+
+VERSION = (1, 0)
+VERSION_STR = '.'.join([str(v) for v in VERSION])
+BUILD = 1
