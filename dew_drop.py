@@ -1,9 +1,10 @@
 import sys
+import time
 import math
 import geomusic
 
 def set_fade(gen, duration):
-    gen.chain = geomusic.FilterChain(
+    gen.filters = geomusic.FilterChain(
         [(geomusic.filters.linear_fade, (duration,))])
 
 def main(argv):
@@ -96,5 +97,8 @@ def main(argv):
 
 
 if __name__ == '__main__':
+    start = time.time()
     main(sys.argv)
+    stop = time.time()
+    print("Total time: {0:.3f}".format(stop - start))
     sys.exit(0)
