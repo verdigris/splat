@@ -13,15 +13,13 @@ def bm(name, call, *args, **kw):
 def main(argv):
     time_s = 10.0
     frag = bm('Fragment', geo.Fragment, 2, 48000, time_s)
-    gen = bm('Generator', geo.Generator, frag, ((0.7, 0.7)))
-    bm('sine', gen.sine, 1000, 0, time_s)
-    raw = bm('as_raw_bytes', frag.as_bytes, 2)
+    gen = bm('SineGenerator', geo.SineGenerator, frag)
+    bm('sine', gen.run, 1000, 0, time_s)
+    bm('as_raw_bytes', frag.as_bytes, 2)
+    bm('reverse', geo.filters.reverse, frag)
     bm('save_to_file', frag.save_to_file, 'bm.wav', 2)
     return True
 
 if __name__ == '__main__':
     ret = main(sys.argv)
-    if ret is True:
-        sys.exit(0)
-    else:
-        sys.exit(1)
+    sys.exit(0 if ret is True else 1)
