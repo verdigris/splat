@@ -12,7 +12,7 @@ def main(argv):
     gen.time_stretch = 1.8
     s = geomusic.scales.LogScale(fund=440.0)
 
-    # print all notes frequencies
+    # print frequencies of all the notes of the scale over 3 octaves
     for octave in range(-2, 1):
         for note in ['A', 'B', 'C#', 'D', 'E', 'F#', 'G#']:
             note_name = "{0}{1}".format(note, octave)
@@ -38,7 +38,7 @@ def main(argv):
     gen.run(s['A-2'], 9.10, 10.00)
 
     print("Voice 2")
-    gen.levels = (0.0, -3.0)
+    gen.levels = (0.0, -2.5)
     gen.ot_decexp(1.6)
     set_fade(gen, 0.02)
     gen.run(s['C#-1'], 0.00, 0.56)
@@ -64,7 +64,7 @@ def main(argv):
     gen.run(s['C#-1'], 9.10, 10.00)
 
     print("Voice 3")
-    gen.levels = (-3.0, 0.0)
+    gen.levels = (-2.5, 0.0)
     gen.ot_decexp(1.2)
     set_fade(gen, 0.015)
     gen.run(s['E'], 0.00, 0.34)
