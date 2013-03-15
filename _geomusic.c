@@ -41,13 +41,13 @@ static int Fragment_init(Fragment *self, PyObject *args, PyObject *kw)
 {
 	unsigned n_channels;
 	unsigned rate;
-	float duration;
+	double duration = 0.0;
 
 	unsigned i;
 	size_t length;
 	size_t data_size;
 
-	if (!PyArg_ParseTuple(args, "IIf", &n_channels, &rate, &duration))
+	if (!PyArg_ParseTuple(args, "II|d", &n_channels, &rate, &duration))
 		return -1;
 
 	if (duration < 0.0) {
@@ -65,14 +65,18 @@ static int Fragment_init(Fragment *self, PyObject *args, PyObject *kw)
 	data_size = length * sizeof(float);
 
 	for (i = 0; i < n_channels; ++i) {
-		self->data[i] = PyMem_Malloc(data_size);
+		if (!data_size) {
+			self->data[i] = NULL;
+		} else {
+			self->data[i] = PyMem_Malloc(data_size);
 
-		if (!self->data[i]) {
-			PyErr_NoMemory();
-			return -1;
+			if (self->data[i] == NULL) {
+				PyErr_NoMemory();
+				return -1;
+			}
+
+			memset(self->data[i], 0, data_size);
 		}
-
-		memset(self->data[i], 0, data_size);
 	}
 
 	self->n_channels = n_channels;
@@ -89,7 +93,7 @@ static PyObject *Fragment_new(PyTypeObject *type, PyObject *args, PyObject *kw)
 
 	self = (Fragment *)type->tp_alloc(type, 0);
 
-	if (!self)
+	if (self == NULL)
 		return PyErr_NoMemory();
 
 	self->init = 0;
@@ -116,7 +120,7 @@ static PyObject *Fragment_sq_item(Fragment *self, Py_ssize_t i)
 
 	sample = PyTuple_New(self->n_channels);
 
-	if (!sample)
+	if (sample == NULL)
 		return PyErr_NoMemory();
 
 	for (c = 0; c < self->n_channels; ++c) {
@@ -213,9 +217,12 @@ static int do_resize(Fragment *self, size_t length)
 	data_size = length * sizeof(float);
 
 	for (i = 0; i < self->n_channels; ++i) {
-		self->data[i] = PyMem_Realloc(self->data[i], data_size);
+		if (self->data[i] == NULL)
+			self->data[i] = PyMem_Malloc(data_size);
+		else
+			self->data[i] = PyMem_Realloc(self->data[i],data_size);
 
-		if (!self->data[i]) {
+		if (self->data[i] == NULL) {
 			PyErr_NoMemory();
 			return -1;
 		}
@@ -374,7 +381,7 @@ static PyObject *Fragment_as_bytes(Fragment *self, PyObject *args)
 
 	bytes_obj = PyByteArray_FromStringAndSize("", 0);
 
-	if (!bytes_obj)
+	if (bytes_obj == NULL)
 		return PyErr_NoMemory();
 
 	bytes_size = self->length * self->n_channels * sample_width;
