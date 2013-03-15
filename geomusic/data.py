@@ -92,8 +92,9 @@ class Fragment(_geomusic.Fragment):
     """A fragment of sound data.
 
     Create an empty sound fragment with the given number of ``channels``,
-    sample ``rate`` in Hertz and initial ``duration`` in seconds.  All the
-    samples are initialised to 0 (silence).
+    sample ``rate`` in Hertz and initial ``duration`` in seconds.  If no
+    ``duration`` is specified, the fragment will be empty.  All the samples are
+    initialised to 0 (silence).
 
     All Geomusic sound data is contained in ``Fragment`` objects.  They are
     accessible as a mutable sequence of tuples of floating point values to
