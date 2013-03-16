@@ -202,7 +202,7 @@ static PyGetSetDef Fragment_getsetters[] = {
 	{ NULL }
 };
 
-/* Fragment methods */
+/* private functions */
 
 static int do_resize(Fragment *self, size_t length)
 {
@@ -234,6 +234,42 @@ static int do_resize(Fragment *self, size_t length)
 
 	return 0;
 }
+
+static int parse_levels(double *levels, Fragment *frag, PyObject *levels_obj)
+{
+	size_t c;
+
+	if (PyFloat_Check(levels_obj)) {
+		const double gain_lin = dB2lin(PyFloat_AsDouble(levels_obj));
+		for (c = 0; c < frag->n_channels; ++c)
+			levels[c] = gain_lin;
+	} else if (PyTuple_Check(levels_obj)) {
+		if (PyTuple_GET_SIZE(levels_obj) != frag->n_channels) {
+			PyErr_SetString(PyExc_ValueError, "channels mismatch");
+			return -1;
+		}
+
+		for (c = 0; c < frag->n_channels; ++c) {
+			PyObject *o = PyTuple_GET_ITEM(levels_obj, c);
+
+			if (!PyFloat_Check(o)) {
+				PyErr_SetString(PyExc_TypeError,
+						"gain must be a float");
+				return -1;
+			}
+
+			levels[c] = dB2lin(PyFloat_AsDouble(o));
+		}
+	} else {
+		PyErr_SetString(PyExc_TypeError,
+				"invalid gain values, must be float or tuple");
+		return -1;
+	}
+
+	return 0;
+}
+
+/* Fragment methods */
 
 static PyObject *Fragment_resize(Fragment *self, PyObject *args)
 {
@@ -415,20 +451,29 @@ static PyObject *Fragment_as_bytes(Fragment *self, PyObject *args)
 }
 
 PyDoc_STRVAR(Fragment_normalize_doc,
-"normalize(level)\n"
+"normalize(level, zero=True)\n"
 "\n"
-"Normalize the fragment data to the given ``level`` in dB.\n");
+"Normalize the amplitude.\n"
+"\n"
+"The ``level`` value in dB is the resulting maximum amplitude after "
+"normalization.  When ``zero`` is ``True``, the average value is "
+"substracted from all the fragment prior to amplification to avoid any "
+"offset and achieve maximum amplitude.  With some imbalanced transitory "
+"signals, it may be better to not remove the average value as this may have "
+"the undesirable effect of adding some offset instead.\n");
 
 static PyObject *Fragment_normalize(Fragment *self, PyObject *args)
 {
 	double level;
+	PyObject *zero = NULL;
 
+	int do_zero;
 	double average[MAX_CHANNELS];
 	unsigned c;
 	double peak;
 	double gain;
 
-	if (!PyArg_ParseTuple(args, "d", &level))
+	if (!PyArg_ParseTuple(args, "d|O!", &level, &PyBool_Type, &zero))
 		return NULL;
 
 	if (self->n_channels > MAX_CHANNELS) {
@@ -438,6 +483,7 @@ static PyObject *Fragment_normalize(Fragment *self, PyObject *args)
 
 	level = dB2lin(level);
 	peak = 0.0;
+	do_zero = ((zero == NULL) || (zero == Py_True)) ? 1 : 0;
 
 	for (c = 0; c < self->n_channels; ++c) {
 		float * const chan_data = self->data[c];
@@ -449,7 +495,8 @@ static PyObject *Fragment_normalize(Fragment *self, PyObject *args)
 		float chan_peak;
 
 		for (it = self->data[c]; it != end; ++it) {
-			avg += *it / self->length;
+			if (do_zero)
+				avg += *it / self->length;
 
 			if (*it > pos)
 				pos = *it;
@@ -459,9 +506,13 @@ static PyObject *Fragment_normalize(Fragment *self, PyObject *args)
 		}
 
 		average[c] = avg;
-		neg -= avg;
+
+		if (do_zero) {
+			neg -= avg;
+			pos -= avg;
+		}
+
 		neg = fabsf(neg);
-		pos -= avg;
 		pos = fabsf(pos);
 		chan_peak = (neg > pos) ? neg : pos;
 
@@ -502,24 +553,8 @@ static PyObject *Fragment_amp(Fragment *self, PyObject *args)
 	if (!PyArg_ParseTuple(args, "O", &gain_obj))
 		return NULL;
 
-	if (PyFloat_Check(gain_obj)) {
-		const double gain_lin = dB2lin(PyFloat_AsDouble(gain_obj));
-		for (c = 0; c < self->n_channels; ++c)
-			gain[c] = gain_lin;
-	} else if (PyTuple_Check(gain_obj)) {
-		if (PyTuple_GET_SIZE(gain_obj) != self->n_channels) {
-			PyErr_SetString(PyExc_ValueError, "channels mismatch");
-			return NULL;
-		}
-
-		for (c = 0; c < self->n_channels; ++c) {
-			PyObject *o = PyTuple_GET_ITEM(gain_obj, c);
-			gain[c] = dB2lin(PyFloat_AsDouble(o));
-		}
-	} else {
-		PyErr_SetString(PyExc_TypeError, "invalid gain values");
+	if (parse_levels(gain, self, gain_obj) < 0)
 		return NULL;
-	}
 
 	for (c = 0; c < self->n_channels; ++c) {
 		const double g = gain[c];
@@ -628,7 +663,7 @@ PyDoc_STRVAR(geomusic_sine_doc,
 "sine(fragment, frequency, levels)\n"
 "\n"
 "Generate a sine wave with constant ``levels`` at the given ``frequency`` "
-"into the entirety of the provided ``fragment``.\n");
+"over the entire ``fragment``.\n");
 
 static PyObject *geomusic_sine(PyObject *self, PyObject *args)
 {
@@ -682,9 +717,9 @@ PyDoc_STRVAR(geomusic_overtones_doc,
 "\n"
 "The ``overtones`` are described with a dictionary which keys are "
 "floating point numbers multiplied by the fundamental frequency to get the "
-"overtone frequencies, and values are tuples with levels for each channel "
-"of the fragment.  The generation is performed over all of the fragment "
-"data.\n");
+"overtone frequencies, and values are single floats or tuples with levels for "
+"each channel of the fragment.  The generation is performed over the entire "
+"fragment.\n");
 
 static PyObject *geomusic_overtones(PyObject *self, PyObject *args)
 {
@@ -744,36 +779,13 @@ static PyObject *geomusic_overtones(PyObject *self, PyObject *args)
 			goto free_overtones;
 		}
 
-		if (!PyTuple_Check(ot_levels)) {
-			PyErr_SetString(PyExc_TypeError,
-					"overtone levels must be a tuple");
-			stat = -1;
-			goto free_overtones;
-		}
-
-		if (PyTuple_GET_SIZE(ot_levels) != frag->n_channels) {
-			PyErr_SetString(PyExc_ValueError,
-					"channels number mismatch");
-			stat = -1;
-			goto free_overtones;
-		}
-
 		ot->freq = PyFloat_AS_DOUBLE(ot_freq);
 
-		for (c = 0; c < frag->n_channels; ++c) {
-			PyObject *l = PyTuple_GET_ITEM(ot_levels, c);
+		if (parse_levels(ot->levels, frag, ot_levels) < 0)
+			goto free_overtones;
 
-			if (!PyFloat_Check(l)) {
-				PyErr_SetString(
-					PyExc_TypeError,
-					"overtone level must be a float");
-				stat = -1;
-				goto free_overtones;
-			}
-
-			ot->levels[c] =
-				dB2lin(PyFloat_AS_DOUBLE(l)) * levels[c];
-		}
+		for (c = 0; c < frag->n_channels; ++c)
+			ot->levels[c] *= levels[c];
 
 		++ot;
 	}
@@ -807,10 +819,10 @@ free_overtones:
 }
 
 PyDoc_STRVAR(geomusic_dec_envelope_doc,
-"dec_envelope(frag, k=1.0, p=1.0)\n"
+"dec_envelope(fragment, k=1.0, p=1.0)\n"
 "\n"
-"This filter applies a decreasing envelope with ``k`` and ``p`` arguments "
-"as follows, for a sound signal ``s`` at index ``i``:\n"
+"This filter applies a decreasing envelope over the ``fragment`` with ``k`` "
+"and ``p`` arguments as follows, for a sound signal ``s`` at index ``i``:\n"
 "\n"
 ".. math::\n"
 "\n"
@@ -847,9 +859,9 @@ static PyObject *geomusic_dec_envelope(PyObject *self, PyObject *args)
 }
 
 PyDoc_STRVAR(geomusic_reverse_doc,
-"reverse(frag)\n"
+"reverse(fragment)\n"
 "\n"
-"Reverse the order of all the samples.\n");
+"Reverse the order of all the ``fragment`` samples.\n");
 
 static PyObject *geomusic_reverse(PyObject *self, PyObject *args)
 {
@@ -876,13 +888,13 @@ static PyObject *geomusic_reverse(PyObject *self, PyObject *args)
 }
 
 PyDoc_STRVAR(geomusic_reverb_doc,
-"reverb(frag, delays, time_factor=0.2, gain_factor=6.0, seed=0)\n"
+"reverb(fragment, delays, time_factor=0.2, gain_factor=6.0, seed=0)\n"
 "\n"
 "This filter creates a fast basic reverb effect with some randomness.\n"
 "\n"
 "The ``delays`` are a list of 2-tuples with a delay duration in seconds and "
-"a gain in dB.  They are used to repeat and mix the whole fragment once for "
-"each element of the list, shifted by the given time and amplified by the "
+"a gain in dB.  They are used to repeat and mix the whole ``fragment`` once "
+"for each element in the list, shifted by the given time and amplified by the "
 "given gain.  All values must be floating point numbers.  The time delay must "
 "not be negative - it's a *causal* reverb.\n"
 "\n"
