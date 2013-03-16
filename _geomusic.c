@@ -486,6 +486,52 @@ static PyObject *Fragment_normalize(Fragment *self, PyObject *args)
 	Py_RETURN_NONE;
 }
 
+PyDoc_STRVAR(Fragment_amp_doc,
+"amp(gain)\n"
+"\n"
+"Amplify the fragment by the given ``gain`` in dB which can either be a float "
+"value to apply to all channels or a tuple with a value for each channel.\n");
+
+static PyObject *Fragment_amp(Fragment *self, PyObject *args)
+{
+	PyObject *gain_obj;
+
+	double gain[MAX_CHANNELS];
+	size_t c;
+
+	if (!PyArg_ParseTuple(args, "O", &gain_obj))
+		return NULL;
+
+	if (PyFloat_Check(gain_obj)) {
+		const double gain_lin = dB2lin(PyFloat_AsDouble(gain_obj));
+		for (c = 0; c < self->n_channels; ++c)
+			gain[c] = gain_lin;
+	} else if (PyTuple_Check(gain_obj)) {
+		if (PyTuple_GET_SIZE(gain_obj) != self->n_channels) {
+			PyErr_SetString(PyExc_ValueError, "channels mismatch");
+			return NULL;
+		}
+
+		for (c = 0; c < self->n_channels; ++c) {
+			PyObject *o = PyTuple_GET_ITEM(gain_obj, c);
+			gain[c] = dB2lin(PyFloat_AsDouble(o));
+		}
+	} else {
+		PyErr_SetString(PyExc_TypeError, "invalid gain values");
+		return NULL;
+	}
+
+	for (c = 0; c < self->n_channels; ++c) {
+		const double g = gain[c];
+		size_t i;
+
+		for (i = 0; i < self->length; ++i)
+			self->data[c][i] *= g;
+	}
+
+	Py_RETURN_NONE;
+}
+
 static PyMethodDef Fragment_methods[] = {
 	{ "_resize", (PyCFunction)Fragment_resize, METH_VARARGS,
 	  "Resize the internal buffer" },
@@ -497,6 +543,8 @@ static PyMethodDef Fragment_methods[] = {
 	  "Make a byte buffer with the data" },
 	{ "normalize", (PyCFunction)Fragment_normalize, METH_VARARGS,
 	  Fragment_normalize_doc },
+	{ "amp", (PyCFunction)Fragment_amp, METH_VARARGS,
+	  Fragment_amp_doc },
 	{ NULL }
 };
 

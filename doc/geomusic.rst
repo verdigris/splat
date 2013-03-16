@@ -9,6 +9,7 @@ Fragment objects
 
    .. automethod:: geomusic.Fragment.mix
    .. automethod:: geomusic.Fragment.normalize
+   .. automethod:: geomusic.Fragment.amp
 
 
 Generator objects
