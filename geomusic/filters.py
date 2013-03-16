@@ -1,5 +1,5 @@
 import collections
-from _geomusic import dec_envelope, reverse
+from _geomusic import dec_envelope, reverse, reverb
 
 class FilterChain(collections.Sequence):
 

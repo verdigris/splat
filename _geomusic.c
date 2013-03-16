@@ -875,6 +875,151 @@ static PyObject *geomusic_reverse(PyObject *self, PyObject *args)
 	Py_RETURN_NONE;
 }
 
+PyDoc_STRVAR(geomusic_reverb_doc,
+"reverb(frag, delays, time_factor=0.2, gain_factor=6.0, seed=0)\n"
+"\n"
+"This filter creates a fast basic reverb effect with some randomness.\n"
+"\n"
+"The ``delays`` are a list of 2-tuples with a delay duration in seconds and "
+"a gain in dB.  They are used to repeat and mix the whole fragment once for "
+"each element of the list, shifted by the given time and amplified by the "
+"given gain.  All values must be floating point numbers.  The time delay must "
+"not be negative - it's a *causal* reverb.\n"
+"\n"
+"The ``time_factor`` and ``gain_factor`` parameters are used when adding a "
+"random element to the delay and gain.  For example, a ``time_factor`` of 0.2 "
+"means the delay will be randomly picked between 1.0 and 1.2 times the value "
+"given in the ``delays`` list.  Similarly, for a ``gain_factor`` of 6.0dB the "
+"gain will be randomly picked within +/- 6dB around the given value in "
+"``delays``.\n"
+"\n"
+"The ``seed`` argument can be used to initialise the pseudo-random number "
+"sequence.  With the default value of 0, the seed will be initialised based "
+"on the current time.\n"
+"\n"
+".. note::\n"
+"\n"
+"   This filter function can also produce a *delay* effect by specifiying "
+"   only a few regularly spaced ``delays``.\n");
+
+static PyObject *geomusic_reverb(PyObject *self, PyObject *args)
+{
+	struct delay {
+		size_t time;
+		double gain;
+	};
+
+	Fragment *frag;
+	PyObject *delays_list;
+	double time_factor = 0.2;
+	double gain_factor = 6.0;
+	unsigned int seed = 0;
+
+	struct delay *delays[MAX_CHANNELS];
+	Py_ssize_t n_delays;
+	size_t max_delay;
+	size_t max_index;
+	size_t d;
+	size_t c;
+	size_t i;
+
+	if (!PyArg_ParseTuple(args, "O!O!|ddI", &geomusic_FragmentType, &frag,
+			      &PyList_Type, &delays_list, &time_factor,
+			      &gain_factor, &seed))
+		return NULL;
+
+	if (!seed)
+		seed = time(0);
+
+	srand(seed);
+
+	n_delays = PyList_GET_SIZE(delays_list);
+
+	for (c = 0; c < frag->n_channels; ++c) {
+		delays[c] = PyMem_Malloc(n_delays * sizeof(struct delay));
+
+		if (delays[c] == NULL) {
+			while (--c)
+				PyMem_Free(delays[c]);
+
+			return PyErr_NoMemory();
+		}
+	}
+
+	max_delay = 0;
+
+	for (d = 0; d < n_delays; ++d) {
+		PyObject *pair = PyList_GetItem(delays_list, d);
+		double time;
+		double gain;
+
+		if (!PyTuple_Check(pair)) {
+			PyErr_SetString(PyExc_TypeError,
+					"delay values must be a tuple");
+			return NULL;
+		}
+
+		if (PyTuple_GET_SIZE(pair) != 2) {
+			PyErr_SetString(PyExc_ValueError,
+					"delay tuple length must be 2");
+			return NULL;
+		}
+
+		time = PyFloat_AsDouble(PyTuple_GetItem(pair, 0));
+
+		if (time < 0.0) {
+			PyErr_SetString(PyExc_ValueError,
+					"delay time must be >= 0");
+			return NULL;
+		}
+
+		for (c = 0; c < frag->n_channels; ++c) {
+			const double c_time =
+				(time
+				 * (1.0 + (rand() * time_factor / RAND_MAX)));
+			delays[c][d].time = c_time * frag->rate;
+
+			if (delays[c][d].time > max_delay)
+				max_delay = delays[c][d].time;
+		}
+
+		gain = PyFloat_AsDouble(PyTuple_GetItem(pair, 1));
+
+		for (c = 0; c < frag->n_channels; ++c) {
+			const double c_gain =
+				(gain - gain_factor
+				 + (rand() * gain_factor * 2.0 / RAND_MAX));
+			delays[c][d].gain = dB2lin(c_gain);
+		}
+	}
+
+	max_index = frag->length - 1;
+
+	if (do_resize(frag, (frag->length + max_delay)) < 0)
+		return NULL;
+
+	for (c = 0; c < frag->n_channels; ++c) {
+		const struct delay *c_delay = delays[c];
+		float *c_data = frag->data[c];
+
+		i = max_index;
+
+		do {
+			const double s = c_data[i];
+
+			for (d = 0; d < n_delays; ++d) {
+				const float z = s * c_delay[d].gain;
+				c_data[i + c_delay[d].time] += z;
+			}
+		} while (i--);
+	}
+
+	for (c = 0; c < frag->n_channels; ++c)
+		PyMem_Free(delays[c]);
+
+	Py_RETURN_NONE;
+}
+
 static PyMethodDef geomusic_methods[] = {
 	{ "lin2dB", geomusic_lin2dB, METH_VARARGS,
 	  geomusic_lin2dB_doc },
@@ -888,6 +1033,8 @@ static PyMethodDef geomusic_methods[] = {
 	  geomusic_dec_envelope_doc },
 	{ "reverse", geomusic_reverse, METH_VARARGS,
 	  geomusic_reverse_doc },
+	{ "reverb", geomusic_reverb, METH_VARARGS,
+	  geomusic_reverb_doc },
 	{ NULL, NULL, 0, NULL }
 };
 
