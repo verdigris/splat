@@ -130,7 +130,7 @@ class OvertonesGenerator(Generator):
 
     def __init__(self, *args, **kw):
         super(OvertonesGenerator, self).__init__(*args, **kw)
-        self.overtones = { 1.0: tuple(0.0 for i in range(self.frag.channels)) }
+        self.overtones = { 1.0: 0.0 }
 
     def ot_decexp(self, k=1.0, n=24):
         """Set harmonic overtones levels following a decreasing exponential.
@@ -152,7 +152,7 @@ class OvertonesGenerator(Generator):
         self.overtones = dict()
         for j in (float(i) for i in range(n)):
             l = _geomusic.lin2dB(math.exp(-j / k))
-            self.overtones[j + 1] = tuple(l for i in range(self.frag.channels))
+            self.overtones[j + 1] = l
 
     def run(self, freq, start, end, levels=None):
         if levels is None:
