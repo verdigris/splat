@@ -1,6 +1,5 @@
 import sys
 import time
-import math
 import geomusic
 
 def set_fade(gen, duration):
@@ -88,6 +87,11 @@ def main(argv):
     gen.run(s['B'], 7.98, 8.54)
     gen.run(s['G#-1'], 8.54, 9.10)
     gen.run(s['A'], 9.10, 10.00)
+
+    if (len(argv) > 1) and (argv[1] == 'reverb'):
+        print("Reverb...")
+        d = [((float(t) / 400), -(6 + float(t) * 0.2)) for t in range(800)]
+        geomusic.filters.reverb(gen.frag, d)
 
     print("Saving to file...")
     padded = geomusic.Fragment(2, 48000, (gen.frag.duration + 1.0))
