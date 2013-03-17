@@ -26,6 +26,13 @@
 #define lin2dB(level) (20 * log10(level))
 #define dB2lin(dB) (pow10((dB) / 20))
 
+/* Set to 1 to use 4xfloat vectors (SSE) */
+#define USE_V4SF 1
+
+#if USE_V4SF
+typedef float v4sf __attribute__ ((vector_size(16)));
+#endif
+
 /* ----------------------------------------------------------------------------
  * Fragment class
  */
@@ -938,6 +945,9 @@ static PyObject *geomusic_reverb(PyObject *self, PyObject *args)
 	struct delay {
 		size_t time;
 		double gain;
+#if USE_V4SF
+		v4sf gain4;
+#endif
 	};
 
 	Fragment *frag;
@@ -1008,7 +1018,11 @@ static PyObject *geomusic_reverb(PyObject *self, PyObject *args)
 			const double c_time =
 				(time
 				 * (1.0 + (rand() * time_factor / RAND_MAX)));
+#if USE_V4SF
+			delays[c][d].time = c_time * frag->rate / 4;
+#else
 			delays[c][d].time = c_time * frag->rate;
+#endif
 
 			if (delays[c][d].time > max_delay)
 				max_delay = delays[c][d].time;
@@ -1017,29 +1031,67 @@ static PyObject *geomusic_reverb(PyObject *self, PyObject *args)
 		gain = PyFloat_AsDouble(PyTuple_GetItem(pair, 1));
 
 		for (c = 0; c < frag->n_channels; ++c) {
-			const double c_gain =
+			const double c_gain_dB =
 				(gain - gain_factor
 				 + (rand() * gain_factor * 2.0 / RAND_MAX));
-			delays[c][d].gain = dB2lin(c_gain);
+#if USE_V4SF
+			const double c_gain = dB2lin(c_gain_dB);
+			const v4sf gain4 = {c_gain, c_gain, c_gain, c_gain};
+			delays[c][d].gain4 = gain4;
+			delays[c][d].gain = c_gain;
+#else
+			delays[c][d].gain = dB2lin(c_gain_dB);
+#endif
 		}
 	}
 
 	max_index = frag->length - 1;
+
+#if USE_V4SF
+	max_delay *= 4;
+#endif
 
 	if (do_resize(frag, (frag->length + max_delay)) < 0)
 		return NULL;
 
 	for (c = 0; c < frag->n_channels; ++c) {
 		const struct delay *c_delay = delays[c];
+#if USE_V4SF
+		v4sf *c_data = (v4sf *)frag->data[c];
+#else
 		float *c_data = frag->data[c];
+#endif
 
 		i = max_index;
 
-		do {
-			const double s = c_data[i];
+#if USE_V4SF
+		while (i % 4) {
+			const double s = frag->data[c][i];
 
 			for (d = 0; d < n_delays; ++d) {
+				const double z = s * c_delay[d].gain;
+				frag->data[c][i + (c_delay[d].time * 4)] += z;
+			}
+
+			i--;
+		}
+
+		i /= 4;
+#endif
+
+		do {
+#if USE_V4SF
+			const v4sf s = c_data[i];
+#else
+			const double s = c_data[i];
+#endif
+
+			for (d = 0; d < n_delays; ++d) {
+#if USE_V4SF
+				const v4sf z = s * c_delay[d].gain4;
+#else
 				const float z = s * c_delay[d].gain;
+#endif
 				c_data[i + c_delay[d].time] += z;
 			}
 		} while (i--);
