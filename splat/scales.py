@@ -1,4 +1,4 @@
-# Geomusic - geomusic/scales.py
+# Splat - splat/scales.py
 #
 # Copyright (C) 2012, 2013 Guillaume Tucker <guillaume@mangoz.org>
 #

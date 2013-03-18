@@ -1,4 +1,4 @@
-# Geomusic - dew_drop.py
+# Splat - dew_drop.py
 #
 # Copyright (C) 2012, 2013 Guillaume Tucker <guillaume@mangoz.org>
 #
@@ -17,16 +17,16 @@
 
 import sys
 import time
-import geomusic
+import splat
 
 def set_fade(gen, duration):
-    gen.filters = geomusic.FilterChain(
-        [(geomusic.filters.linear_fade, (duration,))])
+    gen.filters = splat.FilterChain(
+        [(splat.filters.linear_fade, (duration,))])
 
 def main(argv):
-    gen = geomusic.OvertonesGenerator(geomusic.Fragment(2, 48000, 18.0))
+    gen = splat.OvertonesGenerator(splat.Fragment(2, 48000, 18.0))
     gen.time_stretch = 1.8
-    s = geomusic.scales.LogScale(fund=440.0)
+    s = splat.scales.LogScale(fund=440.0)
 
     # print frequencies of all the notes of the scale over 3 octaves
     for octave in range(-2, 1):
@@ -108,10 +108,10 @@ def main(argv):
     if (len(argv) > 1) and (argv[1] == 'reverb'):
         print("Reverb...")
         d = [((float(t) / 400), -(6 + float(t) * 0.2)) for t in range(800)]
-        geomusic.filters.reverb(gen.frag, d)
+        splat.filters.reverb(gen.frag, d)
 
     print("Saving to file...")
-    padded = geomusic.Fragment(2, 48000, (gen.frag.duration + 1.0))
+    padded = splat.Fragment(2, 48000, (gen.frag.duration + 1.0))
     padded.mix(gen.frag, 0.5)
     padded.normalize(-0.1)
     padded.save_to_file('dew_drop.wav')

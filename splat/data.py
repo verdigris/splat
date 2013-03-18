@@ -1,4 +1,4 @@
-# Geomusic - geomusic/data.py
+# Splat - splat/data.py
 #
 # Copyright (C) 2012, 2013 Guillaume Tucker <guillaume@mangoz.org>
 #
@@ -19,7 +19,7 @@ import os
 import collections
 import struct
 import wave
-import _geomusic
+import _splat
 
 class AudioFile(collections.Sequence):
 
@@ -56,7 +56,7 @@ class AudioFile(collections.Sequence):
 
 class WaveFile(AudioFile):
 
-    """Wave file implementation of :py:class:`geomusic.data.AudioFile`"""
+    """Wave file implementation of :py:class:`splat.data.AudioFile`"""
 
     def __init__(self, file_name, mode):
         self._file = wave.open(file_name, mode)
@@ -104,7 +104,7 @@ class WaveFile(AudioFile):
         return bytearray(self._file.readframes(length))
 
 
-class Fragment(_geomusic.Fragment):
+class Fragment(_splat.Fragment):
 
     """A fragment of sound data.
 
@@ -113,7 +113,7 @@ class Fragment(_geomusic.Fragment):
     ``duration`` is specified, the fragment will be empty.  All the samples are
     initialised to 0 (silence).
 
-    All Geomusic sound data is contained in ``Fragment`` objects.  They are
+    All Splat sound data is contained in ``Fragment`` objects.  They are
     accessible as a mutable sequence of tuples of floating point values to
     represent the samples of the audio channels.  The length of each sample
     tuple is equal to the number of channels of the fragment, the maximum being

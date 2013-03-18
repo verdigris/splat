@@ -1,12 +1,12 @@
-What is Geomusic?
------------------
+What is Splat?
+--------------
 
-Geomusic is a mixture of *geometry* and *music*.  The original idea is to apply
-mathematical concepts derived from geometry to musical composition as well as
-sound synthesis.  In practice you can create just about any sound you can
-imagine and code in software.  A Geomusic composition takes the form of a
-Python script, and can generate sound data as well as import existing audio
-files and run various processing operations.
+Splat is the sound produced by a bare foot stomp.  The original idea is to
+apply mathematical concepts to musical composition as well as sound synthesis.
+In practice you can create just about any sound you can imagine and code in
+software.  A Splat composition takes the form of a Python script, and can
+generate sound data as well as import existing audio files and run various
+processing operations.
 
 This does not involve any real-time sound generation, everything runs to
 ultimately create an audio file which can then be played.  This means it's
