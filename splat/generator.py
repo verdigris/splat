@@ -42,7 +42,7 @@ class Generator(object):
         """
         self._frag = frag
         self._filter_chain = FilterChain(filters)
-        self._levels = tuple([1.0 for x in range(self.frag.channels)])
+        self._levels = tuple([0.0 for x in range(self.frag.channels)])
         self._time_stretch = 1.0
 
     @property
