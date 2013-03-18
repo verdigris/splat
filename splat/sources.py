@@ -1,4 +1,4 @@
-# Geomusic - geomusic/sources.py
+# Splat - splat/sources.py
 #
 # Copyright (C) 2012, 2013 Guillaume Tucker <guillaume@mangoz.org>
 #
@@ -15,4 +15,4 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from _geomusic import sine, overtones
+from _splat import sine, overtones

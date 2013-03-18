@@ -1,5 +1,5 @@
 /*
-    Geomusic - _geomusic.c
+    Splat - _splat.c
 
     Copyright (C) 2012, 2013 Guillaume Tucker <guillaume@mangoz.org>
 
@@ -47,7 +47,7 @@ struct Fragment_object {
 };
 typedef struct Fragment_object Fragment;
 
-static PyTypeObject geomusic_FragmentType;
+static PyTypeObject splat_FragmentType;
 
 static void Fragment_dealloc(Fragment *self)
 {
@@ -326,7 +326,7 @@ static PyObject *Fragment_mix(Fragment *self, PyObject *args)
 	size_t total_length;
 	unsigned c;
 
-	if (!PyArg_ParseTuple(args, "O!|d", &geomusic_FragmentType, &frag,
+	if (!PyArg_ParseTuple(args, "O!|d", &splat_FragmentType, &frag,
 			      &start))
 		return NULL;
 
@@ -609,10 +609,10 @@ static PyMethodDef Fragment_methods[] = {
 	{ NULL }
 };
 
-static PyTypeObject geomusic_FragmentType = {
+static PyTypeObject splat_FragmentType = {
 	PyObject_HEAD_INIT(NULL)
 	0,                                 /* ob_size */
-	"_geomusic.Fragment",              /* tp_name */
+	"_splat.Fragment",                 /* tp_name */
 	sizeof(Fragment),                  /* tp_basicsize */
 	0,                                 /* tp_itemsize */
 	(destructor)Fragment_dealloc,      /* tp_dealloc */
@@ -652,15 +652,15 @@ static PyTypeObject geomusic_FragmentType = {
 };
 
 /* ----------------------------------------------------------------------------
- * _geomusic methods
+ * _splat methods
  */
 
-PyDoc_STRVAR(geomusic_lin2dB_doc,
+PyDoc_STRVAR(splat_lin2dB_doc,
 "lin2dB(value)\n"
 "\n"
 "Convert linear ``value`` to dB.\n");
 
-static PyObject *geomusic_lin2dB(PyObject *self, PyObject *args)
+static PyObject *splat_lin2dB(PyObject *self, PyObject *args)
 {
 	double level;
 
@@ -670,12 +670,12 @@ static PyObject *geomusic_lin2dB(PyObject *self, PyObject *args)
 	return PyFloat_FromDouble(lin2dB(level));
 }
 
-PyDoc_STRVAR(geomusic_dB2lin_doc,
+PyDoc_STRVAR(splat_dB2lin_doc,
 "dB2lin(value)\n"
 "\n"
 "Convert dB ``value`` to linear.\n");
 
-static PyObject *geomusic_dB2lin(PyObject *self, PyObject *args)
+static PyObject *splat_dB2lin(PyObject *self, PyObject *args)
 {
 	double dB;
 
@@ -685,13 +685,13 @@ static PyObject *geomusic_dB2lin(PyObject *self, PyObject *args)
 	return PyFloat_FromDouble(dB2lin(dB));
 }
 
-PyDoc_STRVAR(geomusic_sine_doc,
+PyDoc_STRVAR(splat_sine_doc,
 "sine(fragment, frequency, levels)\n"
 "\n"
 "Generate a sine wave with constant ``levels`` at the given ``frequency`` "
 "over the entire ``fragment``.\n");
 
-static PyObject *geomusic_sine(PyObject *self, PyObject *args)
+static PyObject *splat_sine(PyObject *self, PyObject *args)
 {
 	Fragment *frag;
 	double freq;
@@ -702,7 +702,7 @@ static PyObject *geomusic_sine(PyObject *self, PyObject *args)
 	Py_ssize_t c, i;
 	double k;
 
-	if (!PyArg_ParseTuple(args, "O!dO!", &geomusic_FragmentType, &frag,
+	if (!PyArg_ParseTuple(args, "O!dO!", &splat_FragmentType, &frag,
 			      &freq, &PyTuple_Type, &levels_tuple))
 		return NULL;
 
@@ -735,7 +735,7 @@ static PyObject *geomusic_sine(PyObject *self, PyObject *args)
 	Py_RETURN_NONE;
 }
 
-PyDoc_STRVAR(geomusic_overtones_doc,
+PyDoc_STRVAR(splat_overtones_doc,
 "overtones(fragment, frequency, levels, overtones)\n"
 "\n"
 "Generate a sum of overtones as pure sine waves with the given fundamental "
@@ -747,7 +747,7 @@ PyDoc_STRVAR(geomusic_overtones_doc,
 "each channel of the fragment.  The generation is performed over the entire "
 "fragment.\n");
 
-static PyObject *geomusic_overtones(PyObject *self, PyObject *args)
+static PyObject *splat_overtones(PyObject *self, PyObject *args)
 {
 	struct overtone {
 		double freq;
@@ -772,7 +772,7 @@ static PyObject *geomusic_overtones(PyObject *self, PyObject *args)
 	double k;
 	int stat = 0;
 
-	if (!PyArg_ParseTuple(args, "O!dO!O!", &geomusic_FragmentType, &frag,
+	if (!PyArg_ParseTuple(args, "O!dO!O!", &splat_FragmentType, &frag,
 			      &freq, &PyTuple_Type, &levels_obj,
 			      &PyDict_Type, &overtones_obj))
 		return NULL;
@@ -844,7 +844,7 @@ free_overtones:
 	Py_RETURN_NONE;
 }
 
-PyDoc_STRVAR(geomusic_dec_envelope_doc,
+PyDoc_STRVAR(splat_dec_envelope_doc,
 "dec_envelope(fragment, k=1.0, p=1.0)\n"
 "\n"
 "This filter applies a decreasing envelope over the ``fragment`` with ``k`` "
@@ -855,7 +855,7 @@ PyDoc_STRVAR(geomusic_dec_envelope_doc,
 "   s[i] = \\frac{s[i]}{(1 + \\frac{i}{k})^p}\n"
 "\n");
 
-static PyObject *geomusic_dec_envelope(PyObject *self, PyObject *args)
+static PyObject *splat_dec_envelope(PyObject *self, PyObject *args)
 {
 	Fragment *frag;
 	double k = 1.0;
@@ -863,7 +863,7 @@ static PyObject *geomusic_dec_envelope(PyObject *self, PyObject *args)
 
 	size_t c;
 
-	if (!PyArg_ParseTuple(args, "O!|dd", &geomusic_FragmentType, &frag,
+	if (!PyArg_ParseTuple(args, "O!|dd", &splat_FragmentType, &frag,
 			      &k, &p))
 		return NULL;
 
@@ -884,18 +884,18 @@ static PyObject *geomusic_dec_envelope(PyObject *self, PyObject *args)
 	Py_RETURN_NONE;
 }
 
-PyDoc_STRVAR(geomusic_reverse_doc,
+PyDoc_STRVAR(splat_reverse_doc,
 "reverse(fragment)\n"
 "\n"
 "Reverse the order of all the ``fragment`` samples.\n");
 
-static PyObject *geomusic_reverse(PyObject *self, PyObject *args)
+static PyObject *splat_reverse(PyObject *self, PyObject *args)
 {
 	Fragment *frag;
 
 	size_t c;
 
-	if (!PyArg_ParseTuple(args, "O!", &geomusic_FragmentType, &frag))
+	if (!PyArg_ParseTuple(args, "O!", &splat_FragmentType, &frag))
 		return NULL;
 
 	for (c = 0; c < frag->n_channels; ++c) {
@@ -913,7 +913,7 @@ static PyObject *geomusic_reverse(PyObject *self, PyObject *args)
 	Py_RETURN_NONE;
 }
 
-PyDoc_STRVAR(geomusic_reverb_doc,
+PyDoc_STRVAR(splat_reverb_doc,
 "reverb(fragment, delays, time_factor=0.2, gain_factor=6.0, seed=0)\n"
 "\n"
 "This filter creates a fast basic reverb effect with some randomness.\n"
@@ -940,7 +940,7 @@ PyDoc_STRVAR(geomusic_reverb_doc,
 "   This filter function can also produce a *delay* effect by specifiying "
 "   only a few regularly spaced ``delays``.\n");
 
-static PyObject *geomusic_reverb(PyObject *self, PyObject *args)
+static PyObject *splat_reverb(PyObject *self, PyObject *args)
 {
 	struct delay {
 		size_t time;
@@ -964,7 +964,7 @@ static PyObject *geomusic_reverb(PyObject *self, PyObject *args)
 	size_t c;
 	size_t i;
 
-	if (!PyArg_ParseTuple(args, "O!O!|ddI", &geomusic_FragmentType, &frag,
+	if (!PyArg_ParseTuple(args, "O!O!|ddI", &splat_FragmentType, &frag,
 			      &PyList_Type, &delays_list, &time_factor,
 			      &gain_factor, &seed))
 		return NULL;
@@ -1103,38 +1103,38 @@ static PyObject *geomusic_reverb(PyObject *self, PyObject *args)
 	Py_RETURN_NONE;
 }
 
-static PyMethodDef geomusic_methods[] = {
-	{ "lin2dB", geomusic_lin2dB, METH_VARARGS,
-	  geomusic_lin2dB_doc },
-	{ "dB2lin", geomusic_dB2lin, METH_VARARGS,
-	  geomusic_dB2lin_doc },
-	{ "sine", geomusic_sine, METH_VARARGS,
-	  geomusic_sine_doc },
-	{ "overtones", geomusic_overtones, METH_VARARGS,
-	  geomusic_overtones_doc },
-	{ "dec_envelope", geomusic_dec_envelope, METH_VARARGS,
-	  geomusic_dec_envelope_doc },
-	{ "reverse", geomusic_reverse, METH_VARARGS,
-	  geomusic_reverse_doc },
-	{ "reverb", geomusic_reverb, METH_VARARGS,
-	  geomusic_reverb_doc },
+static PyMethodDef splat_methods[] = {
+	{ "lin2dB", splat_lin2dB, METH_VARARGS,
+	  splat_lin2dB_doc },
+	{ "dB2lin", splat_dB2lin, METH_VARARGS,
+	  splat_dB2lin_doc },
+	{ "sine", splat_sine, METH_VARARGS,
+	  splat_sine_doc },
+	{ "overtones", splat_overtones, METH_VARARGS,
+	  splat_overtones_doc },
+	{ "dec_envelope", splat_dec_envelope, METH_VARARGS,
+	  splat_dec_envelope_doc },
+	{ "reverse", splat_reverse, METH_VARARGS,
+	  splat_reverse_doc },
+	{ "reverb", splat_reverb, METH_VARARGS,
+	  splat_reverb_doc },
 	{ NULL, NULL, 0, NULL }
 };
 
-PyMODINIT_FUNC init_geomusic(void)
+PyMODINIT_FUNC init_splat(void)
 {
-	struct geomusic_type {
+	struct splat_type {
 		PyTypeObject *type;
 		const char *name;
 	};
-	static const struct geomusic_type geomusic_types[] = {
-		{ &geomusic_FragmentType, "Fragment" },
+	static const struct splat_type splat_types[] = {
+		{ &splat_FragmentType, "Fragment" },
 		{ NULL, NULL }
 	};
-	const struct geomusic_type *it;
+	const struct splat_type *it;
 	PyObject *m;
 
-	for (it = geomusic_types; it->type != NULL; ++it) {
+	for (it = splat_types; it->type != NULL; ++it) {
 		if (it->type->tp_new == NULL)
 			it->type->tp_new = PyType_GenericNew;
 
@@ -1142,9 +1142,9 @@ PyMODINIT_FUNC init_geomusic(void)
 			return;
 	}
 
-	m = Py_InitModule("_geomusic", geomusic_methods);
+	m = Py_InitModule("_splat", splat_methods);
 
-	for (it = geomusic_types; it->type != NULL; ++it) {
+	for (it = splat_types; it->type != NULL; ++it) {
 		Py_INCREF((PyObject *)it->type);
 		PyModule_AddObject(m, it->name, (PyObject *)it->type);
 	}

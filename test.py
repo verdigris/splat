@@ -4,7 +4,7 @@ try:
     from cStringIO import StringIO
 except ImportError:
     from StringIO import StringIO
-import geomusic
+import splat
 
 # -----------------------------------------------------------------------------
 # utilities
@@ -21,12 +21,12 @@ def check_md5(frag, hexdigest):
 # test functions
 
 def test_frag():
-    frag = geomusic.Fragment(2, 48000, 1.0)
+    frag = splat.Fragment(2, 48000, 1.0)
     return check_md5(frag, 'fe384f668da282694c29a84ebd33481d')
 test_frag.test_name = 'Fragment'
 
 def test_sine():
-    gen = geomusic.SineGenerator(geomusic.Fragment(2, 48000, 1.0))
+    gen = splat.SineGenerator(splat.Fragment(2, 48000, 1.0))
     gen.run(1000, 0.0, 1.0)
     return check_md5(gen.frag, 'e34be36a9b609c910744bd399b90709c')
 test_sine.test_name = "SineGenerator"

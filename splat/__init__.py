@@ -1,4 +1,4 @@
-# Geomusic - geomusic/__init__.py
+# Splat - splat/__init__.py
 #
 # Copyright (C) 2012, 2013 Guillaume Tucker <guillaume@mangoz.org>
 #
@@ -15,7 +15,7 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from _geomusic import lin2dB, dB2lin
+from _splat import lin2dB, dB2lin
 from generator import Generator, FilterChain, SineGenerator, OvertonesGenerator
 from data import Fragment
 from filters import FilterChain

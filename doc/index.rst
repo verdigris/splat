@@ -10,5 +10,5 @@ Geomusic manual
    :maxdepth: 2
 
    intro
-   geomusic
+   splat
 ..   examples
