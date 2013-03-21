@@ -43,6 +43,9 @@ Here's a very small **Splat** example which creates a beep 440Hz sound:
 `verdigris.mu <http://verdigris.mu>`_
 -------------------------------------
 
-You can find some pieces created with **Splat** as well as other music,
-software and electronics things on `verdigris.mu <http://verdigris.mu>`_.  You
-can send your creations to `info@verdigris.mu <mailto:info@verdigris.mu>`_.
+Download the `Manual in PDF format <http://verdigris.mu/public/doc/Splat.pdf>`_
+to start using **Splat**.
+
+You can find some splats as well as other music, software and electronics
+things on `verdigris.mu <http://verdigris.mu>`_.  You can send your creations
+to `info@verdigris.mu <mailto:info@verdigris.mu>`_.
