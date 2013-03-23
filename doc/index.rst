@@ -6,9 +6,10 @@
 Splat manual
 ============
 
+.. include:: ../README.rst
+
 .. toctree::
    :maxdepth: 2
 
    intro
    splat
-..   examples
