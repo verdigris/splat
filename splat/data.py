@@ -20,8 +20,14 @@ import struct
 import wave
 import _splat
 
+def file_ext(file_name):
+    return file_name.rpartition(os.extsep)[2].lower()
+
+# -----------------------------------------------------------------------------
+# Audio file openers
+
 def open_wav(file_name):
-    if file_name.rpartition('.')[2].lower() != 'wav':
+    if file_ext(file_name) != 'wav':
         return None
 
     w = wave.open(file_name, 'rb')
@@ -47,9 +53,28 @@ def open_wav(file_name):
 
     return frag
 
-
 audio_file_openers = [open_wav,]
 
+# -----------------------------------------------------------------------------
+# Audio file savers
+
+def save_wav(file_name, frag, start, end, sample_width=2):
+    w = wave.open(file_name, 'w')
+    w.setnchannels(frag.channels)
+    w.setsampwidth(sample_width)
+    w.setframerate(frag.sample_rate)
+    w.setnframes(len(frag))
+    raw_bytes = frag.as_bytes(sample_width)
+    k = frag.channels * sample_width
+    start_n = start * k
+    end_n = end * k
+    w.writeframes(raw_bytes[start_n:end_n])
+    w.close()
+
+audio_file_savers = { 'wav': save_wav, }
+
+# -----------------------------------------------------------------------------
+# Data classes
 
 class Fragment(_splat.Fragment):
 
@@ -95,30 +120,30 @@ class Fragment(_splat.Fragment):
         """Convert a time in seconds ``s`` to a sample index number."""
         return int(s * self.sample_rate)
 
-    def save_to_file(self, file_name, sample_width=2, start=0, end=None):
-        """Save the contents of the audio fragment to an audio file.
+    def save(self, file_name, fmt=None, start=0, end=None, *args, **kw):
+        """Save the contents of the audio fragment to a file.
 
-        A file is created with the provided name ``file_name``, and the
-        contents of the audio fragment are written to it.  The ``sample_width``
-        argument contains the resolution in bytes for each channels, which by
-        default is 2 (16 bits).
+        A file called ``file_name`` is created and the contents of the audio
+        fragment are written to it.  It is possible to save only a part of the
+        fragment using the ``start`` and ``end`` arguments with times in
+        seconds.
 
-        Note: Only ``WAV`` files are currently supported.
+        The ``fmt`` argument is a string to identify the output file format to
+        use.  If ``None``, the file name extension is used.  Currently only
+        ``wav`` is supported.  Extra arguments that are specific to the file
+        format can be added.
 
-        It's also possible to only save a part of the fragment using the
-        ``start`` and ``end`` arguments with times in seconds.
+        The ``wav`` format accepts an extra ``sample_width`` argument to
+        specify the number of bytes per sample for each channel, which is 2 by
+        default (16 bits).
         """
-        f = wave.open(file_name, 'w')
-        f.setnchannels(self.channels)
-        f.setsampwidth(sample_width)
-        f.setframerate(self.sample_rate)
-        f.setnframes(len(self))
-        bytes = self.as_bytes(sample_width)
-        k = self.channels * 2
-        start_n = start * k
-        if end is not None:
-            end_n = end * k
-        else:
-            end_n = len(self) * k
-        f.writeframes(bytes[start_n:end_n])
-        f.close()
+        if fmt is None:
+            fmt = file_ext(file_name)
+        saver = audio_file_savers.get(fmt, None)
+        if saver is None:
+            raise Exception("Unsupported file format: {0}".format(fmt))
+        if end is None:
+            end = len(self)
+        start_n = start * self.sample_rate
+        end_n = end * self.sample_rate
+        saver(file_name, self, start_n, end_n, *args, **kw)
