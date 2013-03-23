@@ -34,18 +34,19 @@ Here's a very small **Splat** example which creates a beep 440Hz sound:
 
     import splat
 
-    gen = splat.SineGenerator(splat.Fragment(2, 48000, 1.0),
-                              [splat.filters.linear_fade])
-    gen.run(440.0, 0.1, 0.9)
+    gen = splat.SineGenerator(splat.Fragment(), [splat.filters.linear_fade])
+    gen.run(440.0, 0.0, 1.0)
     gen.frag.save("A440.wav")
 
 
 `verdigris.mu <http://verdigris.mu>`_
 -------------------------------------
 
+You can find some splats as well as other music, software and electronics
+things on `verdigris.mu <http://verdigris.mu>`_.  Some experimental splats can
+also be heard on `SoundCloud <http://soundcloud.com/verdigris-mu>`_.  You can
+send your creations or reactions to `info@verdigris.mu
+<mailto:info@verdigris.mu>`_.
+
 Download the `Manual in PDF format <http://verdigris.mu/public/doc/Splat.pdf>`_
 to start using **Splat**.
-
-You can find some splats as well as other music, software and electronics
-things on `verdigris.mu <http://verdigris.mu>`_.  You can send your creations
-to `info@verdigris.mu <mailto:info@verdigris.mu>`_.

@@ -26,7 +26,7 @@ class Generator(object):
     """Generator to manage sound sources
 
     This class needs to be sub-classed to implement
-    :py:meth:`splat.Generator.run` with a concreate sound source.  It creates a
+    :py:meth:`splat.Generator.run` with a concrete sound source.  It creates a
     :py:class:`splat.Fragment` instance to store the generated and mixed
     sounds.
     """

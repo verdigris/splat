@@ -678,7 +678,7 @@ static PyTypeObject splat_FragmentType = {
 PyDoc_STRVAR(splat_lin2dB_doc,
 "lin2dB(value)\n"
 "\n"
-"Convert linear ``value`` to dB.\n");
+"Convert floating point linear ``value`` to dB.\n");
 
 static PyObject *splat_lin2dB(PyObject *self, PyObject *args)
 {
@@ -693,7 +693,7 @@ static PyObject *splat_lin2dB(PyObject *self, PyObject *args)
 PyDoc_STRVAR(splat_dB2lin_doc,
 "dB2lin(value)\n"
 "\n"
-"Convert dB ``value`` to linear.\n");
+"Convert floating point dB ``value`` to linear.\n");
 
 static PyObject *splat_dB2lin(PyObject *self, PyObject *args)
 {

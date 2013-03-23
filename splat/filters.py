@@ -56,7 +56,7 @@ class FilterChain(collections.Sequence):
         The filter function ``filter_func`` is added to the end of the chain,
         and the provided ``args`` tuple is associated with it to provide
         specific parameters when invoking it by
-        :py:meth:`splat.FilterChain.run``.
+        :py:meth:`splat.FilterChain.run`.
         """
         if not isinstance(args, tuple):
             raise Exception("Invalid filter arguments, must be a tuple")
