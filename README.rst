@@ -37,7 +37,7 @@ Here's a very small **Splat** example which creates a beep 440Hz sound:
     gen = splat.SineGenerator(splat.Fragment(2, 48000, 1.0),
                               [splat.filters.linear_fade])
     gen.run(440.0, 0.1, 0.9)
-    gen.frag.save_to_file("A440.wav")
+    gen.frag.save("A440.wav")
 
 
 `verdigris.mu <http://verdigris.mu>`_

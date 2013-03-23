@@ -1,6 +1,6 @@
 import sys
 import time
-import geomusic as geo
+import splat
 
 def bm(name, call, *args, **kw):
     start = time.time()
@@ -12,12 +12,12 @@ def bm(name, call, *args, **kw):
 
 def main(argv):
     time_s = 10.0
-    frag = bm('Fragment', geo.Fragment, 2, 48000, time_s)
-    gen = bm('SineGenerator', geo.SineGenerator, frag)
+    frag = bm('Fragment', splat.Fragment, 2, 48000, time_s)
+    gen = bm('SineGenerator', splat.SineGenerator, frag)
     bm('sine', gen.run, 1000, 0, time_s)
     bm('as_raw_bytes', frag.as_bytes, 2)
-    bm('reverse', geo.filters.reverse, frag)
-    bm('save_to_file', frag.save_to_file, 'bm.wav', 2)
+    bm('reverse', splat.filters.reverse, frag)
+    bm('save', frag.save, 'bm.wav')
     return True
 
 if __name__ == '__main__':
