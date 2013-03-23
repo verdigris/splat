@@ -12,7 +12,7 @@ import splat
 def check_md5(frag, hexdigest):
     md5sum = md5.new(frag.as_bytes(2))
     if md5sum.hexdigest() != hexdigest:
-        print("MD5 mismatch: {0}".format(md5sum.hexdigest()))
+        print("MD5 mismatch: {0} {1}".format(md5sum.hexdigest(), hexdigest))
         return False
     else:
         return True
@@ -28,7 +28,7 @@ test_frag.test_name = 'Fragment'
 def test_sine():
     gen = splat.SineGenerator(splat.Fragment(2, 48000, 1.0))
     gen.run(1000, 0.0, 1.0)
-    return check_md5(gen.frag, 'e34be36a9b609c910744bd399b90709c')
+    return check_md5(gen.frag, 'ec18389e198ee868d61c9439343a3337')
 test_sine.test_name = "SineGenerator"
 
 # -----------------------------------------------------------------------------
