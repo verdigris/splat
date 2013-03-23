@@ -30,8 +30,9 @@
 
 
    You can find some splats as well as other music, software and electronics
-   things on `verdigris.mu <http://verdigris.mu>`_.  You can send your
-   creations to `info@verdigris.mu <mailto:info@verdigris.mu>`_.
+   things on `verdigris.mu <http://verdigris.mu>`_ as well as on `SoundCloud
+   <http://soundcloud.com/verdigris-mu>`_.  You can send your creations to
+   `info@verdigris.mu <mailto:info@verdigris.mu>`_.
 
 
 Splat manual
