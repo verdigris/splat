@@ -65,15 +65,17 @@ static void Fragment_dealloc(Fragment *self)
 
 static int Fragment_init(Fragment *self, PyObject *args, PyObject *kw)
 {
-	unsigned n_channels;
-	unsigned rate;
+	static char *kwlist[] = { "channels", "rate", "duration", NULL };
+	unsigned n_channels = 2;
+	unsigned rate = 48000;
 	double duration = 0.0;
 
 	unsigned i;
 	size_t length;
 	size_t data_size;
 
-	if (!PyArg_ParseTuple(args, "II|d", &n_channels, &rate, &duration))
+	if (!PyArg_ParseTupleAndKeywords(args, kw, "|IId", kwlist,
+					 &n_channels, &rate, &duration))
 		return -1;
 
 	if (duration < 0.0) {

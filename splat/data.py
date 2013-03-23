@@ -81,7 +81,8 @@ class Fragment(_splat.Fragment):
     """A fragment of sound data.
 
     Create an empty sound fragment with the given number of ``channels``,
-    sample ``rate`` in Hertz and initial ``duration`` in seconds.  If no
+    sample ``rate`` in Hertz and initial ``duration`` in seconds.  The default
+    number of channels is 2 and the default sample rate is 48000.  If no
     ``duration`` is specified, the fragment will be empty.  All the samples are
     initialised to 0 (silence).
 
