@@ -20,76 +20,35 @@ import struct
 import wave
 import _splat
 
-class AudioFile(object):
+def open_wav(file_name):
+    if file_name.rpartition('.')[2].lower() != 'wav':
+        return None
 
-    """Audio file factory"""
+    w = wave.open(file_name, 'rb')
+    channels = w.getnchannels()
+    n_frames = w.getnframes()
+    sample_rate = w.getframerate()
+    duration = n_frames / float(sample_rate)
+    sample_width = w.getsampwidth()
 
-    @staticmethod
-    def open(file_name, mode='r'):
-        ext = file_name.rpartition('.')[2]
-        if ext == 'wav':
-            return WaveFile(file_name, mode)
-        raise Exception('Unsupported file format: {0}'.format(ext))
+    frag = Fragment(channels, sample_rate, duration)
+    rem = len(frag)
+    cur = 0
+    chunk_size = (64 * 1024) / (sample_width * channels)
 
-    def __init__(self, file_name, mode):
-        raise NotImplementedError
+    while rem > 0:
+        n = chunk_size if (rem >= chunk_size) else rem
+        raw_bytes = bytearray(w.readframes(n))
+        frag.import_bytes(raw_bytes, cur, sample_width, sample_rate, channels)
+        rem -= n
+        cur += n
 
-    def close(self):
-        pass
+    w.close()
 
-    @property
-    def channels(self):
-        raise NotImplementedError
-
-    @property
-    def duration(self):
-        raise NotImplementedError
-
-    @property
-    def sample_rate(self):
-        raise NotImplementedError
-
-    def get_bytearray(self):
-        raise NotImplementedError
+    return frag
 
 
-class WaveFile(AudioFile):
-
-    """Wave file implementation of :py:class:`splat.data.AudioFile`"""
-
-    def __init__(self, file_name, mode):
-        self._file = wave.open(file_name, mode)
-        self._sampwidth = self._file.getsampwidth()
-        if self._sampwidth != 2:
-            raise Exception("Unsupported sample width")
-        self._channels = self._file.getnchannels()
-        self._length = self._file.getnframes()
-
-    def close(self):
-        self._file.close()
-
-    @property
-    def channels(self):
-        return self._channels
-
-    @property
-    def sample_width(self):
-        return self._sampwidth
-
-    @property
-    def duration(self):
-        return self._file.getnframes() / float(self._file.getframerate())
-
-    @property
-    def sample_rate(self):
-        return self._file.getframerate()
-
-    # ToDo: pass array to avoid re-allocating each time
-    def get_bytearray(self, start=0, length=None):
-        if length is None:
-            length = len(self)
-        self._file.setpos(start)
-        return bytearray(self._file.readframes(length))
+audio_file_openers = [open_wav,]
 
 
 class Fragment(_splat.Fragment):
@@ -109,26 +68,18 @@ class Fragment(_splat.Fragment):
     """
 
     @classmethod
-    def open(cls, file_name, mode='r'):
+    def open(cls, file_name):
         """Open a file to create a sound fragment
 
         Open a sound file specified by ``file_name`` and imports its contents
         into a new ``Fragment`` instance, which is then returned.
         """
-        af = AudioFile.open(file_name, mode)
-        frag = cls(af.channels, af.sample_rate, af.duration)
-        rem = len(frag)
-        cur = 0
-        chunk_size = (64 * 1024) / (af.sample_width * af.channels)
-        while rem > 0:
-            n = chunk_size if (rem >= chunk_size) else rem
-            raw_bytes = af.get_bytearray(cur, n)
-            frag.import_bytes(raw_bytes, cur, af.sample_width,
-                              af.sample_rate, af.channels)
-            rem -= n
-            cur += n
-        af.close
-        return frag
+        for opener in audio_file_openers:
+            frag = opener(file_name)
+            if frag is not None:
+                return frag
+
+        raise Exception("Unsupported file format")
 
     def resize(self, duration):
         """Resize the fragment to the specified ``duration`` in seconds."""
