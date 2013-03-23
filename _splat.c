@@ -436,7 +436,7 @@ static PyObject *Fragment_as_bytes(Fragment *self, PyObject *args)
 	if (!PyArg_ParseTuple(args, "I", &sample_width))
 		return NULL;
 
-	if (sample_width != 2) {
+	if ((sample_width != 1) && (sample_width != 2)) {
 		PyErr_SetString(PyExc_ValueError, "unsupported sample width");
 		return NULL;
 	}
@@ -456,20 +456,38 @@ static PyObject *Fragment_as_bytes(Fragment *self, PyObject *args)
 
 	out = PyByteArray_AS_STRING(bytes_obj);
 
-	for (i = 0; i < self->length; ++i) {
-		for (c = 0; c < self->n_channels; ++c) {
-			const float z = *(it[c]++);
-			int16_t s;
+	if (sample_width == 2) {
+		for (i = 0; i < self->length; ++i) {
+			for (c = 0; c < self->n_channels; ++c) {
+				const float z = *(it[c]++);
+				int16_t s;
 
-			if (z < -1.0)
-				s = -32767;
-			else if (z > 1.0)
-				s = 32767;
-			else
-				s = z * 32767;
+				if (z < -1.0)
+					s = -32767;
+				else if (z > 1.0)
+					s = 32767;
+				else
+					s = z * 32767;
 
-			*out++ = s & 0xFF;
-			*out++ = (s >> 8) & 0xFF;
+				*out++ = s & 0xFF;
+				*out++ = (s >> 8) & 0xFF;
+			}
+		}
+	} else if (sample_width == 1) {
+		for (i = 0; i < self->length; ++i) {
+			for (c = 0; c < self->n_channels; ++c) {
+				const float z = *(it[c]++);
+				int8_t s;
+
+				if (z < -1.0)
+					s = 0;
+				else if (z > 1.0)
+					s = 255;
+				else
+					s = (z * 127) + 128;
+
+				*out++ = s & 0xFF;
+			}
 		}
 	}
 
