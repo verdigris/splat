@@ -16,12 +16,11 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import os
-import collections
 import struct
 import wave
 import _splat
 
-class AudioFile(collections.Sequence):
+class AudioFile(object):
 
     """Audio file factory"""
 
@@ -65,20 +64,9 @@ class WaveFile(AudioFile):
             raise Exception("Unsupported sample width")
         self._channels = self._file.getnchannels()
         self._length = self._file.getnframes()
-        self._fmt = '<' + ('h' * self._channels)
 
     def close(self):
         self._file.close()
-
-    def __getitem__(self, n):
-        if n >= self._length:
-            raise IndexError
-        self._file.setpos(n)
-        data = struct.unpack(self._fmt, self._file.readframes(1))
-        return tuple((float(data[i]) / 32768.0 for i in range(self._channels)))
-
-    def __len__(self):
-        return self._length
 
     @property
     def channels(self):
