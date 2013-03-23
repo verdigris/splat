@@ -3,10 +3,16 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Splat manual
-============
+.. only:: html
 
-.. include:: ../README.rst
+   .. include:: ../README.rst
+
+
+.. only:: latex
+
+   Splat manual
+   ============
+
 
 .. toctree::
    :maxdepth: 2
