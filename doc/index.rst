@@ -5,7 +5,12 @@
 
 .. only:: html
 
-   .. include:: ../README.rst
+   .. toctree::
+      :maxdepth: 2
+
+      README
+      intro
+      splat
 
 
 .. only:: latex
@@ -13,9 +18,9 @@
    Splat manual
    ============
 
+   .. toctree::
+      :maxdepth: 2
 
-.. toctree::
-   :maxdepth: 2
+      intro
+      splat
 
-   intro
-   splat
