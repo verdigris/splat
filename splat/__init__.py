@@ -25,4 +25,4 @@ import scales
 
 VERSION = (1, 0)
 VERSION_STR = '.'.join([str(v) for v in VERSION])
-BUILD = 2
+BUILD = 3
