@@ -1,5 +1,6 @@
 import sys
 import md5
+import math
 try:
     from cStringIO import StringIO
 except ImportError:
@@ -17,17 +18,30 @@ def check_md5(frag, hexdigest):
     else:
         return True
 
+def check_samples(frag, samples):
+    for n, s in samples.iteritems():
+        for c, d in zip(frag[n], s):
+            if abs(c - d) > (10 ** -6):
+                print("Sample mismatch {0}: {1} {2}".format(n, frag[n], s))
+                return False
+    return True
+
 # -----------------------------------------------------------------------------
 # test functions
 
 def test_frag():
     frag = splat.Fragment(duration=1.0)
-    return check_md5(frag, 'fe384f668da282694c29a84ebd33481d')
+    return (check_samples(frag, {int(len(frag) / 2): (0.0, 0.0)}) and
+            check_md5(frag, 'fe384f668da282694c29a84ebd33481d'))
 test_frag.test_name = 'Fragment'
 
 def test_sine():
-    gen = splat.SineGenerator(splat.Fragment(duration=1.0))
-    gen.run(1000, 0.0, 1.0)
+    gen = splat.SineGenerator(splat.Fragment())
+    f = 1000.0
+    gen.run(f, 0.0, 1.0)
+    n = int(0.1234 * gen.frag.duration * gen.frag.sample_rate)
+    s = math.sin(2 * math.pi * f * float(n) / gen.frag.sample_rate)
+    check_samples(gen.frag, {n: (s, s)})
     return check_md5(gen.frag, 'ec18389e198ee868d61c9439343a3337')
 test_sine.test_name = "SineGenerator"
 
