@@ -10,6 +10,9 @@ Fragment objects
    .. automethod:: splat.Fragment.mix
    .. automethod:: splat.Fragment.normalize
    .. automethod:: splat.Fragment.amp
+   .. autoattribute:: splat.Fragment.sample_rate
+   .. autoattribute:: splat.Fragment.duration
+   .. autoattribute:: splat.Fragment.channels
 
 
 Generator objects

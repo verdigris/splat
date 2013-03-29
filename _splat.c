@@ -49,6 +49,10 @@ typedef struct Fragment_object Fragment;
 
 static PyTypeObject splat_FragmentType;
 
+/* private functions */
+static int do_resize(Fragment *self, size_t length);
+static int parse_levels(double *levels, Fragment *frag, PyObject *levels_obj);
+
 static void Fragment_dealloc(Fragment *self)
 {
 	if (self->init) {
@@ -208,15 +212,38 @@ static PySequenceMethods Fragment_as_sequence = {
 
 /* Fragment getsetters */
 
+PyDoc_STRVAR(sample_rate_doc, "Get the sample rate in Hz.");
+
 static PyObject *Fragment_get_sample_rate(Fragment *self, void *_)
 {
 	return Py_BuildValue("I", self->rate);
 }
 
+PyDoc_STRVAR(duration_doc, "Get or set the fragment duration in seconds.");
+
 static PyObject *Fragment_get_duration(Fragment *self, void *_)
 {
 	return Py_BuildValue("f", (float)self->length / self->rate);
 }
+
+static int Fragment_set_duration(Fragment *self, PyObject *value, void *_)
+{
+	size_t new_length;
+
+	if (!PyFloat_Check(value)) {
+		PyErr_SetString(PyExc_TypeError, "Duration must be a float");
+		return -1;
+	}
+
+	new_length = PyFloat_AS_DOUBLE(value) * self->rate;
+
+	if (do_resize(self, new_length) < 0)
+		return -1;
+
+	return 0;
+}
+
+PyDoc_STRVAR(channels_doc, "Get the number of channels.");
 
 static PyObject *Fragment_get_channels(Fragment *self, void *_)
 {
@@ -224,93 +251,15 @@ static PyObject *Fragment_get_channels(Fragment *self, void *_)
 }
 
 static PyGetSetDef Fragment_getsetters[] = {
-	{ "sample_rate", (getter)Fragment_get_sample_rate, NULL, NULL },
-	{ "duration", (getter)Fragment_get_duration, NULL, NULL },
-	{ "channels", (getter)Fragment_get_channels, NULL, NULL },
+	{ "sample_rate", (getter)Fragment_get_sample_rate, NULL,
+	  sample_rate_doc },
+	{ "duration", (getter)Fragment_get_duration,
+	  (setter)Fragment_set_duration, duration_doc },
+	{ "channels", (getter)Fragment_get_channels, NULL, channels_doc },
 	{ NULL }
 };
 
-/* private functions */
-
-static int do_resize(Fragment *self, size_t length)
-{
-	size_t start;
-	size_t data_size;
-	size_t i;
-
-	if (length <= self->length)
-		return 0;
-
-	start = self->length * sizeof(float);
-	data_size = length * sizeof(float);
-
-	for (i = 0; i < self->n_channels; ++i) {
-		if (self->data[i] == NULL)
-			self->data[i] = PyMem_Malloc(data_size);
-		else
-			self->data[i] = PyMem_Realloc(self->data[i],data_size);
-
-		if (self->data[i] == NULL) {
-			PyErr_NoMemory();
-			return -1;
-		}
-
-		memset(&self->data[i][self->length], 0, (data_size - start));
-	}
-
-	self->length = length;
-
-	return 0;
-}
-
-static int parse_levels(double *levels, Fragment *frag, PyObject *levels_obj)
-{
-	size_t c;
-
-	if (PyFloat_Check(levels_obj)) {
-		const double gain_lin = dB2lin(PyFloat_AsDouble(levels_obj));
-		for (c = 0; c < frag->n_channels; ++c)
-			levels[c] = gain_lin;
-	} else if (PyTuple_Check(levels_obj)) {
-		if (PyTuple_GET_SIZE(levels_obj) != frag->n_channels) {
-			PyErr_SetString(PyExc_ValueError, "channels mismatch");
-			return -1;
-		}
-
-		for (c = 0; c < frag->n_channels; ++c) {
-			PyObject *o = PyTuple_GET_ITEM(levels_obj, c);
-
-			if (!PyFloat_Check(o)) {
-				PyErr_SetString(PyExc_TypeError,
-						"gain must be a float");
-				return -1;
-			}
-
-			levels[c] = dB2lin(PyFloat_AsDouble(o));
-		}
-	} else {
-		PyErr_SetString(PyExc_TypeError,
-				"invalid gain values, must be float or tuple");
-		return -1;
-	}
-
-	return 0;
-}
-
 /* Fragment methods */
-
-static PyObject *Fragment_resize(Fragment *self, PyObject *args)
-{
-	Py_ssize_t length;
-
-	if (!PyArg_ParseTuple(args, "n", &length))
-		return NULL;
-
-	if (do_resize(self, length) < 0)
-		return NULL;
-
-	Py_RETURN_NONE;
-}
 
 PyDoc_STRVAR(Fragment_mix_doc,
 "mix(fragment, start=0.0)\n"
@@ -614,8 +563,6 @@ static PyObject *Fragment_amp(Fragment *self, PyObject *args)
 }
 
 static PyMethodDef Fragment_methods[] = {
-	{ "_resize", (PyCFunction)Fragment_resize, METH_VARARGS,
-	  "Resize the internal buffer" },
 	{ "mix", (PyCFunction)Fragment_mix, METH_VARARGS,
 	  Fragment_mix_doc },
 	{ "import_bytes", (PyCFunction)Fragment_import_bytes, METH_VARARGS,
@@ -670,6 +617,73 @@ static PyTypeObject splat_FragmentType = {
 	0,                                 /* tp_alloc */
 	Fragment_new,                      /* tp_new */
 };
+
+/* private functions */
+
+static int do_resize(Fragment *self, size_t length)
+{
+	size_t start;
+	size_t data_size;
+	size_t i;
+
+	if (length <= self->length)
+		return 0;
+
+	start = self->length * sizeof(float);
+	data_size = length * sizeof(float);
+
+	for (i = 0; i < self->n_channels; ++i) {
+		if (self->data[i] == NULL)
+			self->data[i] = PyMem_Malloc(data_size);
+		else
+			self->data[i] = PyMem_Realloc(self->data[i],data_size);
+
+		if (self->data[i] == NULL) {
+			PyErr_NoMemory();
+			return -1;
+		}
+
+		memset(&self->data[i][self->length], 0, (data_size - start));
+	}
+
+	self->length = length;
+
+	return 0;
+}
+
+static int parse_levels(double *levels, Fragment *frag, PyObject *levels_obj)
+{
+	size_t c;
+
+	if (PyFloat_Check(levels_obj)) {
+		const double gain_lin = dB2lin(PyFloat_AsDouble(levels_obj));
+		for (c = 0; c < frag->n_channels; ++c)
+			levels[c] = gain_lin;
+	} else if (PyTuple_Check(levels_obj)) {
+		if (PyTuple_GET_SIZE(levels_obj) != frag->n_channels) {
+			PyErr_SetString(PyExc_ValueError, "channels mismatch");
+			return -1;
+		}
+
+		for (c = 0; c < frag->n_channels; ++c) {
+			PyObject *o = PyTuple_GET_ITEM(levels_obj, c);
+
+			if (!PyFloat_Check(o)) {
+				PyErr_SetString(PyExc_TypeError,
+						"gain must be a float");
+				return -1;
+			}
+
+			levels[c] = dB2lin(PyFloat_AsDouble(o));
+		}
+	} else {
+		PyErr_SetString(PyExc_TypeError,
+				"invalid gain values, must be float or tuple");
+		return -1;
+	}
+
+	return 0;
+}
 
 /* ----------------------------------------------------------------------------
  * _splat methods
