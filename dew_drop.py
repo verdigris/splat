@@ -107,7 +107,7 @@ def main(argv):
 
     if (len(argv) > 1) and (argv[1] == 'reverb'):
         print("Reverb...")
-        d = [((float(t) / 400), -(6 + float(t) * 0.2)) for t in range(800)]
+        d = splat.filters.reverb_delays()
         splat.filters.reverb(gen.frag, d)
 
     print("Saving to file...")
