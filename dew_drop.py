@@ -113,7 +113,7 @@ def main(argv):
     print("Saving to file...")
     padded = splat.Fragment(2, 48000, (gen.frag.duration + 1.0))
     padded.mix(gen.frag, 0.5)
-    padded.normalize(-0.1)
+    padded.normalize()
     padded.save('dew_drop.wav')
 
 
