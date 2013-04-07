@@ -144,7 +144,8 @@ class Fragment(_splat.Fragment):
         if saver is None:
             raise Exception("Unsupported file format: {0}".format(fmt))
         if end is None:
-            end = len(self)
-        start_n = start * self.sample_rate
-        end_n = end * self.sample_rate
+            end_n = len(self)
+        else:
+            end_n = int(end * self.sample_rate)
+        start_n = int(start * self.sample_rate)
         saver(file_name, self, start_n, end_n, *args, **kw)
