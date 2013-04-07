@@ -459,7 +459,7 @@ PyDoc_STRVAR(Fragment_normalize_doc,
 
 static PyObject *Fragment_normalize(Fragment *self, PyObject *args)
 {
-	double level;
+	double level = -0.05;
 	PyObject *zero = NULL;
 
 	int do_zero;
@@ -468,7 +468,7 @@ static PyObject *Fragment_normalize(Fragment *self, PyObject *args)
 	double peak;
 	double gain;
 
-	if (!PyArg_ParseTuple(args, "d|O!", &level, &PyBool_Type, &zero))
+	if (!PyArg_ParseTuple(args, "|dO!", &level, &PyBool_Type, &zero))
 		return NULL;
 
 	if (self->n_channels > MAX_CHANNELS) {
