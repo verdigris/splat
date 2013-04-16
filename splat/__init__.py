@@ -22,6 +22,7 @@ from filters import FilterChain
 import filters
 import sources
 import scales
+import interpol
 
 VERSION = (1, 0)
 VERSION_STR = '.'.join([str(v) for v in VERSION])
