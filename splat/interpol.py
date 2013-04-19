@@ -80,7 +80,7 @@ class PolyMatrix(object):
 class Spline(object):
 
     def __init__(self, pts, n=2):
-        self._pts = pts
+        self._pts = sorted(pts)
         self._n = 2
         self._pols = []
         self._build()
@@ -89,11 +89,44 @@ class Spline(object):
     def polynomials(self):
         return self._pols
 
+    @property
+    def start(self):
+        return self._pts[0][0]
+
+    @property
+    def end(self):
+        return self._pts[-1][0]
+
     def value(self, x):
         for x0, x1, pol in self._pols:
             if (x0 <= x) and (x <= x1):
                 return pol.value(x)
         return None
+
+    def slices(self, y0, xmin=None, xmax=None, xstep=0.001):
+        if xmin is None:
+            xmin = self.start
+        if xmax is None:
+            xmax = self.end
+        y1 = self.value(xmin)
+        if y1 is None:
+            return None
+        slices = []
+        x0 = None
+        s1 = bool(y1 < y0)
+        for i in range(1, int((xmax - xmin) / xstep)):
+            x = xmin + float(i) * xstep
+            y = self.value(x)
+            if y is None:
+                break
+            s = bool(y < y0)
+            if s1 and not s:
+                x0 = x
+            elif (x is not None) and (s and not s1):
+                slices.append((x0, x))
+            y1 = y
+            s1 = s
+        return slices
 
     def _build(self):
         m = PolyMatrix(self._pts[:(self._n + 1)])
