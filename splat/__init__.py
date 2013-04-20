@@ -16,13 +16,8 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from _splat import lin2dB, dB2lin
-from generator import Generator, FilterChain, SineGenerator, OvertonesGenerator
-from data import Fragment
-from filters import FilterChain
-import filters
-import sources
-import scales
-import interpol
+
+__all__ = ['gen', 'data', 'filters', 'sources', 'scales', 'interpol']
 
 VERSION = (1, 0)
 VERSION_STR = '.'.join([str(v) for v in VERSION])
