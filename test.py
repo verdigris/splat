@@ -5,7 +5,8 @@ try:
     from cStringIO import StringIO
 except ImportError:
     from StringIO import StringIO
-import splat
+import splat.data
+import splat.gen
 
 # -----------------------------------------------------------------------------
 # utilities
@@ -30,13 +31,13 @@ def check_samples(frag, samples):
 # test functions
 
 def test_frag():
-    frag = splat.Fragment(duration=1.0)
+    frag = splat.data.Fragment(duration=1.0)
     return (check_samples(frag, {int(len(frag) / 2): (0.0, 0.0)}) and
             check_md5(frag, 'fe384f668da282694c29a84ebd33481d'))
 test_frag.test_name = 'Fragment'
 
 def test_sine():
-    gen = splat.SineGenerator(splat.Fragment())
+    gen = splat.gen.SineGenerator(splat.data.Fragment())
     f = 1000.0
     gen.run(f, 0.0, 1.0)
     n = int(0.1234 * gen.frag.duration * gen.frag.sample_rate)
