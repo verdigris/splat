@@ -18,13 +18,17 @@
 import sys
 import time
 import splat
+import splat.data
+import splat.gen
+import splat.filters
+import splat.scales
 
 def set_fade(gen, duration):
-    gen.filters = splat.FilterChain(
+    gen.filters = splat.filters.FilterChain(
         [(splat.filters.linear_fade, (duration,))])
 
 def main(argv):
-    gen = splat.OvertonesGenerator(splat.Fragment(2, 48000, 18.0))
+    gen = splat.gen.OvertonesGenerator(splat.data.Fragment(2, 48000, 18.0))
     gen.time_stretch = 1.8
     s = splat.scales.LogScale(fund=440.0)
 
@@ -111,7 +115,7 @@ def main(argv):
         splat.filters.reverb(gen.frag, d)
 
     print("Saving to file...")
-    padded = splat.Fragment(2, 48000, (gen.frag.duration + 1.0))
+    padded = splat.data.Fragment(2, 48000, (gen.frag.duration + 1.0))
     padded.mix(gen.frag, 0.5)
     padded.normalize()
     padded.save('dew_drop.wav')
