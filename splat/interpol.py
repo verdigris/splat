@@ -2,9 +2,15 @@ import copy
 
 class Polynomial(object):
 
+    """Polynomial object.
+    """
+
     def __init__(self, coefs):
         self._coefs = coefs
         self._deriv = None
+
+    def __repr__(self):
+        return repr(self._coefs)
 
     @property
     def pol(self):
@@ -26,7 +32,22 @@ class Polynomial(object):
 
 class PolyMatrix(object):
 
+    """Matrix to calculate polynomial coefficients.
+
+    For a given list of input points, polynomial coefficients are calculated so
+    that it passes through all of them.  The order of the polynomial is equal
+    to the number of input points minus one.
+
+    The calculation is achieved by first building a matrix from the input
+    coordinates and then reducing it with linear operations.  It uses what is
+    now known as the Gauss-Jordan elimination.  A
+    :py:class:`splat.interpol.Polynomial` object is created as a result.  It is
+    also possible to append user-defined rows to the matrix in addition to the
+    ones automatically created from the input points.
+    """
+
     def __init__(self, pts):
+        """The ``pts`` are a list of 2-tuples with ``(x, y)`` coordinates."""
         self._pts = pts
         self._m = []
         self._r = None
@@ -34,27 +55,35 @@ class PolyMatrix(object):
 
     @property
     def m(self):
+        """Get the matrix as n lists of (n + 1) elements."""
         if not self._m:
             self._build()
         return self._m
 
     @property
     def reduced(self):
+        """Get the reduced matrix, which contains the identity matrix and the
+        polynomial coefficients at the end of each row."""
         if self._r is None:
             self._reduce()
         return self._r
 
     @property
     def poly(self):
+        """Get the :py:class:`splat.interpol.Polynomial` object derived from
+        the reduced matrix."""
         if self._poly is None:
-            self._reduce()
+            n = len(self.reduced)
+            self._poly = Polynomial(tuple((l[n] for l in self.reduced)))
         return self._poly
 
-    def add_pts(self, pts):
-        self._pts += pts
-
     def add_row(self, row):
-        self._m.append(row)
+        """Append a row to the matrix.  It must be a list of floats with the
+        same length as the others (n + 1).  This resets the reduced matrix and
+        the polynomial."""
+        self.m.append(row)
+        self._r = None
+        self._poly = None
 
     def _build(self):
         n = len(self._pts)
@@ -74,12 +103,29 @@ class PolyMatrix(object):
                     r = self._r[j][i]
                     for k in range(i, n + 1):
                         self._r[j][k] -= (self._r[i][k] * r)
-        self._poly = Polynomial(tuple((l[n] for l in self._r)))
 
 
 class Spline(object):
 
+    """Spline built from a series of points and slope coordinates.
+
+    For a given list of ``(x, y)`` or ``(x, y, d)`` coordinates, where ``d`` is
+    a slope value, a Spline object will create a list of polynomials of degree
+    ``n`` or ``n + 1`` if the slope is specified.  This can then be used as a
+    continuous ``f(x) = y`` function.  Each polynomial is used to interpolate
+    between 2 input points, except at the end where 3 points may share a same
+    polynomial.  They are calculated so that they go through the all of the
+    given ``(x, y)`` 2-tuple coordinates.  The slope (or derivative value) at
+    each point is either determined by the interpolation polynomial or
+    constrained in the last value in 3-tuple input points.
+    """
+
     def __init__(self, pts, n=2):
+        """All the input points are provided as a list of 2- or 3-tuples in
+        ``pts``.  The polynomial order is given by ``n``, which is 2 by
+        default.  For points with a 3-tuple, the polynomial order will be ``n +
+        1`` in order to match the specified slope value, so 3 by default.
+        """
         self._pts = sorted(pts)
         self._n = 2
         self._pols = []
@@ -87,23 +133,44 @@ class Spline(object):
 
     @property
     def polynomials(self):
+        """List of 3-tuples containing the ``x`` range and a
+        :py:class:`splat.interpol.Polynomial` object."""
         return self._pols
 
     @property
     def start(self):
+        """First ``x`` value from the list of points.  The Spline is undefined
+        for values smaller than this."""
         return self._pts[0][0]
 
     @property
     def end(self):
+        """Last ``x`` value from the list of points.  The Spline is undefined
+        for values greater than this."""
         return self._pts[-1][0]
 
     def value(self, x):
+        """Return a ``y`` value for a given ``x`` value, or None if
+        undefined."""
         for x0, x1, pol in self._pols:
             if (x0 <= x) and (x <= x1):
                 return pol.value(x)
         return None
 
     def slices(self, y0, xmin=None, xmax=None, xstep=0.001):
+        """Get slices of the Spline function for a given ``y0`` value.
+
+        Return a list of 2-tuples with ``x`` ranges for which the Spline is
+        greater or equal to the given ``y0`` value.  Optional arguments
+        ``xmin`` and ``xmax`` can be used to restrict the interval instead of
+        the whole Spline definition range.  The ``xstep`` argument defines the
+        granularity used in generating the range coordinates.  Smaller values
+        make more accurate results but also increase the processing time.
+
+        This can for example be used to create arbitrary random distributions
+        by adding evenly distributed random events within slices while
+        iterating over a ``y`` range.
+        """
         if xmin is None:
             xmin = self.start
         if xmax is None:
