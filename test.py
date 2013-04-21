@@ -7,6 +7,7 @@ except ImportError:
     from StringIO import StringIO
 import splat.data
 import splat.gen
+import splat.interpol
 
 # -----------------------------------------------------------------------------
 # utilities
@@ -22,10 +23,13 @@ def check_md5(frag, hexdigest):
 def check_samples(frag, samples):
     for n, s in samples.iteritems():
         for c, d in zip(frag[n], s):
-            if abs(c - d) > (10 ** -6):
+            if not floatcmp(c, d):
                 print("Sample mismatch {0}: {1} {2}".format(n, frag[n], s))
                 return False
     return True
+
+def floatcmp(f1, f2):
+    return abs(f1 - f2) < (10 ** -6)
 
 # -----------------------------------------------------------------------------
 # test functions
@@ -45,6 +49,18 @@ def test_sine():
     check_samples(gen.frag, {n: (s, s)})
     return check_md5(gen.frag, 'ec18389e198ee868d61c9439343a3337')
 test_sine.test_name = "SineGenerator"
+
+def test_spline():
+    pts = [(1.23, 4.56), (4.32, 2.54, 1.25), (5.458, -4.247)]
+    s = splat.interpol.Spline(pts)
+    for p in pts:
+        x, y = p[0], p[1]
+        y1 = s.value(x)
+        if not floatcmp(y, y1):
+            print("Spline error: s({0}) = {1} instead of {2}".format(x, y1, y))
+            return False
+    return True
+test_spline.test_name = "Spline"
 
 # -----------------------------------------------------------------------------
 # main function
