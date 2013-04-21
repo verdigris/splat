@@ -3,10 +3,18 @@ import copy
 class Polynomial(object):
 
     """Polynomial object.
+
+    A series of coefficients are used to create a polynomial function.  The
+    index of each coefficient corresponds to the power of the input variable,
+    starting with 0 and increasing by 1 each time.
     """
 
     def __init__(self, coefs):
-        self._coefs = coefs
+        """The ``coefs`` are a sequence of floats with the coefficients of the
+        polynomial function.  The degree of the polynomial is equal to the
+        length of ``coefs``.
+        """
+        self._coefs = tuple(coefs)
         self._deriv = None
 
     def __repr__(self):
@@ -14,16 +22,21 @@ class Polynomial(object):
 
     @property
     def pol(self):
+        """A tuple with the polynomial coefficients."""
         return self._coefs
 
     @property
     def derivative(self):
+        """A :py:class:`splat.interpol.Polynomial` object with the derivative
+        of this polynomial."""
         if self._deriv is None:
             coefs = tuple((k * (i + 1)) for i, k in enumerate(self._coefs[1:]))
             self._deriv = Polynomial(coefs)
         return self._deriv
 
     def value(self, x):
+        """Return the value of the polynomial for the given ``x`` input
+        value."""
         res = 0
         for p, k in enumerate(self._coefs):
             res += k * (x ** p)
@@ -35,15 +48,15 @@ class PolyMatrix(object):
     """Matrix to calculate polynomial coefficients.
 
     For a given list of input points, polynomial coefficients are calculated so
-    that it passes through all of them.  The order of the polynomial is equal
-    to the number of input points minus one.
+    that the function passes through all of them.  The order of the polynomial
+    function is equal to the number of input points minus one.
 
-    The calculation is achieved by first building a matrix from the input
-    coordinates and then reducing it with linear operations.  It uses what is
-    now known as the Gauss-Jordan elimination.  A
-    :py:class:`splat.interpol.Polynomial` object is created as a result.  It is
-    also possible to append user-defined rows to the matrix in addition to the
-    ones automatically created from the input points.
+    The calculation is achieved by building a matrix from the input coordinates
+    and then reducing it with linear operations.  It uses what is now known as
+    the *Gauss-Jordan elimination*.  A :py:class:`splat.interpol.Polynomial`
+    object is created as a result.  It is also possible to append user-defined
+    rows to the matrix in addition to the ones automatically created from the
+    input points.
     """
 
     def __init__(self, pts):
@@ -55,7 +68,8 @@ class PolyMatrix(object):
 
     @property
     def m(self):
-        """Get the matrix as n lists of (n + 1) elements."""
+        """Get the matrix numbers as ``n`` lists, each of one containing a row
+        of ``(n + 1)`` elements."""
         if not self._m:
             self._build()
         return self._m
@@ -79,8 +93,8 @@ class PolyMatrix(object):
 
     def add_row(self, row):
         """Append a row to the matrix.  It must be a list of floats with the
-        same length as the others (n + 1).  This resets the reduced matrix and
-        the polynomial."""
+        same length as the others (``n + 1``).  This resets the reduced matrix
+        and the polynomial."""
         self.m.append(row)
         self._r = None
         self._poly = None
