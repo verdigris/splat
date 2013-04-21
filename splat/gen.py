@@ -23,12 +23,18 @@ import _splat
 
 class Generator(object):
 
-    """Generator to manage sound sources
+    """Generator to manage sound sources.
 
-    This class needs to be sub-classed to implement
-    :py:meth:`splat.gen.Generator.run` with a concrete sound source.  It
-    creates a :py:class:`splat.data.Fragment` instance to store the generated
-    and mixed sounds.
+    This abstract class provides the basic interface to run a sound generator
+    and create and mix signals run with a given base frequency and start and
+    end times using a given sound source function.  Its main advantage is to
+    allow a Splat piece to be run with different generators or sound sources
+    without rewriting the code.  It creates a :py:class:`splat.data.Fragment`
+    object to store the generated and mixed sound data.  It allows arbitrary
+    extra arguments to be passed to the sound source for extra flexibility.
+
+    In order to be used, this class needs to be sub-classed to implement
+    :py:meth:`splat.gen.Generator.run` with a concrete sound source.
     """
 
     def __init__(self, frag, filters=None):
@@ -47,7 +53,7 @@ class Generator(object):
 
     @property
     def levels(self):
-        """Sound levels as a tuple in dB"""
+        """Sound levels as a tuple in dB."""
         return self._levels
 
     @levels.setter
@@ -59,17 +65,17 @@ class Generator(object):
     @property
     def frag(self):
         """:py:class:`splat.data.Fragment` instance with the generated
-        sounds"""
+        sounds."""
         return self._frag
 
     @property
     def channels(self):
-        """Number of channels"""
+        """Number of channels."""
         return self._frag.channels
 
     @property
     def sample_rate(self):
-        """Sample rate in Hz"""
+        """Sample rate in Hz."""
         return self._frag.sample_rate
 
     @property
@@ -139,11 +145,12 @@ class OvertonesGenerator(Generator):
 
     """Overtones generator.
 
-    Overtones are defined by an ``overtones`` dictionary.  This uses the
-    :py:func:`splat.sources.overtones` source.
+    Overtones are defined by an ``overtones`` dictionary.  For a description of
+    the overtunes, see the :py:func:`splat.sources.overtones` source which is
+    used by this generator.
 
     Note: The time to generate the signal increases with the number of
-    overtones ``n``.
+    overtones.
     """
 
     def __init__(self, *args, **kw):

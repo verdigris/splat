@@ -17,6 +17,7 @@ the time to generate it will be shorter with a faster machine.
 
 It is usually easier to prototype new tools (i.e. generators, filters ...) in
 pure Python, and when some code is known to be working it can be implemented
-again in C for improved performance.
+again in C for improved performance (see ``splat.c`` in source code
+distribution).
 
 Note: Only ``WAV`` audio file format is currently supported.

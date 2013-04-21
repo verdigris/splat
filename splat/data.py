@@ -97,7 +97,7 @@ class Fragment(_splat.Fragment):
     def open(cls, file_name):
         """Open a file to create a sound fragment
 
-        Open a sound file specified by ``file_name`` and imports its contents
+        Open a sound file specified by ``file_name`` and import its contents
         into a new :py:class:`splat.data.Fragment` instance, which is then
         returned.
         """
@@ -115,11 +115,13 @@ class Fragment(_splat.Fragment):
         return n
 
     def n2s(self, n):
-        """Convert a sample index number ``n`` into a time in seconds."""
+        """Convert a sample index number ``n`` into a time in seconds and
+        return it."""
         return float(n) / self.sample_rate
 
     def s2n(self, s):
-        """Convert a time in seconds ``s`` to a sample index number."""
+        """Convert a time in seconds ``s`` to a sample index number and return
+        it."""
         return int(s * self.sample_rate)
 
     def save(self, file_name, fmt=None, start=0, end=None, *args, **kw):

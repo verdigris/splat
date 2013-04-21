@@ -164,8 +164,8 @@ class Spline(object):
         return self._pts[-1][0]
 
     def value(self, x):
-        """Return a ``y`` value for a given ``x`` value, or None if
-        undefined."""
+        """Return the spline value for a given ``x`` input value, or ``None``
+        if undefined."""
         for x0, x1, pol in self._pols:
             if (x0 <= x) and (x <= x1):
                 return pol.value(x)
