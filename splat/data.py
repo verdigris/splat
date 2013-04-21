@@ -86,11 +86,11 @@ class Fragment(_splat.Fragment):
     ``duration`` is specified, the fragment will be empty.  All the samples are
     initialised to 0 (silence).
 
-    All Splat sound data is contained in ``Fragment`` objects.  They are
-    accessible as a mutable sequence of tuples of floating point values to
-    represent the samples of the audio channels.  The length of each sample
-    tuple is equal to the number of channels of the fragment, the maximum being
-    fixed to 16.
+    All Splat sound data is contained in :py:class:`splat.data.Fragment`
+    objects.  They are accessible as a mutable sequence of tuples of floating
+    point values to represent the samples of the audio channels.  The length of
+    each sample tuple is equal to the number of channels of the fragment, the
+    maximum being fixed to 16.
     """
 
     @classmethod
@@ -98,7 +98,8 @@ class Fragment(_splat.Fragment):
         """Open a file to create a sound fragment
 
         Open a sound file specified by ``file_name`` and imports its contents
-        into a new ``Fragment`` instance, which is then returned.
+        into a new :py:class:`splat.data.Fragment` instance, which is then
+        returned.
         """
         for opener in audio_file_openers:
             frag = opener(file_name)

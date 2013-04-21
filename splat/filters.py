@@ -22,9 +22,9 @@ class FilterChain(collections.Sequence):
 
     """Chain of filters to process existing data
 
-    This class is used by the :py:class:`splat.Generator` classes to define
+    This class is used by the :py:class:`splat.gen.Generator` classes to define
     a chain of filter functions that are run on each newly created
-    :py:class:`splat.Fragment` instance from a sound source
+    :py:class:`splat.data.Fragment` instance from a sound source
     (:ref:`sources`).
     """
 
@@ -56,7 +56,7 @@ class FilterChain(collections.Sequence):
         The filter function ``filter_func`` is added to the end of the chain,
         and the provided ``args`` tuple is associated with it to provide
         specific parameters when invoking it by
-        :py:meth:`splat.FilterChain.run`.
+        :py:meth:`splat.filters.FilterChain.run`.
         """
         if not isinstance(args, tuple):
             raise Exception("Invalid filter arguments, must be a tuple")
@@ -66,7 +66,7 @@ class FilterChain(collections.Sequence):
         """Run all the filter functions on a sound fragment.
 
         All the filter functions in the chain are run with their associated
-        arguments on the :py:class:`splat.Fragment` argument ``frag``.
+        arguments on the :py:class:`splat.data.Fragment` argument ``frag``.
         """
         for f, args in self:
             f(frag, *args)

@@ -26,19 +26,19 @@ class Generator(object):
     """Generator to manage sound sources
 
     This class needs to be sub-classed to implement
-    :py:meth:`splat.Generator.run` with a concrete sound source.  It creates a
-    :py:class:`splat.Fragment` instance to store the generated and mixed
-    sounds.
+    :py:meth:`splat.gen.Generator.run` with a concrete sound source.  It
+    creates a :py:class:`splat.data.Fragment` instance to store the generated
+    and mixed sounds.
     """
 
     def __init__(self, frag, filters=None):
-        """The ``frag`` argument must be a :py:class:`splat.Fragment`
+        """The ``frag`` argument must be a :py:class:`splat.data.Fragment`
         instance.
 
         A chain of ``filters`` can also be initialised here with a list of
-        filter functions and internally create a :py:meth:`splat.FilterChain`
-        object.  This can be altered later via
-        :py:attr:`splat.Generator.filters`.
+        filter functions and internally create a
+        :py:meth:`splat.filters.FilterChain` object.  This can be altered later
+        via :py:attr:`splat.gen.Generator.filters`.
         """
         self._frag = frag
         self._filter_chain = FilterChain(filters)
@@ -58,7 +58,8 @@ class Generator(object):
 
     @property
     def frag(self):
-        """:py:class:`splat.Fragment` instance with the generated sounds"""
+        """:py:class:`splat.data.Fragment` instance with the generated
+        sounds"""
         return self._frag
 
     @property
@@ -73,7 +74,7 @@ class Generator(object):
 
     @property
     def filters(self):
-        """The :py:class:`splat.FilterChain` being used."""
+        """The :py:class:`splat.filters.FilterChain` being used."""
         return self._filter_chain
 
     @filters.setter
@@ -85,7 +86,7 @@ class Generator(object):
         """Time stretch factor
 
         All ``start`` and ``end`` times are multiplied by this value when
-        calling :py:meth:`splat.Generator.run`.
+        calling :py:meth:`splat.gen.Generator.run`.
         """
         return self._time_stretch
 
@@ -95,7 +96,7 @@ class Generator(object):
 
     def _run(self, source, start, end, *args, **kw):
         """Main method, designed to be invoked by sub-classes via
-        :py:meth:`splat.Generator.run`
+        :py:meth:`splat.gen.Generator.run`
 
         The ``source`` argument is a sound source function (:ref:`sources`), to
         which the ``*args`` and ``**kw`` arguments are passed on.  The sound is
@@ -114,7 +115,7 @@ class Generator(object):
 
         This method is the main entry point to run the generator and actually
         produce some sound data.  It will typically call
-        :py:meth:`splat.Generator._run` with a sound source and specific
+        :py:meth:`splat.gen.Generator._run` with a sound source and specific
         arguments.
         """
         raise NotImplementedError
