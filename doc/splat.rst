@@ -58,6 +58,34 @@ of the fragment.  Filter functions can be combined into a series via the
 .. autofunction:: splat.filters.reverb
 
 
+.. _interpolation:
+
+Interpolation and Spline objects
+--------------------------------
+
+This module contains a set of classes designed to work together and provide
+polynomial interpolation functionality.  The principle is to build a continuous
+function for a given set of input discrete coordinates.  A
+:py:class:`splat.interpol.Polynomial` object represents a polynomial function
+with a series of coefficients.  It can be calculated by reducing a matrix
+containing some coordinates using :py:class:`splat.interpol.PolyMatrix`.  It is
+usually preferred to use a :py:class:`splat.interpol.Spline` object to create a
+long function composed of a list of different polynomials between each pair of
+points.  It is easier to control the interpolation of a spline containing many
+low-degree polynomials tha a single high degree polynomial.
+
+.. autoclass:: splat.interpol.Polynomial
+   :members:
+
+.. autoclass:: splat.interpol.PolyMatrix
+   :members:
+
+.. autoclass:: splat.interpol.Spline
+   :members:
+
+
+.. _general_purpose_functions:
+
 General purpose functions
 -------------------------
 
