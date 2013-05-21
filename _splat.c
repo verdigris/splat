@@ -319,17 +319,21 @@ static PyObject *Fragment_import_bytes(Fragment *self, PyObject *args)
 
 	const char *bytes;
 	Py_ssize_t n_bytes;
+	unsigned sample_bits;
 	unsigned bytes_per_sample;
 	unsigned n_samples;
 	unsigned end;
 	unsigned ch;
+	int32_t neg;
+	int32_t neg_mask;
+	float scale;
 
 	if (!PyArg_ParseTuple(args, "O!iIII", &PyByteArray_Type, &bytes_obj,
 			      &start, &sample_width, &sample_rate,
 			      &n_channels))
 		return NULL;
 
-	if (sample_width != 2) {
+	if ((sample_width != 2) && (sample_width != 3)) {
 		PyErr_SetString(PyExc_ValueError, "unsupported sample width");
 		return NULL;
 	}
@@ -359,14 +363,36 @@ static PyObject *Fragment_import_bytes(Fragment *self, PyObject *args)
 	if (do_resize(self, end) < 0)
 		return NULL;
 
+	sample_bits = 8 * sample_width;
+	scale = pow(2, sample_bits) / 2;
+	neg = 1 << (sample_bits - 1);
+	neg_mask = 0xFFFFFFFF - (1 << sample_bits) + 1;
+
 	for (ch = 0; ch < self->n_channels; ++ch) {
-		const void *in = bytes + (sample_width * ch);
+		const char *in = bytes + (sample_width * ch);
 		float *out = &self->data[ch][start];
 		unsigned s;
 
-		for (s = start; s < end; ++s) {
-			*out++ = *(int16_t *)in / 32678.0;
-			in += bytes_per_sample;
+		if (sample_width == 2) {
+			for (s = start; s < end; ++s) {
+				*out++ = *(int16_t *)in / scale;
+				in += bytes_per_sample;
+			}
+		} else {
+			for (s = start; s < end; ++s) {
+				const uint8_t *b = (const uint8_t *)in;
+				int32_t sample = 0;
+				int n;
+
+				for (n = 0; n < sample_width; ++n)
+					sample += (*b++) << (n * 8);
+
+				if (sample & neg)
+					sample |= neg_mask;
+
+				*out++ = sample / scale;
+				in += bytes_per_sample;
+			}
 		}
 	}
 
