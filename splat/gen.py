@@ -16,7 +16,9 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import math
+import random
 import sources
+import interpol
 from data import Fragment
 from filters import FilterChain
 import _splat
@@ -241,3 +243,193 @@ class OvertonesGenerator(SourceGenerator):
     def _run(self, frag, levels, freq, phase=0.0, *args, **kw):
         super(OvertonesGenerator, self)._run(frag, levels, freq, phase,
                                              self.overtones, *args, **kw)
+
+
+class Particle(object):
+
+    def __init__(self, start, end, f_log):
+        self.start = start
+        self.end = end
+        self.f_log = f_log
+
+    def __repr__(self):
+        return u"[{0}, {1}] {2}".format(self.start, self.end, self.freq)
+
+    @property
+    def freq(self):
+        return _splat.dB2lin(self.f_log)
+
+
+class ParticlePool(object):
+
+    def __init__(self, min_f_log, max_f_log, min_len, max_len, envelope,
+                 n_slices, density):
+        self._pts = []
+        for y0 in range(n_slices):
+            y0 = float(1 + y0) / n_slices
+            seg = envelope.slices(y0)
+
+            for x0, x1 in seg:
+                n_events = int((x1 - x0) * density / n_slices)
+
+                for i in range(n_events):
+                    start = random.uniform(x0, x1)
+                    end = random.uniform((start + min_len), (start + max_len))
+                    f_log = random.uniform(min_f_log, max_f_log)
+                    self._pts.append(Particle(start, end, f_log))
+
+        self._start = envelope.start
+        self._end = envelope.end
+
+
+    @property
+    def start(self):
+        return self._start
+
+    @property
+    def end(self):
+        return self._end
+
+    def count(self, t_start=None, t_end=None):
+        if (t_start is None) and (t_end is None):
+            return len(self._pts)
+        n = 0
+        for p in self._pts:
+            if (p.start > t_start) and (p.end < t_end):
+                n += 1
+        return n
+
+    def iterate(self, t_start=None, t_end=None, share=1.0):
+        if t_start is None:
+            t_start = self.start
+        if t_end is None:
+            t_end = self.end
+        n = int(self.count(t_start, t_end) * share)
+        new_pts = []
+        for i, p in enumerate(self._pts):
+            if (n > 0) and (p.start > t_start) and (p.end < t_end):
+                n -= 1
+                yield(p)
+            else:
+                new_pts.append(p)
+        self._pts = new_pts
+
+
+class ParticleGenerator(Generator):
+
+    def __init__(self, subgen, *args, **kw):
+        super(ParticleGenerator, self).__init__(subgen.frag, *args, **kw)
+        self._subgen = subgen
+        self._start = None
+        self._end = None
+        self._z = None
+        self._eq = None
+        self._q = None
+        self._min_f_log = _splat.lin2dB(20)
+        self._max_f_log = _splat.lin2dB(20000)
+        self._gain_fuzz = 0.0
+        self._stereo_gain_fuzz = 0.0
+        self._pool = None
+        self.progress_step = 10
+        self.do_show_progress = True
+
+    @property
+    def subgen(self):
+        return self._subgen
+
+    @property
+    def start(self):
+        return self._start
+
+    @property
+    def end(self):
+        return self._end
+
+    # ToDo: use dB instead of linear (0..1) levels?
+    def set_z(self, z_pts, *args, **kw):
+        self._z = interpol.Spline(z_pts, *args, **kw)
+
+    @property
+    def z(self):
+        return self._z
+
+    def set_eq(self, eq_pts, *args, **kw):
+        self._eq = interpol.Spline(eq_pts, *args, **kw)
+        self._min_f_log = _splat.lin2dB(self._eq.start)
+        self._max_f_log = _splat.lin2dB(self._eq.end)
+
+    @property
+    def eq(self):
+        return self._eq
+
+    def set_q(self, q_pts, *args, **kw):
+        self._q = interpol.Spline(q_pts, *args, **kw)
+
+    @property
+    def q(self):
+        return self._q
+
+    def set_gain_fuzz(self, gain_fuzz, stereo_gain_fuzz):
+        self._gain_fuzz = gain_fuzz
+        self._stereo_gain_fuzz = stereo_gain_fuzz
+
+    @property
+    def gain_fuzz(self):
+        return (self._gain_fuzz, self._stereo_gain_fuzz)
+
+    def make_pool(self, min_len=0.05, max_len=0.1, n_slices=20, density=100):
+        self._pool = ParticlePool(
+            self._min_f_log, self._max_f_log, min_len, max_len, self._z,
+            n_slices, density)
+
+    @property
+    def pool(self):
+        return self._pool
+
+    def run(self, start, end, freq, share=1.0, levels=(0.0, 0.0), *args, **kw):
+        if self.start is None:
+            self._start = start
+            self._end = end
+        else:
+            self._start = min(self.start, start)
+            self._end = max(self.end, end)
+
+        n_events = self._pool.count()
+        step = n_events / self.progress_step
+        progress = 0
+        for i, p in enumerate(self._pool.iterate(start, end, share)):
+            if self.do_show_progress and (i % step) == 0:
+                self.show_progress(progress)
+                progress += self.progress_step
+
+            if self._eq:
+                g = self._eq.value(p.freq)
+            else:
+                g = 0.0
+
+            if self._gain_fuzz:
+                g += random.uniform(-self._gain_fuzz, self._gain_fuzz)
+
+            if self._stereo_gain_fuzz:
+                levels = tuple(g + random.uniform(-self._stereo_gain_fuzz,
+                                                   self._stereo_gain_fuzz)
+                               for g in range(self.frag.channels))
+            else:
+                levels = tuple(g for i in range(self.frag.channels))
+
+            if self._q:
+                p_freq = self.curve(freq, p.freq, self._q.value(p.start))
+            else:
+                p_freq = p.freq
+
+            self.subgen.run(p.start, p.end, p_freq, levels=levels, *args, **kw)
+
+    def curve(self, freq, p_freq, q):
+        f_log = _splat.lin2dB(freq)
+        s = _splat.lin2dB(p_freq)
+        f_curve = s - 0.5 * ((2 * s) - (2 * f_log)) * math.exp(
+            -((s - f_log) * (s - f_log)) / _splat.dB2lin(q))
+        return _splat.dB2lin(f_curve)
+
+    def show_progress(self, progress):
+        print("Progress: {0}%".format(progress))
