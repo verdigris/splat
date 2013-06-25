@@ -100,34 +100,47 @@ class Generator(object):
     def time_stretch(self, value):
         self._time_stretch = value
 
-    def _run(self, source, start, end, *args, **kw):
+    def _run(self, frag, *args, **kw):
         """Main method, designed to be invoked by sub-classes via
         :py:meth:`splat.gen.Generator.run`
-
-        The ``source`` argument is a sound source function (:ref:`sources`), to
-        which the ``*args`` and ``**kw`` arguments are passed on.  The sound is
-        supposed to start and end at the times specified by the ``start`` and
-        ``end`` arguments.
         """
-        start *= self.time_stretch
-        end *= self.time_stretch
-        frag = Fragment(self.channels, self.sample_rate, (end - start))
-        source(frag, *args, **kw)
-        self.filters.run(frag)
-        self.frag.mix(frag, start)
+        raise NotImplemented
 
-    def run(self, start, end, *args, **kw):
-        """Main abstract method to be implemented by sub-classes
+    def run(self, freq, start, end, levels=None, *args, **kw):
+        """Main public method to run the generator
 
         This method is the main entry point to run the generator and actually
-        produce some sound data.  It will typically call
+        produce some sound data.  It is designed to be easily overridden by
+        various types of generators, and will typically call
         :py:meth:`splat.gen.Generator._run` with a sound source and specific
         arguments.
         """
-        raise NotImplementedError
+        if levels is None:
+            levels = self._levels
+        start *= self.time_stretch
+        end *= self.time_stretch
+        frag = Fragment(self.channels, self.sample_rate, (end - start))
+        self._run(frag, freq, levels, *args, **kw)
+        self.filters.run(frag)
+        self.frag.mix(frag, start)
 
 
-class SineGenerator(Generator):
+class SourceGenerator(Generator):
+
+    def __init__(self, source, *args, **kw):
+        super(SourceGenerator, self).__init__(*args, **kw)
+        self._source = source
+
+    @property
+    def source(self):
+        """Sound source."""
+        return self._source
+
+    def _run(self, frag, *args, **kw):
+        self.source(frag, *args, **kw)
+
+
+class SineGenerator(SourceGenerator):
 
     """Sine wave generator.
 
@@ -135,13 +148,11 @@ class SineGenerator(Generator):
     source to generate pure sine waves.
     """
 
-    def run(self, freq, start, end, levels=None):
-        if levels is None:
-            levels = self._levels
-        self._run(sources.sine, start, end, freq, levels)
+    def __init__(self, *args, **kw):
+        super(SineGenerator, self).__init__(sources.sine, *args, **kw)
 
 
-class OvertonesGenerator(Generator):
+class OvertonesGenerator(SourceGenerator):
 
     """Overtones generator.
 
@@ -154,7 +165,8 @@ class OvertonesGenerator(Generator):
     """
 
     def __init__(self, *args, **kw):
-        super(OvertonesGenerator, self).__init__(*args, **kw)
+        super(OvertonesGenerator, self).__init__(sources.overtones,
+                                                 *args, **kw)
         self.overtones = { 1.0: 0.0 }
 
     def ot_decexp(self, k=1.0, n=24):
@@ -179,7 +191,6 @@ class OvertonesGenerator(Generator):
             l = _splat.lin2dB(math.exp(-j / k))
             self.overtones[j + 1] = l
 
-    def run(self, freq, start, end, levels=None):
-        if levels is None:
-            levels = self._levels
-        self._run(sources.overtones, start, end, freq, levels, self.overtones)
+    def _run(self, frag, freq, levels, *args, **kw):
+        super(OvertonesGenerator, self)._run(frag, freq, levels,
+                                             self.overtones, *args, **kw)
