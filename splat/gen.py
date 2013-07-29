@@ -23,18 +23,21 @@ import _splat
 
 class Generator(object):
 
-    """Generator to manage sound sources.
+    """Sound data generator.
 
-    This abstract class provides the basic interface to run a sound generator
-    and create and mix signals run with a given base frequency and start and
-    end times using a given sound source function.  Its main advantage is to
-    allow a Splat piece to be run with different generators or sound sources
-    without rewriting the code.  It creates a :py:class:`splat.data.Fragment`
-    object to store the generated and mixed sound data.  It allows arbitrary
-    extra arguments to be passed to the sound source for extra flexibility.
+    This abstract class provides the basic interface to constitute a sound
+    generator.  It creates a :py:class:`splat.data.Fragment` object to store
+    the generated and mixed down sound data.  A generator typically runs a
+    sound source with a given base frequency and start and end times.  It
+    allows arbitrary extra arguments to be passed to the sound source for extra
+    flexibility.
 
-    In order to be used, this class needs to be sub-classed to implement
-    :py:meth:`splat.gen.Generator.run` with a concrete sound source.
+    The main purpose is to allow a Splat piece to be run with different
+    generators or sound sources without rewriting the code and data that define
+    the contents of the piece.
+
+    In order to be used, this class typically needs to be sub-classed to
+    implement :py:meth:`splat.gen.Generator._run` with a concrete sound source.
     """
 
     def __init__(self, frag, filters=None):
@@ -150,6 +153,12 @@ class SineGenerator(SourceGenerator):
 
     def __init__(self, *args, **kw):
         super(SineGenerator, self).__init__(sources.sine, *args, **kw)
+
+
+class SquareGenerator(SourceGenerator):
+
+    def __init__(self, *args, **kw):
+        super(SquareGenerator, self).__init__(sources.square, *args, **kw)
 
 
 class OvertonesGenerator(SourceGenerator):
