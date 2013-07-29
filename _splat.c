@@ -33,6 +33,14 @@
 typedef float v4sf __attribute__ ((vector_size(16)));
 #endif
 
+#ifndef min
+# define min(_a, _b) (((_a) < (_b)) ? (_a) : (_b))
+#endif
+
+#ifndef max
+# define max(_a, _b) (((_a) > (_b)) ? (_a) : (_b))
+#endif
+
 /* ----------------------------------------------------------------------------
  * Fragment class
  */
@@ -765,8 +773,8 @@ static PyObject *splat_sine(PyObject *self, PyObject *args)
 	Py_ssize_t c, i;
 	double k;
 
-	if (!PyArg_ParseTuple(args, "O!dO!", &splat_FragmentType, &frag,
-			      &freq, &PyTuple_Type, &levels_tuple))
+	if (!PyArg_ParseTuple(args, "O!dO!", &splat_FragmentType, &frag, &freq,
+			      &PyTuple_Type, &levels_tuple))
 		return NULL;
 
 	n_channels = PyTuple_Size(levels_tuple);
@@ -793,6 +801,76 @@ static PyObject *splat_sine(PyObject *self, PyObject *args)
 
 		for (c = 0; c < n_channels; ++c)
 			frag->data[c][i] = s * levels[c];
+	}
+
+	Py_RETURN_NONE;
+}
+
+PyDoc_STRVAR(splat_square_doc,
+"square(fragment, frequency, levels, ratio=0.5)\n"
+"\n"
+"Generate a square wave with constant ``levels`` and ``ratio`` at the given "
+" ``frequency`` over the entire ``fragment``.\n");
+
+static PyObject *splat_square(PyObject *self, PyObject *args)
+{
+	Fragment *frag;
+	double freq;
+	PyObject *levels_obj;
+	double ratio = 0.5;
+
+	double levels_pos[MAX_CHANNELS];
+	double levels_neg[MAX_CHANNELS];
+	const double *levels;
+	Py_ssize_t c, i, t;
+	Py_ssize_t t_start, t_ratio, t_end;
+	long period_n;
+
+	if (!PyArg_ParseTuple(args, "O!dO!|d", &splat_FragmentType, &frag,
+			      &freq, &PyTuple_Type, &levels_obj, &ratio))
+		return NULL;
+
+	if (PyTuple_GET_SIZE(levels_obj) != frag->n_channels) {
+		PyErr_SetString(PyExc_ValueError, "channels number mismatch");
+		return NULL;
+	}
+
+	if ((ratio < 0.0) || (ratio > 1.0)) {
+		PyErr_SetString(PyExc_ValueError, "invalid ratio value");
+		return NULL;
+	}
+
+	for (c = 0; c < frag->n_channels; ++c) {
+		PyObject *l = PyTuple_GET_ITEM(levels_obj, c);
+		const double llin = dB2lin(PyFloat_AsDouble(l));
+
+		levels_pos[c] = llin;
+		levels_neg[c] = -llin;
+	}
+
+	period_n = 0;
+	t_start = 0;
+	t_ratio = 0;
+	t_end = 0;
+	t = 0;
+	levels = levels_pos;
+
+	for (i = 0; i < frag->length;) {
+		if (i == t_end) {
+			t_start = t_end;
+			t_end = ++period_n * frag->rate / freq;
+			t_ratio = t_start + (ratio * frag->rate / freq);
+			levels = levels_pos;
+			t = min(t_ratio, frag->length);
+		} else if (i == t_ratio) {
+			levels = levels_neg;
+			t = min(t_end, frag->length);
+		}
+
+		do {
+			for (c = 0; c < frag->n_channels; ++c)
+				frag->data[c][i] = levels[c];
+		} while (++i < t);
 	}
 
 	Py_RETURN_NONE;
@@ -1173,6 +1251,8 @@ static PyMethodDef splat_methods[] = {
 	  splat_dB2lin_doc },
 	{ "sine", splat_sine, METH_VARARGS,
 	  splat_sine_doc },
+	{ "square", splat_square, METH_VARARGS,
+	  splat_square_doc },
 	{ "overtones", splat_overtones, METH_VARARGS,
 	  splat_overtones_doc },
 	{ "dec_envelope", splat_dec_envelope, METH_VARARGS,
