@@ -876,6 +876,86 @@ static PyObject *splat_square(PyObject *self, PyObject *args)
 	Py_RETURN_NONE;
 }
 
+PyDoc_STRVAR(splat_triangle_doc,
+"triangle(fragment, frequency, levels, ratio=0.5)\n"
+"\n"
+"Generate a triangle wave with constant ``levels`` and ``ratio`` at the given "
+" ``frequency`` over the entire ``fragment``.\n");
+
+static PyObject *splat_triangle(PyObject *self, PyObject *args)
+{
+	Fragment *frag;
+	double freq;
+	PyObject *levels_obj;
+	double ratio = 0.5;
+
+	double a1[MAX_CHANNELS], b1[MAX_CHANNELS];
+	double a2[MAX_CHANNELS], b2[MAX_CHANNELS];
+	const double *a, *b;
+	Py_ssize_t c, i, t;
+	Py_ssize_t t_start, t_ratio, t_end;
+	long period_n;
+
+	if (!PyArg_ParseTuple(args, "O!dO!|d", &splat_FragmentType, &frag,
+			      &freq, &PyTuple_Type, &levels_obj, &ratio))
+		return NULL;
+
+	if (PyTuple_GET_SIZE(levels_obj) != frag->n_channels) {
+		PyErr_SetString(PyExc_ValueError, "channels number mismatch");
+		return NULL;
+	}
+
+	if ((ratio < 0.0) || (ratio > 1.0)) {
+		PyErr_SetString(PyExc_ValueError, "invalid ratio value");
+		return NULL;
+	}
+
+	t_ratio = ratio * frag->rate / freq;
+	t_end = (1 - ratio) * frag->rate / freq;
+
+	for (c = 0; c < frag->n_channels; ++c) {
+		PyObject *l = PyTuple_GET_ITEM(levels_obj, c);
+		const double llin = dB2lin(PyFloat_AsDouble(l));
+
+		a1[c] = 2 * llin / t_ratio;
+		b1[c] = -llin;
+		a2[c] = -2 * llin / t_end;
+		b2[c] = llin - (a2[c] * t_ratio);
+	}
+
+	period_n = 0;
+	t_start = 0;
+	t_ratio = 0;
+	t_end = 0;
+	t = 0;
+	a = a1;
+	b = b1;
+
+	for (i = 0; i < frag->length;) {
+		if (i == t_end) {
+			t_start = t_end;
+			t_end = ++period_n * frag->rate / freq;
+			t_ratio = t_start + (ratio * frag->rate / freq);
+			t = min(t_ratio, frag->length);
+			a = a1;
+			b = b1;
+		} else if (i == t_ratio) {
+			t = min(t_end, frag->length);
+			a = a2;
+			b = b2;
+		}
+
+		do {
+			const Py_ssize_t x = i - t_start;
+
+			for (c = 0; c < frag->n_channels; ++c)
+				frag->data[c][i] = a[c] * x + b[c];
+		} while (++i < t);
+	}
+
+	Py_RETURN_NONE;
+}
+
 PyDoc_STRVAR(splat_overtones_doc,
 "overtones(fragment, frequency, levels, overtones)\n"
 "\n"
@@ -1253,6 +1333,8 @@ static PyMethodDef splat_methods[] = {
 	  splat_sine_doc },
 	{ "square", splat_square, METH_VARARGS,
 	  splat_square_doc },
+	{ "triangle", splat_triangle, METH_VARARGS,
+	  splat_triangle_doc },
 	{ "overtones", splat_overtones, METH_VARARGS,
 	  splat_overtones_doc },
 	{ "dec_envelope", splat_dec_envelope, METH_VARARGS,
