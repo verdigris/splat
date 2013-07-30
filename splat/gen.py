@@ -161,6 +161,12 @@ class SquareGenerator(SourceGenerator):
         super(SquareGenerator, self).__init__(sources.square, *args, **kw)
 
 
+class TriangleGenerator(SourceGenerator):
+
+    def __init__(self, *args, **kw):
+        super(TriangleGenerator, self).__init__(sources.triangle, *args, **kw)
+
+
 class OvertonesGenerator(SourceGenerator):
 
     """Overtones generator.
