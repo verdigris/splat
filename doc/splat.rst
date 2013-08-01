@@ -22,8 +22,16 @@ Generator objects
    :members:
    :private-members:
 
+.. autoclass:: splat.gen.SourceGenerator
+   :members:
 
 .. autoclass:: splat.gen.SineGenerator
+   :members:
+
+.. autoclass:: splat.gen.SquareGenerator
+   :members:
+
+.. autoclass:: splat.gen.TriangleGenerator
    :members:
 
 .. autoclass:: splat.gen.OvertonesGenerator
@@ -36,6 +44,8 @@ Sound sources
 -------------
 
 .. autofunction:: splat.sources.sine
+.. autofunction:: splat.sources.square
+.. autofunction:: splat.sources.triangle
 .. autofunction:: splat.sources.overtones
 
 
