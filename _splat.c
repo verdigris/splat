@@ -451,11 +451,14 @@ PyDoc_STRVAR(Fragment_normalize_doc,
 "Normalize the amplitude.\n"
 "\n"
 "The ``level`` value in dB is the resulting maximum amplitude after "
-"normalization.  When ``zero`` is ``True``, the average value is "
-"substracted from all the fragment prior to amplification to avoid any "
-"offset and achieve maximum amplitude.  With some imbalanced transitory "
-"signals, it may be better to not remove the average value as this may have "
-"the undesirable effect of adding some offset instead.\n");
+"normalization.  The same gain is applied to all channels, so the relative "
+"difference in levels between channels is preserved.\n"
+"\n"
+"When ``zero`` is ``True``, the average value is substracted from all the "
+"fragment prior to amplification to avoid any offset and achieve maximum "
+"amplitude.  With some imbalanced transitory signals, it may be better to not "
+"remove the average value as this may have the undesirable effect of adding "
+"some offset instead.\n");
 
 static PyObject *Fragment_normalize(Fragment *self, PyObject *args)
 {
