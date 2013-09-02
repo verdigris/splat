@@ -50,6 +50,14 @@ def test_sine():
     return check_md5(gen.frag, 'ec18389e198ee868d61c9439343a3337')
 test_sine.test_name = "SineGenerator"
 
+def test_overtones():
+    gen = splat.gen.OvertonesGenerator(splat.data.Fragment())
+    gen.ot_decexp(1.0)
+    f = 1000.0
+    gen.run(f, 0.0, 1.0)
+    return check_md5(gen.frag, 'ee045e012673ff7ed4ab9bd590b57368')
+test_overtones.test_name = "OvertonesGenerator"
+
 def test_spline():
     pts = [(1.23, 4.56), (4.32, 2.54, 1.25), (5.458, -4.247)]
     s = splat.interpol.Spline(pts)
