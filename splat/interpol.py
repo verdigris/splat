@@ -2,7 +2,7 @@ import copy
 
 class Polynomial(object):
 
-    """Polynomial object.
+    """Polynomial object
 
     A series of coefficients are used to create a polynomial function.  The
     index of each coefficient corresponds to the power of the input variable,
@@ -45,11 +45,11 @@ class Polynomial(object):
 
 class PolyMatrix(object):
 
-    """Matrix to calculate polynomial coefficients.
+    """Matrix to calculate polynomial coefficients
 
     For a given list of input points, polynomial coefficients are calculated so
-    that the function passes through all of them.  The order of the polynomial
-    function is equal to the number of input points minus one.
+    that the function passes through all of these points.  The order of the
+    polynomial function is equal to the number of input points minus one.
 
     The calculation is achieved by building a matrix from the input coordinates
     and then reducing it with linear operations.  It uses what is now known as
@@ -68,7 +68,7 @@ class PolyMatrix(object):
 
     @property
     def m(self):
-        """Get the matrix numbers as ``n`` lists, each of one containing a row
+        """Get the matrix numbers as ``n`` lists, each of them containing a row
         of ``(n + 1)`` elements."""
         if not self._m:
             self._build()
@@ -121,7 +121,7 @@ class PolyMatrix(object):
 
 class Spline(object):
 
-    """Spline built from a series of points and slope coordinates.
+    """Spline built from a series of points and slope coordinates
 
     For a given list of ``(x, y)`` or ``(x, y, d)`` coordinates, where ``d`` is
     a slope value, a Spline object will create a list of polynomials of degree
@@ -148,7 +148,8 @@ class Spline(object):
     @property
     def polynomials(self):
         """List of 3-tuples containing the ``x`` range and a
-        :py:class:`splat.interpol.Polynomial` object."""
+        :py:class:`splat.interpol.Polynomial` object.  Each item in the list
+        corresponds to a segment of the spline, between 2 input points."""
         return self._pols
 
     @property
@@ -183,7 +184,9 @@ class Spline(object):
 
         This can for example be used to create arbitrary random distributions
         by adding evenly distributed random events within slices while
-        iterating over a ``y`` range.
+        iterating over a ``y`` range.  It can also be used to calculate an
+        approximation of the area of the spline by adding the area of
+        rectangular slices between a set of ``y`` values.
         """
         if xmin is None:
             xmin = self.start
