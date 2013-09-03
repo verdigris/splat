@@ -822,9 +822,8 @@ static PyObject *splat_square(PyObject *self, PyObject *args)
 	double levels_pos[MAX_CHANNELS];
 	double levels_neg[MAX_CHANNELS];
 	const double *levels;
-	Py_ssize_t c, i, t;
-	Py_ssize_t t_start, t_ratio, t_end;
-	long period_n;
+	Py_ssize_t c, i;
+	double k;
 
 	if (!PyArg_ParseTuple(args, "O!dO!|d", &splat_FragmentType, &frag,
 			      &freq, &PyTuple_Type, &levels_obj, &ratio))
@@ -848,29 +847,19 @@ static PyObject *splat_square(PyObject *self, PyObject *args)
 		levels_neg[c] = -llin;
 	}
 
-	period_n = 0;
-	t_start = 0;
-	t_ratio = 0;
-	t_end = 0;
-	t = 0;
-	levels = levels_pos;
+	k = freq / frag->rate;
 
-	for (i = 0; i < frag->length;) {
-		if (i == t_end) {
-			t_start = t_end;
-			t_end = ++period_n * frag->rate / freq;
-			t_ratio = t_start + (ratio * frag->rate / freq);
+	for (i = 0; i < frag->length; ++i) {
+		double n_periods;
+		const double t_rel = modf((i * k), &n_periods);
+
+		if (t_rel < ratio)
 			levels = levels_pos;
-			t = min(t_ratio, frag->length);
-		} else if (i == t_ratio) {
+		else
 			levels = levels_neg;
-			t = min(t_end, frag->length);
-		}
 
-		do {
-			for (c = 0; c < frag->n_channels; ++c)
-				frag->data[c][i] = levels[c];
-		} while (++i < t);
+		for (c = 0; c < frag->n_channels; ++c)
+			frag->data[c][i] = levels[c];
 	}
 
 	Py_RETURN_NONE;
@@ -892,9 +881,8 @@ static PyObject *splat_triangle(PyObject *self, PyObject *args)
 	double a1[MAX_CHANNELS], b1[MAX_CHANNELS];
 	double a2[MAX_CHANNELS], b2[MAX_CHANNELS];
 	const double *a, *b;
-	Py_ssize_t c, i, t;
-	Py_ssize_t t_start, t_ratio, t_end;
-	long period_n;
+	Py_ssize_t c, i;
+	double k;
 
 	if (!PyArg_ParseTuple(args, "O!dO!|d", &splat_FragmentType, &frag,
 			      &freq, &PyTuple_Type, &levels_obj, &ratio))
@@ -910,47 +898,32 @@ static PyObject *splat_triangle(PyObject *self, PyObject *args)
 		return NULL;
 	}
 
-	t_ratio = ratio * frag->rate / freq;
-	t_end = (1 - ratio) * frag->rate / freq;
-
 	for (c = 0; c < frag->n_channels; ++c) {
 		PyObject *l = PyTuple_GET_ITEM(levels_obj, c);
 		const double llin = dB2lin(PyFloat_AsDouble(l));
 
-		a1[c] = 2 * llin / t_ratio;
+		a1[c] = 2 * llin / ratio;
 		b1[c] = -llin;
-		a2[c] = -2 * llin / t_end;
-		b2[c] = llin - (a2[c] * t_ratio);
+		a2[c] = -2 * llin / (1 - ratio);
+		b2[c] = llin - (a2[c] * ratio);
 	}
 
-	period_n = 0;
-	t_start = 0;
-	t_ratio = 0;
-	t_end = 0;
-	t = 0;
-	a = a1;
-	b = b1;
+	k = freq / frag->rate;
 
-	for (i = 0; i < frag->length;) {
-		if (i == t_end) {
-			t_start = t_end;
-			t_end = ++period_n * frag->rate / freq;
-			t_ratio = t_start + (ratio * frag->rate / freq);
-			t = min(t_ratio, frag->length);
+	for (i = 0; i < frag->length; ++i) {
+		double n_periods;
+		const double t_rel = modf((i * k), &n_periods);
+
+		if (t_rel < ratio) {
 			a = a1;
 			b = b1;
-		} else if (i == t_ratio) {
-			t = min(t_end, frag->length);
+		} else {
 			a = a2;
 			b = b2;
 		}
 
-		do {
-			const Py_ssize_t x = i - t_start;
-
-			for (c = 0; c < frag->n_channels; ++c)
-				frag->data[c][i] = a[c] * x + b[c];
-		} while (++i < t);
+		for (c = 0; c < frag->n_channels; ++c)
+			frag->data[c][i] = (a[c] * t_rel) + b[c];
 	}
 
 	Py_RETURN_NONE;
