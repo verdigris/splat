@@ -23,32 +23,37 @@ import _splat
 
 class Generator(object):
 
-    """Sound data generator.
+    """Sound data generator
 
     This abstract class provides the basic interface to constitute a sound
-    generator.  It creates a :py:class:`splat.data.Fragment` object to store
-    the generated and mixed down sound data.  A generator typically runs a
-    sound source with a given base frequency and start and end times.  It
-    allows arbitrary extra arguments to be passed to the sound source for extra
+    generator.  It uses a :py:class:`splat.data.Fragment` object to store the
+    generated and mixed down sound data.  A generator typically runs a sound
+    source with a given base frequency, start and end times.  It allows
+    arbitrary extra arguments to be passed on to the sound source for extra
     flexibility.
 
     The main purpose is to allow a Splat piece to be run with different
     generators or sound sources without rewriting the code and data that define
     the contents of the piece.
 
-    In order to be used, this class typically needs to be sub-classed to
-    implement :py:meth:`splat.gen.Generator._run` with a concrete sound source.
+    In order to be used, this class typically needs to be sub-classed with a
+    concrete implementation of :py:meth:`splat.gen.Generator._run`.  Another
+    possibility is to override the default :py:meth:`splat.gen.Generator.run`
+    to define new behaviours.
     """
 
-    def __init__(self, frag, filters=None):
+    def __init__(self, frag=None, filters=None):
         """The ``frag`` argument must be a :py:class:`splat.data.Fragment`
-        instance.
+        instance.  If `None`, a default empty fragment will be automatically
+        created.
 
         A chain of ``filters`` can also be initialised here with a list of
         filter functions and internally create a
         :py:meth:`splat.filters.FilterChain` object.  This can be altered later
         via :py:attr:`splat.gen.Generator.filters`.
         """
+        if frag is None:
+            frag = Fragment()
         self._frag = frag
         self._filter_chain = FilterChain(filters)
         self._levels = tuple([0.0 for x in range(self.frag.channels)])
@@ -130,7 +135,18 @@ class Generator(object):
 
 class SourceGenerator(Generator):
 
+    """Generator using a sound source
+
+    This is a basic class to implement generators using a sound source.  See
+    :ref:`sources` for examples.  Several sub-classes are already available to
+    make best use of the built-in sound sources.
+    """
+
     def __init__(self, source, *args, **kw):
+        """The `source` argument is meant to be a source function.  This is
+        then used in the :py:meth:`splat.gen.SourceGenerator._run`
+        implementation of this class.
+        """
         super(SourceGenerator, self).__init__(*args, **kw)
         self._source = source
 
@@ -145,7 +161,7 @@ class SourceGenerator(Generator):
 
 class SineGenerator(SourceGenerator):
 
-    """Sine wave generator.
+    """Sine wave generator
 
     This is the simplest generator, based on the :py:func:`splat.sources.sine`
     source to generate pure sine waves.
@@ -157,19 +173,29 @@ class SineGenerator(SourceGenerator):
 
 class SquareGenerator(SourceGenerator):
 
+    """Square wave generator
+
+    This uses the :py:func:`splat.sources.square` source to generate square
+    waves.
+    """
     def __init__(self, *args, **kw):
         super(SquareGenerator, self).__init__(sources.square, *args, **kw)
 
 
 class TriangleGenerator(SourceGenerator):
 
+    """Triangle wave generator
+
+    This uses the :py:func:`splat.sources.triangle` source to generate triangle
+    waves.
+    """
     def __init__(self, *args, **kw):
         super(TriangleGenerator, self).__init__(sources.triangle, *args, **kw)
 
 
 class OvertonesGenerator(SourceGenerator):
 
-    """Overtones generator.
+    """Overtones generator
 
     Overtones are defined by an ``overtones`` dictionary.  For a description of
     the overtunes, see the :py:func:`splat.sources.overtones` source which is
