@@ -32,9 +32,12 @@ Here's a very small **Splat** example which creates a beep 440Hz sound:
 
 .. code-block:: python
 
-    import splat
+    import splat.gen
+    import splat.data
+    import splat.filters
 
-    gen = splat.SineGenerator(splat.Fragment(), [splat.filters.linear_fade])
+    gen = splat.gen.SineGenerator()
+    gen.filters = [splat.filters.linear_fade]
     gen.run(440.0, 0.0, 1.0)
     gen.frag.save("A440.wav")
 
