@@ -52,9 +52,39 @@ def test_sine():
     gen.run(f, 0.0, 1.0)
     n = int(0.1234 * gen.frag.duration * gen.frag.sample_rate)
     s = math.sin(2 * math.pi * f * float(n) / gen.frag.sample_rate)
-    check_samples(gen.frag, {n: (s, s)})
-    return check_md5(gen.frag, 'ec18389e198ee868d61c9439343a3337')
+    return (check_samples(gen.frag, {n: (s, s)}) and
+            check_md5(gen.frag, 'ec18389e198ee868d61c9439343a3337'))
 test_sine.test_name = "SineGenerator"
+
+def test_square():
+    gen = splat.gen.SquareGenerator()
+    f = 1000.0
+    gen.run(f, 0.0, 1.0)
+    nf = gen.frag.sample_rate / f
+    samples = {int(nf * 0.1): (1.0, 1.0), int(nf * 0.9): (-1.0, -1.0)}
+    return (check_samples(gen.frag, samples) and
+            check_md5(gen.frag, '0ca047e998f512280800012b05107c63'))
+test_square.test_name = "SquareGenerator"
+
+def test_triangle():
+    gen = splat.gen.TriangleGenerator()
+    f = 1000.0
+    ratio = 0.567
+    gen.run(f, 0.0, 1.0, (0.0, 0.0), ratio)
+    nf = gen.frag.sample_rate / f
+    x1 = 0.25
+    t1 = int(nf * ratio * x1)
+    s1 = (t1 * 2.0 / (ratio * nf)) - 1.0
+    x2 = 0.75
+    ratio2 = 1 - ratio
+    t2 = int(nf * (ratio + (ratio2 * x2)))
+    a2 = -2.0 / (ratio2 * nf)
+    b2 = 1.0 - (a2 * ratio * nf)
+    s2 = (t2 * a2) + b2
+    samples = {t1: (s1, s1), t2: (s2, s2)}
+    return (check_samples(gen.frag, samples) and
+            check_md5(gen.frag, 'b6d9eb000b328134cd500173b24f1c88'))
+test_triangle.test_name = "TriangleGenerator"
 
 def test_overtones():
     gen = splat.gen.OvertonesGenerator()
