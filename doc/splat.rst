@@ -82,7 +82,7 @@ containing some coordinates using :py:class:`splat.interpol.PolyMatrix`.  It is
 usually preferred to use a :py:class:`splat.interpol.Spline` object to create a
 long function composed of a list of different polynomials between each pair of
 points.  It is easier to control the interpolation of a spline containing many
-low-degree polynomials tha a single high degree polynomial.
+low-degree polynomials than a single high degree polynomial.
 
 .. autoclass:: splat.interpol.Polynomial
    :members:
