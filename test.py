@@ -40,8 +40,14 @@ def test_frag():
             check_md5(frag, 'fe384f668da282694c29a84ebd33481d'))
 test_frag.test_name = 'Fragment'
 
+def test_gen_frag():
+    gen = splat.gen.SineGenerator()
+    return (isinstance(gen.frag, splat.data.Fragment) and
+            gen.frag.duration == 0.0)
+test_gen_frag.test_name = "Generator Fragment"
+
 def test_sine():
-    gen = splat.gen.SineGenerator(splat.data.Fragment())
+    gen = splat.gen.SineGenerator()
     f = 1000.0
     gen.run(f, 0.0, 1.0)
     n = int(0.1234 * gen.frag.duration * gen.frag.sample_rate)
@@ -51,7 +57,7 @@ def test_sine():
 test_sine.test_name = "SineGenerator"
 
 def test_overtones():
-    gen = splat.gen.OvertonesGenerator(splat.data.Fragment())
+    gen = splat.gen.OvertonesGenerator()
     gen.ot_decexp(1.0)
     f = 1000.0
     gen.run(f, 0.0, 1.0)
