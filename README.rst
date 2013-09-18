@@ -6,7 +6,7 @@ Quick intro
 
 **Splat is a programme** to generate some audio data which you may call music.
 It's written in Python to make it easy to use, and all the crucial processing
-parts are implemented in C for fast number crunshing.  It's distributed under
+parts are implemented in C for fast number crunching.  It's distributed under
 the terms of the **GNU LGPL v3** so you remain a free individual when you use
 it.
 
@@ -28,12 +28,12 @@ player.
 Beep
 ----
 
-Here's a very small **Splat** example which creates a beep 440Hz sound:
+Here's a very small **Splat** example which creates a 440Hz sound for 1 second,
+with smooth fade-in and fade-out:
 
 .. code-block:: python
 
     import splat.gen
-    import splat.data
     import splat.filters
 
     gen = splat.gen.SineGenerator()
@@ -47,9 +47,9 @@ Here's a very small **Splat** example which creates a beep 440Hz sound:
 
 You can find some splats as well as other music, software and electronics
 things on `verdigris.mu <http://verdigris.mu>`_.  Some experimental splats can
-also be heard on `SoundCloud <http://soundcloud.com/verdigris-mu>`_.  You can
-send your creations or reactions to `info@verdigris.mu
+also be heard on `SoundCloud <https://soundcloud.com/verdigrix/sets/splat-1>`_.
+You can send your creations or reactions to `info@verdigris.mu
 <mailto:info@verdigris.mu>`_.
 
-Download the `Manual in PDF format <http://verdigris.mu/public/doc/Splat.pdf>`_
+Download the `manual in PDF format <http://verdigris.mu/public/doc/Splat.pdf>`_
 to start using **Splat**.
