@@ -29,7 +29,7 @@ Beep
 ----
 
 Here's a very small **Splat** example which creates a 440Hz sound for 1 second,
-with smooth fade-in and fade-out:
+with fade-in and fade-out:
 
 .. code-block:: python
 
