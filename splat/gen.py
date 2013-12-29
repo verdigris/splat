@@ -114,7 +114,7 @@ class Generator(object):
         """
         raise NotImplemented
 
-    def run(self, freq, start, end, levels=None, *args, **kw):
+    def run(self, start, end, *args, **kw):
         """Main public method to run the generator
 
         This method is the main entry point to run the generator and actually
@@ -123,12 +123,11 @@ class Generator(object):
         :py:meth:`splat.gen.Generator._run` with a sound source and specific
         arguments.
         """
-        if levels is None:
-            levels = self._levels
+        levels = kw.pop('levels', self._levels)
         start *= self.time_stretch
         end *= self.time_stretch
         frag = Fragment(self.channels, self.sample_rate, (end - start))
-        self._run(frag, freq, levels, *args, **kw)
+        self._run(frag, levels, *args, **kw)
         self.filters.run(frag)
         self.frag.mix(frag, start)
 
@@ -155,8 +154,8 @@ class SourceGenerator(Generator):
         """Sound source."""
         return self._source
 
-    def _run(self, frag, *args, **kw):
-        self.source(frag, *args, **kw)
+    def _run(self, frag, levels, freq, phase=0.0, *args, **kw):
+        self.source(frag, levels, freq, phase, *args, **kw)
 
 
 class SineGenerator(SourceGenerator):
@@ -206,8 +205,7 @@ class OvertonesGenerator(SourceGenerator):
     """
 
     def __init__(self, *args, **kw):
-        super(OvertonesGenerator, self).__init__(sources.overtones,
-                                                 *args, **kw)
+        super(OvertonesGenerator, self).__init__(sources.overtones, *args,**kw)
         self.overtones = { 1.0: 0.0 }
 
     def ot_decexp(self, k=1.0, n=24):
@@ -232,6 +230,6 @@ class OvertonesGenerator(SourceGenerator):
             l = _splat.lin2dB(math.exp(-j / k))
             self.overtones[j + 1] = l
 
-    def _run(self, frag, freq, levels, *args, **kw):
-        super(OvertonesGenerator, self)._run(frag, freq, levels,
+    def _run(self, frag, levels, freq, phase=0.0, *args, **kw):
+        super(OvertonesGenerator, self)._run(frag, levels, freq, phase,
                                              self.overtones, *args, **kw)
