@@ -173,7 +173,7 @@ static PyObject *Fragment_sq_item(Fragment *self, Py_ssize_t i)
 
 static int Fragment_sq_ass_item(Fragment *self, Py_ssize_t i, PyObject *v)
 {
-	Py_ssize_t c;
+	unsigned c;
 
 	if (!PyTuple_CheckExact(v)) {
 		PyErr_SetString(PyExc_TypeError, "item must be a tuple");
@@ -331,7 +331,7 @@ static PyObject *Fragment_import_bytes(Fragment *self, PyObject *args)
 	unsigned bytes_per_sample;
 	unsigned n_samples;
 	unsigned end;
-	unsigned ch;
+	unsigned c;
 	int32_t neg;
 	int32_t neg_mask;
 	float scale;
@@ -376,9 +376,9 @@ static PyObject *Fragment_import_bytes(Fragment *self, PyObject *args)
 	neg = 1 << (sample_bits - 1);
 	neg_mask = 0xFFFFFFFF - (1 << sample_bits) + 1;
 
-	for (ch = 0; ch < self->n_channels; ++ch) {
-		const char *in = bytes + (sample_width * ch);
-		float *out = &self->data[ch][start];
+	for (c = 0; c < self->n_channels; ++c) {
+		const char *in = bytes + (sample_width * c);
+		float *out = &self->data[c][start];
 		unsigned s;
 
 		if (sample_width == 2) {
@@ -580,7 +580,7 @@ static PyObject *Fragment_amp(Fragment *self, PyObject *args)
 	PyObject *gain_obj;
 
 	double gain[MAX_CHANNELS];
-	size_t c;
+	unsigned c;
 
 	if (!PyArg_ParseTuple(args, "O", &gain_obj))
 		return NULL;
@@ -690,7 +690,7 @@ static int do_resize(Fragment *self, size_t length)
 
 static int parse_levels(double *levels, Fragment *frag, PyObject *levels_obj)
 {
-	size_t c;
+	unsigned c;
 
 	if (PyFloat_Check(levels_obj)) {
 		const double gain_lin = dB2lin(PyFloat_AsDouble(levels_obj));
@@ -770,7 +770,8 @@ static PyObject *splat_sine(PyObject *self, PyObject *args)
 
 	Py_ssize_t n_channels;
 	double levels[MAX_CHANNELS];
-	Py_ssize_t c, i;
+	unsigned c;
+	size_t i;
 	double k;
 
 	if (!PyArg_ParseTuple(args, "O!dO!", &splat_FragmentType, &frag, &freq,
@@ -822,7 +823,8 @@ static PyObject *splat_square(PyObject *self, PyObject *args)
 	double levels_pos[MAX_CHANNELS];
 	double levels_neg[MAX_CHANNELS];
 	const double *levels;
-	Py_ssize_t c, i;
+	unsigned c;
+	size_t i;
 	double k;
 
 	if (!PyArg_ParseTuple(args, "O!dO!|d", &splat_FragmentType, &frag,
@@ -881,7 +883,8 @@ static PyObject *splat_triangle(PyObject *self, PyObject *args)
 	double a1[MAX_CHANNELS], b1[MAX_CHANNELS];
 	double a2[MAX_CHANNELS], b2[MAX_CHANNELS];
 	const double *a, *b;
-	Py_ssize_t c, i;
+	unsigned c;
+	size_t i;
 	double k;
 
 	if (!PyArg_ParseTuple(args, "O!dO!|d", &splat_FragmentType, &frag,
@@ -962,7 +965,7 @@ static PyObject *splat_overtones(PyObject *self, PyObject *args)
 	double levels[MAX_CHANNELS];
 	Py_ssize_t pos;
 	size_t i;
-	size_t c;
+	unsigned c;
 	double k;
 	int stat = 0;
 
@@ -1055,7 +1058,7 @@ static PyObject *splat_dec_envelope(PyObject *self, PyObject *args)
 	double k = 1.0;
 	double p = 1.0;
 
-	size_t c;
+	unsigned c;
 
 	if (!PyArg_ParseTuple(args, "O!|dd", &splat_FragmentType, &frag,
 			      &k, &p))
@@ -1087,7 +1090,7 @@ static PyObject *splat_reverse(PyObject *self, PyObject *args)
 {
 	Fragment *frag;
 
-	size_t c;
+	unsigned c;
 
 	if (!PyArg_ParseTuple(args, "O!", &splat_FragmentType, &frag))
 		return NULL;
@@ -1155,7 +1158,7 @@ static PyObject *splat_reverb(PyObject *self, PyObject *args)
 	size_t max_delay;
 	size_t max_index;
 	size_t d;
-	size_t c;
+	unsigned c;
 	size_t i;
 
 	if (!PyArg_ParseTuple(args, "O!O!|ddI", &splat_FragmentType, &frag,
