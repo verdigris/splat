@@ -754,6 +754,165 @@ static int frag_resize(Fragment *self, size_t length)
 }
 
 /* ----------------------------------------------------------------------------
+ * Signal vector
+ */
+
+#define SIGNAL_VECTOR_BITS 8
+#define SIGNAL_VECTOR_LEN (1 << SIGNAL_VECTOR_BITS)
+#define SIGNAL_VECTOR_MASK (SIGNAL_VECTOR_LEN - 1)
+
+struct splat_signal;
+
+struct signal_vector {
+	double data[SIGNAL_VECTOR_LEN];
+	PyObject *obj;
+	int (*signal)(struct splat_signal *s, struct signal_vector *v);
+};
+
+enum signal_ret {
+	SIGNAL_VECTOR_CONTINUE = 0,
+	SIGNAL_VECTOR_STOP,
+};
+
+struct splat_signal {
+	Fragment *frag;
+	size_t n_vectors;
+	struct signal_vector *vectors;
+	PyObject *py_float;
+	PyObject *py_args;
+	size_t cur;
+	size_t end;
+	size_t len;
+	int error;
+};
+
+static int splat_signal_func(struct splat_signal *s, struct signal_vector *v)
+{
+	const double rate = s->frag->rate;
+	size_t i;
+
+	for (i = s->cur; i < s->end; ++i) {
+		PyObject *ret;
+
+		PyFloat_AS_DOUBLE(s->py_float) = i / rate;
+		ret = PyObject_Call(v->obj, s->py_args, NULL);
+
+		if (!PyFloat_Check(ret))
+			return -1;
+
+		v->data[i & SIGNAL_VECTOR_MASK] = PyFloat_AS_DOUBLE(ret);
+	}
+
+	return 0;
+}
+
+static int splat_signal_frag(struct splat_signal *s, struct signal_vector *v)
+{
+	Fragment *frag = (Fragment *)v->obj;
+	size_t i;
+
+	for (i = s->cur; i < s->end; ++i)
+		v->data[i & SIGNAL_VECTOR_MASK] = frag->data[0][i];
+
+	return 0;
+}
+
+static int splat_signal_init(struct splat_signal *s, Fragment *frag,
+			     PyObject **signals, size_t n_signals)
+{
+	size_t i;
+
+	s->frag = frag;
+	s->n_vectors = n_signals;
+
+	s->vectors = PyMem_Malloc(n_signals * sizeof(struct signal_vector));
+
+	if (s->vectors == NULL) {
+		PyErr_NoMemory();
+		return -1;
+	}
+
+	s->py_float = PyFloat_FromDouble(0);
+
+	if (s->py_float == NULL)
+		return -1;
+
+	s->py_args = PyTuple_New(1);
+
+	if (s->py_args == NULL)
+		return -1;
+
+	PyTuple_SET_ITEM(s->py_args, 0, s->py_float);
+
+	for (i = 0; i < n_signals; ++i) {
+		struct signal_vector *v = &s->vectors[i];
+		PyObject *signal = signals[i];
+
+		if (PyFloat_Check(signal)) {
+			const double value = PyFloat_AS_DOUBLE(signal);
+			size_t j;
+
+			for (j = 0; j < SIGNAL_VECTOR_LEN; ++j)
+				v->data[j] = value;
+
+			v->signal = NULL;
+		} else if (PyCallable_Check(signal)) {
+			v->signal = splat_signal_func;
+		} else if (PyObject_TypeCheck(signal, &splat_FragmentType)) {
+			Fragment *sig_frag = (Fragment *)signal;
+
+			if (sig_frag->length != frag->length) {
+				PyErr_SetString(PyExc_ValueError,
+						"fragment size mismatch");
+				return -1;
+			}
+
+			v->signal = splat_signal_frag;
+		} else {
+			PyErr_SetString(PyExc_TypeError,
+					"unsupported signal type");
+			return -1;
+		}
+
+		v->obj = signal;
+	}
+
+	s->cur = 0;
+	s->end = 0;
+	s->len = 0;
+	s->error = 0;
+
+	return 0;
+}
+
+static void splat_signal_free(struct splat_signal *s)
+{
+	Py_DECREF(s->py_args);
+	PyMem_Free(s->vectors);
+}
+
+static int splat_signal_next(struct splat_signal *s)
+{
+	size_t i;
+
+	s->cur += s->len;
+	s->end = min((s->cur + SIGNAL_VECTOR_LEN), s->frag->length);
+	s->len = s->end - s->cur;
+
+	if (!s->len)
+		return SIGNAL_VECTOR_STOP;
+
+	for (i = 0; i < s->n_vectors; ++i) {
+		struct signal_vector *v = &s->vectors[i];
+
+		if ((v->signal != NULL) && (v->signal(s, v)))
+			return SIGNAL_VECTOR_STOP;
+	}
+
+	return SIGNAL_VECTOR_CONTINUE;
+}
+
+/* ----------------------------------------------------------------------------
  * _splat methods
  */
 
