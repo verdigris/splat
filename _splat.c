@@ -57,8 +57,9 @@ typedef struct Fragment_object Fragment;
 
 static PyTypeObject splat_FragmentType;
 
-/* private functions */
-static int do_resize(Fragment *self, size_t length);
+/* -- internal functions -- */
+
+static int frag_resize(Fragment *self, size_t length);
 static int parse_levels(double *levels, Fragment *frag, PyObject *levels_obj);
 
 static void Fragment_dealloc(Fragment *self)
@@ -245,7 +246,7 @@ static int Fragment_set_duration(Fragment *self, PyObject *value, void *_)
 
 	new_length = PyFloat_AS_DOUBLE(value) * self->rate;
 
-	if (do_resize(self, new_length) < 0)
+	if (frag_resize(self, new_length))
 		return -1;
 
 	return 0;
@@ -302,7 +303,7 @@ static PyObject *Fragment_mix(Fragment *self, PyObject *args)
 	start_sample = start * self->rate;
 	total_length = start_sample + frag->length;
 
-	if (do_resize(self, total_length) < 0)
+	if (frag_resize(self, total_length))
 		return NULL;
 
 	for (c = 0; c < self->n_channels; ++c) {
@@ -368,7 +369,7 @@ static PyObject *Fragment_import_bytes(Fragment *self, PyObject *args)
 	n_samples = n_bytes / bytes_per_sample;
 	end = start + n_samples;
 
-	if (do_resize(self, end) < 0)
+	if (frag_resize(self, end))
 		return NULL;
 
 	sample_bits = 8 * sample_width;
@@ -655,13 +656,13 @@ static PyTypeObject splat_FragmentType = {
 	Fragment_new,                      /* tp_new */
 };
 
-/* private functions */
+/* -- internal Fragment functions -- */
 
-static int do_resize(Fragment *self, size_t length)
+static int frag_resize(Fragment *self, size_t length)
 {
 	size_t start;
 	size_t data_size;
-	size_t i;
+	unsigned c;
 
 	if (length <= self->length)
 		return 0;
@@ -669,18 +670,18 @@ static int do_resize(Fragment *self, size_t length)
 	start = self->length * sizeof(float);
 	data_size = length * sizeof(float);
 
-	for (i = 0; i < self->n_channels; ++i) {
-		if (self->data[i] == NULL)
-			self->data[i] = PyMem_Malloc(data_size);
+	for (c = 0; c < self->n_channels; ++c) {
+		if (self->data[c] == NULL)
+			self->data[c] = PyMem_Malloc(data_size);
 		else
-			self->data[i] = PyMem_Realloc(self->data[i],data_size);
+			self->data[c] = PyMem_Realloc(self->data[c],data_size);
 
-		if (self->data[i] == NULL) {
+		if (self->data[c] == NULL) {
 			PyErr_NoMemory();
 			return -1;
 		}
 
-		memset(&self->data[i][self->length], 0, (data_size - start));
+		memset(&self->data[c][self->length], 0, (data_size - start));
 	}
 
 	self->length = length;
@@ -1248,7 +1249,7 @@ static PyObject *splat_reverb(PyObject *self, PyObject *args)
 	max_delay *= 4;
 #endif
 
-	if (do_resize(frag, (frag->length + max_delay)) < 0)
+	if (frag_resize(frag, (frag->length + max_delay)))
 		return NULL;
 
 	for (c = 0; c < frag->n_channels; ++c) {
