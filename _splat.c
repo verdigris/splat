@@ -59,8 +59,19 @@ static PyTypeObject splat_FragmentType;
 
 /* -- internal functions -- */
 
+struct splat_levels_helper {
+	unsigned n;
+	PyObject *obj[MAX_CHANNELS];
+	double fl[MAX_CHANNELS]; /* levels converted to linear scale */
+	int all_floats;
+};
+
+static int frag_get_levels(Fragment *frag, struct splat_levels_helper *levels,
+			   PyObject *levels_obj);
+
 static int frag_resize(Fragment *self, size_t length);
-static int parse_levels(double *levels, Fragment *frag, PyObject *levels_obj);
+
+/* -- Fragment functions -- */
 
 static void Fragment_dealloc(Fragment *self)
 {
@@ -580,17 +591,17 @@ static PyObject *Fragment_amp(Fragment *self, PyObject *args)
 {
 	PyObject *gain_obj;
 
-	double gain[MAX_CHANNELS];
+	struct splat_levels_helper gains;
 	unsigned c;
 
 	if (!PyArg_ParseTuple(args, "O", &gain_obj))
 		return NULL;
 
-	if (parse_levels(gain, self, gain_obj) < 0)
+	if (frag_get_levels(self, &gains, gain_obj))
 		return NULL;
 
 	for (c = 0; c < self->n_channels; ++c) {
-		const double g = gain[c];
+		const double g = gains.fl[c];
 		size_t i;
 
 		for (i = 0; i < self->length; ++i)
@@ -658,6 +669,59 @@ static PyTypeObject splat_FragmentType = {
 
 /* -- internal Fragment functions -- */
 
+static int frag_get_levels(Fragment *frag, struct splat_levels_helper *levels,
+			   PyObject *levels_obj)
+{
+	unsigned c;
+
+	if (PyFloat_Check(levels_obj)) {
+		const double gain_lin = dB2lin(PyFloat_AsDouble(levels_obj));
+
+		for (c = 0; c < frag->n_channels; ++c) {
+			levels->obj[c] = levels_obj;
+			levels->fl[c] = gain_lin;
+			levels->all_floats = 1;
+			levels->n = frag->n_channels;
+		}
+	} else if (PyTuple_Check(levels_obj)) {
+		const Py_ssize_t n_channels = PyTuple_GET_SIZE(levels_obj);
+
+		if (n_channels > MAX_CHANNELS) {
+			PyErr_SetString(PyExc_ValueError, "too many channels");
+			return -1;
+		}
+
+		if (n_channels != frag->n_channels) {
+			PyErr_SetString(PyExc_ValueError,
+					"channels number mismatch");
+			return -1;
+		}
+
+		levels->n = n_channels;
+		levels->all_floats = 1;
+
+		for (c = 0; c < n_channels; ++c) {
+			levels->obj[c] = PyTuple_GetItem(levels_obj, c);
+
+			if (levels->all_floats &&
+			    PyFloat_Check(levels->obj[c])) {
+				const double level_dB =
+					PyFloat_AS_DOUBLE(levels->obj[c]);
+
+				levels->fl[c] = dB2lin(level_dB);
+			} else {
+				levels->all_floats = 0;
+			}
+		}
+	} else {
+		PyErr_SetString(PyExc_TypeError,
+				"level values must be float or tuple");
+		return -1;
+	}
+
+	return 0;
+}
+
 static int frag_resize(Fragment *self, size_t length)
 {
 	size_t start;
@@ -685,40 +749,6 @@ static int frag_resize(Fragment *self, size_t length)
 	}
 
 	self->length = length;
-
-	return 0;
-}
-
-static int parse_levels(double *levels, Fragment *frag, PyObject *levels_obj)
-{
-	unsigned c;
-
-	if (PyFloat_Check(levels_obj)) {
-		const double gain_lin = dB2lin(PyFloat_AsDouble(levels_obj));
-		for (c = 0; c < frag->n_channels; ++c)
-			levels[c] = gain_lin;
-	} else if (PyTuple_Check(levels_obj)) {
-		if (PyTuple_GET_SIZE(levels_obj) != frag->n_channels) {
-			PyErr_SetString(PyExc_ValueError, "channels mismatch");
-			return -1;
-		}
-
-		for (c = 0; c < frag->n_channels; ++c) {
-			PyObject *o = PyTuple_GET_ITEM(levels_obj, c);
-
-			if (!PyFloat_Check(o)) {
-				PyErr_SetString(PyExc_TypeError,
-						"gain must be a float");
-				return -1;
-			}
-
-			levels[c] = dB2lin(PyFloat_AsDouble(o));
-		}
-	} else {
-		PyErr_SetString(PyExc_TypeError,
-				"invalid gain values, must be float or tuple");
-		return -1;
-	}
 
 	return 0;
 }
@@ -767,42 +797,27 @@ static PyObject *splat_sine(PyObject *self, PyObject *args)
 {
 	Fragment *frag;
 	double freq;
-	PyObject *levels_tuple;
+	PyObject *levels_obj;
 
-	Py_ssize_t n_channels;
-	double levels[MAX_CHANNELS];
+	struct splat_levels_helper levels;
 	unsigned c;
 	size_t i;
 	double k;
 
-	if (!PyArg_ParseTuple(args, "O!dO!", &splat_FragmentType, &frag, &freq,
-			      &PyTuple_Type, &levels_tuple))
+	if (!PyArg_ParseTuple(args, "O!dO", &splat_FragmentType, &frag, &freq,
+			      &levels_obj))
 		return NULL;
 
-	n_channels = PyTuple_Size(levels_tuple);
-
-	if (n_channels > MAX_CHANNELS) {
-		PyErr_SetString(PyExc_ValueError, "too many channels");
+	if (frag_get_levels(frag, &levels, levels_obj))
 		return NULL;
-	}
-
-	if (n_channels != frag->n_channels) {
-		PyErr_SetString(PyExc_ValueError, "channels number mismatch");
-		return NULL;
-	}
-
-	for (c = 0; c < n_channels; ++c) {
-		PyObject *level = PyTuple_GetItem(levels_tuple, c);
-		levels[c] = dB2lin(PyFloat_AsDouble(level));
-	}
 
 	k = 2 * M_PI * freq / frag->rate;
 
 	for (i = 0; i < frag->length; ++i) {
 		const double s = sin(k * i);
 
-		for (c = 0; c < n_channels; ++c)
-			frag->data[c][i] = s * levels[c];
+		for (c = 0; c < frag->n_channels; ++c)
+			frag->data[c][i] = s * levels.fl[c];
 	}
 
 	Py_RETURN_NONE;
@@ -821,48 +836,42 @@ static PyObject *splat_square(PyObject *self, PyObject *args)
 	PyObject *levels_obj;
 	double ratio = 0.5;
 
-	double levels_pos[MAX_CHANNELS];
+	struct splat_levels_helper levels;
+	const double *levels_pos = levels.fl;
 	double levels_neg[MAX_CHANNELS];
-	const double *levels;
 	unsigned c;
 	size_t i;
 	double k;
 
-	if (!PyArg_ParseTuple(args, "O!dO!|d", &splat_FragmentType, &frag,
-			      &freq, &PyTuple_Type, &levels_obj, &ratio))
+	if (!PyArg_ParseTuple(args, "O!dO|d", &splat_FragmentType, &frag,
+			      &freq, &levels_obj, &ratio))
 		return NULL;
 
-	if (PyTuple_GET_SIZE(levels_obj) != frag->n_channels) {
-		PyErr_SetString(PyExc_ValueError, "channels number mismatch");
+	if (frag_get_levels(frag, &levels, levels_obj))
 		return NULL;
-	}
 
 	if ((ratio < 0.0) || (ratio > 1.0)) {
 		PyErr_SetString(PyExc_ValueError, "invalid ratio value");
 		return NULL;
 	}
 
-	for (c = 0; c < frag->n_channels; ++c) {
-		PyObject *l = PyTuple_GET_ITEM(levels_obj, c);
-		const double llin = dB2lin(PyFloat_AsDouble(l));
-
-		levels_pos[c] = llin;
-		levels_neg[c] = -llin;
-	}
+	for (c = 0; c < frag->n_channels; ++c)
+		levels_neg[c] = -levels_pos[c];
 
 	k = freq / frag->rate;
 
 	for (i = 0; i < frag->length; ++i) {
 		double n_periods;
 		const double t_rel = modf((i * k), &n_periods);
+		const double *cur_levels;
 
 		if (t_rel < ratio)
-			levels = levels_pos;
+			cur_levels = levels_pos;
 		else
-			levels = levels_neg;
+			cur_levels = levels_neg;
 
 		for (c = 0; c < frag->n_channels; ++c)
-			frag->data[c][i] = levels[c];
+			frag->data[c][i] = cur_levels[c];
 	}
 
 	Py_RETURN_NONE;
@@ -881,6 +890,7 @@ static PyObject *splat_triangle(PyObject *self, PyObject *args)
 	PyObject *levels_obj;
 	double ratio = 0.5;
 
+	struct splat_levels_helper levels;
 	double a1[MAX_CHANNELS], b1[MAX_CHANNELS];
 	double a2[MAX_CHANNELS], b2[MAX_CHANNELS];
 	const double *a, *b;
@@ -888,14 +898,12 @@ static PyObject *splat_triangle(PyObject *self, PyObject *args)
 	size_t i;
 	double k;
 
-	if (!PyArg_ParseTuple(args, "O!dO!|d", &splat_FragmentType, &frag,
-			      &freq, &PyTuple_Type, &levels_obj, &ratio))
+	if (!PyArg_ParseTuple(args, "O!dO|d", &splat_FragmentType, &frag,
+			      &freq, &levels_obj, &ratio))
 		return NULL;
 
-	if (PyTuple_GET_SIZE(levels_obj) != frag->n_channels) {
-		PyErr_SetString(PyExc_ValueError, "channels number mismatch");
+	if (frag_get_levels(frag, &levels, levels_obj))
 		return NULL;
-	}
 
 	if ((ratio < 0.0) || (ratio > 1.0)) {
 		PyErr_SetString(PyExc_ValueError, "invalid ratio value");
@@ -903,8 +911,7 @@ static PyObject *splat_triangle(PyObject *self, PyObject *args)
 	}
 
 	for (c = 0; c < frag->n_channels; ++c) {
-		PyObject *l = PyTuple_GET_ITEM(levels_obj, c);
-		const double llin = dB2lin(PyFloat_AsDouble(l));
+		const double llin = levels.fl[c];
 
 		a1[c] = 2 * llin / ratio;
 		b1[c] = -llin;
@@ -949,43 +956,35 @@ static PyObject *splat_overtones(PyObject *self, PyObject *args)
 {
 	struct overtone {
 		double freq;
-		double levels[MAX_CHANNELS];
+		struct splat_levels_helper levels;
 	};
 
 	Fragment *frag;
 	double freq;
 	PyObject *levels_obj;
-	PyObject *overtones_obj;
+	PyObject *ot_obj;
 
+	struct splat_levels_helper levels;
 	struct overtone *overtones;
 	struct overtone *ot;
 	const struct overtone *ot_end;
 	Py_ssize_t n_overtones;
 	PyObject *ot_freq;
 	PyObject *ot_levels;
-	double levels[MAX_CHANNELS];
 	Py_ssize_t pos;
 	size_t i;
 	unsigned c;
 	double k;
 	int stat = 0;
 
-	if (!PyArg_ParseTuple(args, "O!dO!O!", &splat_FragmentType, &frag,
-			      &freq, &PyTuple_Type, &levels_obj,
-			      &PyDict_Type, &overtones_obj))
+	if (!PyArg_ParseTuple(args, "O!dOO!", &splat_FragmentType, &frag,
+			      &freq, &levels_obj, &PyDict_Type, &ot_obj))
 		return NULL;
 
-	if (PyTuple_GET_SIZE(levels_obj) != frag->n_channels) {
-		PyErr_SetString(PyExc_ValueError, "channels number mismatch");
+	if (frag_get_levels(frag, &levels, levels_obj))
 		return NULL;
-	}
 
-	for (i = 0; i < frag->n_channels; ++i) {
-		PyObject *l = PyTuple_GET_ITEM(levels_obj, i);
-		levels[i] = dB2lin(PyFloat_AsDouble(l));
-	}
-
-	n_overtones = PyDict_Size(overtones_obj);
+	n_overtones = PyDict_Size(ot_obj);
 	overtones = PyMem_Malloc(n_overtones * sizeof(struct overtone));
 
 	if (overtones == NULL)
@@ -995,7 +994,7 @@ static PyObject *splat_overtones(PyObject *self, PyObject *args)
 	ot_end = &overtones[n_overtones];
 	pos = 0;
 
-	while (PyDict_Next(overtones_obj, &pos, &ot_freq, &ot_levels)) {
+	while (PyDict_Next(ot_obj, &pos, &ot_freq, &ot_levels)) {
 		if (!PyFloat_Check(ot_freq)) {
 			PyErr_SetString(PyExc_TypeError,
 					"overtone key must be a float");
@@ -1005,11 +1004,11 @@ static PyObject *splat_overtones(PyObject *self, PyObject *args)
 
 		ot->freq = PyFloat_AS_DOUBLE(ot_freq);
 
-		if (parse_levels(ot->levels, frag, ot_levels) < 0)
+		if (frag_get_levels(frag, &ot->levels, ot_levels))
 			goto free_overtones;
 
 		for (c = 0; c < frag->n_channels; ++c)
-			ot->levels[c] *= levels[c];
+			ot->levels.fl[c] *= levels.fl[c];
 
 		++ot;
 	}
@@ -1020,7 +1019,7 @@ static PyObject *splat_overtones(PyObject *self, PyObject *args)
 	for (ot = overtones; ot != ot_end; ++ot)
 		if ((ot->freq * freq) >= (frag->rate / 2))
 			for (c = 0; c < frag->n_channels; ++c)
-				ot->levels[c] = 0.0f;
+				ot->levels.fl[c] = 0.0f;
 
 	for (i = 0; i < frag->length; ++i) {
 		const double m = k * i;
@@ -1029,7 +1028,7 @@ static PyObject *splat_overtones(PyObject *self, PyObject *args)
 			const double s = sin(m * ot->freq);
 
 			for (c = 0; c < frag->n_channels; ++c)
-				frag->data[c][i] += s * ot->levels[c];
+				frag->data[c][i] += s * ot->levels.fl[c];
 		}
 	}
 
