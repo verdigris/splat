@@ -1363,104 +1363,298 @@ static PyObject *splat_triangle(PyObject *self, PyObject *args)
 
 /* -- overtones source -- */
 
-PyDoc_STRVAR(splat_overtones_doc,
-"overtones(fragment, frequency, levels, overtones)\n"
-"\n"
-"Generate a sum of overtones as pure sine waves with the given fundamental "
-"``frequency`` and ``levels`` in dB.\n"
-"\n"
-"The ``overtones`` are described with a dictionary which keys are "
-"floating point numbers multiplied by the fundamental frequency to get the "
-"overtone frequencies, and values are single floats or tuples with levels for "
-"each channel of the fragment.  The generation is performed over the entire "
-"fragment.\n");
-
-static PyObject *splat_overtones(PyObject *self, PyObject *args)
-{
-	struct overtone {
-		double freq;
-		struct splat_levels_helper levels;
-	};
-
-	Fragment *frag;
-	PyObject *levels_obj;
-	double freq;
-	double phase;
-	PyObject *ot_obj;
-
+struct overtone {
+	PyObject *ratio;
+	double fl_ratio;
+	PyObject *phase;
+	double fl_phase;
 	struct splat_levels_helper levels;
-	struct overtone *overtones;
+};
+
+static void splat_overtones_float(Fragment *frag, const double *levels,
+				  double freq, double phase,
+				  struct overtone *overtones, Py_ssize_t n)
+{
+	const double k = 2 * M_PI * freq;
+	const double max_ratio = (frag->rate / freq) / 2;
 	struct overtone *ot;
-	const struct overtone *ot_end;
-	Py_ssize_t n_overtones;
-	PyObject *ot_freq;
-	PyObject *ot_levels;
-	Py_ssize_t pos;
-	size_t i;
+	const struct overtone *ot_end = &overtones[n];
 	unsigned c;
-	double k;
-	int stat = 0;
+	size_t i;
 
-	if (!PyArg_ParseTuple(args, "O!OddO!", &splat_FragmentType, &frag,
-			      &levels_obj, &freq, &phase,
-			      &PyDict_Type, &ot_obj))
-		return NULL;
-
-	if (frag_get_levels(frag, &levels, levels_obj))
-		return NULL;
-
-	n_overtones = PyDict_Size(ot_obj);
-	overtones = PyMem_Malloc(n_overtones * sizeof(struct overtone));
-
-	if (overtones == NULL)
-		return PyErr_NoMemory();
-
-	ot = overtones;
-	ot_end = &overtones[n_overtones];
-	pos = 0;
-
-	while (PyDict_Next(ot_obj, &pos, &ot_freq, &ot_levels)) {
-		if (!PyFloat_Check(ot_freq)) {
-			PyErr_SetString(PyExc_TypeError,
-					"overtone key must be a float");
-			stat = -1;
-			goto free_overtones;
-		}
-
-		ot->freq = PyFloat_AS_DOUBLE(ot_freq);
-
-		if (frag_get_levels(frag, &ot->levels, ot_levels))
-			goto free_overtones;
-
-		for (c = 0; c < frag->n_channels; ++c)
-			ot->levels.fl[c] *= levels.fl[c];
-
-		++ot;
-	}
-
-	k = 2 * M_PI * freq / frag->rate;
-
-	/* Silence harmonics above rate / 2 to avoid spectrum overlap */
-	for (ot = overtones; ot != ot_end; ++ot)
-		if ((ot->freq * freq) >= (frag->rate / 2))
+	/* Silence harmonics above (rate / 2) to avoid spectrum overlap
+	   and multiply each overtone levels with global levels. */
+	for (ot = overtones; ot != ot_end; ++ot) {
+		if (ot->fl_ratio >= max_ratio) {
 			for (c = 0; c < frag->n_channels; ++c)
 				ot->levels.fl[c] = 0.0f;
+		} else {
+			for (c = 0; c < frag->n_channels; ++c)
+				ot->levels.fl[c] *= levels[c];
+		}
+	}
 
 	for (i = 0; i < frag->length; ++i) {
-		const double m = k * i;
+		const double t = phase + ((double)i / frag->rate);
 
 		for (ot = overtones; ot != ot_end; ++ot) {
-			const double s = sin(m * ot->freq);
+			const double s =
+				sin(k * ot->fl_ratio * (t + ot->fl_phase));
 
 			for (c = 0; c < frag->n_channels; ++c)
 				frag->data[c][i] += s * ot->levels.fl[c];
 		}
 	}
+}
 
+static void splat_overtones_mixed(Fragment *frag, PyObject **levels,
+				  PyObject *freq, PyObject *phase,
+				  struct overtone *overtones, Py_ssize_t n)
+{
+	enum {
+		SIG_FREQ = 0,
+		SIG_PHASE,
+		SIG_AMP,
+	};
+	const double k = 2 * M_PI;
+	const double half_rate = frag->rate / 2;
+	PyObject *signals[SIG_AMP + MAX_CHANNELS];
+	struct splat_signal sig;
+	struct overtone *ot;
+	const struct overtone *ot_end = &overtones[n];
+	unsigned c;
+
+	signals[SIG_FREQ] = freq;
+	signals[SIG_PHASE] = phase;
+
+	for (c = 0; c < frag->n_channels; ++c)
+		signals[SIG_AMP + c] = levels[c];
+
+	if (splat_signal_init(&sig, frag, signals,
+			      (SIG_AMP + frag->n_channels)))
+		return;
+
+	while (splat_signal_next(&sig) == SIGNAL_VECTOR_CONTINUE) {
+		size_t i, j;
+
+		for (i = sig.cur, j = 0; i < sig.end; ++i, ++j) {
+			const double f = sig.vectors[SIG_FREQ].data[j];
+			const double max_ratio = half_rate / f;
+			const double m = k * f;
+			const double ph = sig.vectors[SIG_PHASE].data[j];
+			const double t = ph + ((double)i / frag->rate);
+
+			for (ot = overtones; ot != ot_end; ++ot) {
+				double s;
+
+				if (ot->fl_ratio >= max_ratio)
+					continue;
+
+				s = sin(m * ot->fl_ratio * (t + ot->fl_phase));
+
+				for (c = 0; c < frag->n_channels; ++c) {
+					double x;
+
+					x = sig.vectors[SIG_AMP + c].data[j];
+					x = dB2lin(x);
+					x *= ot->levels.fl[c];
+					frag->data[c][i] += s * x;
+				}
+			}
+		}
+	}
+}
+
+static void splat_overtones_signal(Fragment *frag, PyObject **levels,
+				   PyObject *freq, PyObject *phase,
+				   struct overtone *overtones, Py_ssize_t n)
+{
+	enum {
+		SIG_FREQ = 0,
+		SIG_PHASE = 1,
+		SIG_AMP = 2,
+		SIG_OT = 2 + MAX_CHANNELS,
+	};
+	const double k = 2 * M_PI;
+	const double half_rate = frag->rate / 2;
+	PyObject **signals;
+	struct splat_signal sig;
+	struct overtone *ot;
+	const struct overtone *ot_end = &overtones[n];
+	static const size_t sig_freq = 0;
+	static const size_t sig_phase = 1;
+	static const size_t sig_amp = 2;
+	const size_t sig_ot = sig_amp + frag->n_channels;
+	/* for each overtone: ratio, phase and levels */
+	const size_t sig_n = sig_ot + (n * (2 + frag->n_channels));
+	unsigned c;
+
+	signals = PyMem_Malloc(sig_n * sizeof(PyObject *));
+
+	if (signals == NULL) {
+		PyErr_NoMemory();
+		return;
+	}
+
+	signals[sig_freq] = freq;
+	signals[sig_phase] = phase;
+
+	for (c = 0; c < frag->n_channels; ++c)
+		signals[sig_amp + c] = levels[c];
+
+	{
+		PyObject **sig_ot_it = &signals[sig_ot];
+
+		for (ot = overtones; ot != ot_end; ++ot) {
+			*sig_ot_it++ = ot->ratio;
+			*sig_ot_it++ = ot->phase;
+
+			for (c = 0; c < frag->n_channels; ++c)
+				*sig_ot_it++ = ot->levels.obj[c];
+		}
+	}
+
+	if (splat_signal_init(&sig, frag, signals, sig_n))
+		return;
+
+	while (splat_signal_next(&sig) == SIGNAL_VECTOR_CONTINUE) {
+		size_t i, j;
+
+		for (i = sig.cur, j = 0; i < sig.end; ++i, ++j) {
+			const double t = (double)i / frag->rate;
+			const double f = sig.vectors[sig_freq].data[j];
+			const double max_ratio = half_rate / f;
+			const double ph = sig.vectors[sig_phase].data[j];
+			const double m = k * f;
+			const double tph = t + ph;
+			const struct signal_vector *otv = &sig.vectors[sig_ot];
+
+			for (ot = overtones; ot != ot_end; ++ot) {
+				const double ratio = (otv++)->data[j];
+				const double ot_ph = (otv++)->data[j];
+				double s;
+
+				if (ratio >= max_ratio) {
+					otv += frag->n_channels;
+					continue;
+				}
+
+				s = sin(m * ratio * (tph + ot_ph));
+
+				for (c = 0; c < frag->n_channels; ++c) {
+					double x, y;
+
+					x = sig.vectors[sig_amp + c].data[j];
+					y = (otv++)->data[j];
+					frag->data[c][i] +=
+						s * dB2lin(x) * dB2lin(y);
+				}
+			}
+		}
+	}
+
+	PyMem_Free(signals);
+}
+
+PyDoc_STRVAR(splat_overtones_doc,
+"overtones(fragment, levels, frequency, phase, overtones)\n"
+"\n"
+"Generate a sum of overtones as pure sine waves with the given fundamental "
+"``frequency`` and ``levels`` in dB.\n"
+"\n"
+"The ``overtones`` are described with a list of 3-tuples containing the "
+"ratio between the overtone and the fundamental frequency, the phase and "
+"levels: (ratio, phase, levels).  All these values can be signals, and the "
+"levels can either be a single value for all channels or individual values."
+"The generation is performed over the entire fragment.\n");
+
+static PyObject *splat_overtones(PyObject *self, PyObject *args)
+{
+	enum {
+		OT_RATIO = 0,
+		OT_PHASE,
+		OT_LEVELS,
+	};
+	Fragment *frag;
+	PyObject *levels_obj;
+	PyObject *freq;
+	PyObject *phase;
+	PyObject *overtones_obj;
+
+	struct splat_levels_helper levels;
+	struct overtone *overtones;
+	struct overtone *ot;
+	Py_ssize_t n;
+	Py_ssize_t pos;
+	int all_floats;
+	int ot_all_floats;
+	int stat = 0;
+
+	if (!PyArg_ParseTuple(args, "O!OOOO!", &splat_FragmentType, &frag,
+			      &levels_obj, &freq, &phase,
+			      &PyList_Type, &overtones_obj))
+		return NULL;
+
+	if (frag_get_levels(frag, &levels, levels_obj))
+		return NULL;
+
+	n = PyList_GET_SIZE(overtones_obj);
+	overtones = PyMem_Malloc(n * sizeof(struct overtone));
+
+	if (overtones == NULL)
+		return PyErr_NoMemory();
+
+	all_floats = levels.all_floats && splat_check_all_floats(freq, phase);
+	ot_all_floats = 1;
+
+	for (pos = 0, ot = overtones; pos < n; ++pos, ++ot) {
+		PyObject *ot_params = PyList_GET_ITEM(overtones_obj, pos);
+		PyObject *ot_levels;
+
+		if (!PyTuple_Check(ot_params) ||
+		    (PyTuple_GET_SIZE(ot_params) != 3)) {
+			PyErr_SetString(PyExc_ValueError,
+					"overtone params must be a 3-tuple");
+			goto free_overtones;
+		}
+
+		ot->ratio = PyTuple_GET_ITEM(ot_params, OT_RATIO);
+
+		if (ot_all_floats && PyFloat_Check(ot->ratio))
+			ot->fl_ratio = PyFloat_AS_DOUBLE(ot->ratio);
+		else
+			ot_all_floats = 0;
+
+		ot->phase = PyTuple_GET_ITEM(ot_params, OT_PHASE);
+
+		if (ot_all_floats && PyFloat_Check(ot->phase))
+			ot->fl_phase = PyFloat_AS_DOUBLE(ot->phase);
+		else
+			ot_all_floats = 0;
+
+		ot_levels = PyTuple_GET_ITEM(ot_params, OT_LEVELS);
+
+		if (frag_get_levels(frag, &ot->levels, ot_levels))
+			goto free_overtones;
+
+		ot_all_floats = ot_all_floats && ot->levels.all_floats;
+	}
+
+	all_floats = all_floats && ot_all_floats;
+
+	if (all_floats)
+		splat_overtones_float(frag, levels.fl, PyFloat_AS_DOUBLE(freq),
+				      PyFloat_AS_DOUBLE(phase), overtones, n);
+	else if (ot_all_floats)
+		splat_overtones_mixed(frag, levels.obj, freq, phase,
+				      overtones, n);
+	else
+		splat_overtones_signal(frag, levels.obj, freq, phase,
+				       overtones, n);
 free_overtones:
 	PyMem_Free(overtones);
 
-	if (stat < 0)
+	if (stat)
 		return NULL;
 
 	Py_RETURN_NONE;
