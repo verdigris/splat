@@ -998,39 +998,95 @@ static int _splat_check_all_floats(size_t n, ...)
 
 /* -- sine source -- */
 
+static void splat_sine_floats(Fragment *frag, const double *levels,
+			      double freq, double phase)
+{
+	const double k = 2 * M_PI * freq / frag->rate;
+	size_t i;
+
+	for (i = 0; i < frag->length; ++i) {
+		const double s = sin(k * i);
+		unsigned c;
+
+		for (c = 0; c < frag->n_channels; ++c)
+			frag->data[c][i] = s * levels[c];
+	}
+}
+
+static void splat_sine_signals(Fragment *frag, PyObject **levels,
+			       PyObject *freq, PyObject *phase)
+{
+	enum {
+		SIG_FREQ = 0,
+		SIG_PHASE,
+		SIG_AMP,
+	};
+	static const double k = 2 * M_PI;
+	struct splat_signal sig;
+	PyObject *signals[SIG_AMP + MAX_CHANNELS];
+	unsigned c;
+
+	signals[SIG_FREQ] = freq;
+	signals[SIG_PHASE] = phase;
+
+	for (c = 0; c < frag->n_channels; ++c)
+		signals[SIG_AMP + c] = levels[c];
+
+	if (splat_signal_init(&sig, frag, signals,
+			      (SIG_AMP + frag->n_channels)))
+		return;
+
+	while (splat_signal_next(&sig) == SIGNAL_VECTOR_CONTINUE) {
+		size_t i, j;
+
+		for (i = sig.cur, j = 0; i < sig.end; ++i, j++) {
+			const float t = (double)i / frag->rate;
+			const double f = sig.vectors[SIG_FREQ].data[j];
+			const double ph = sig.vectors[SIG_PHASE].data[j];
+			const double s = sin(k * f * (t + ph));
+
+			for (c = 0; c < frag->n_channels; ++c) {
+				const double a =
+					sig.vectors[SIG_AMP + c].data[j];
+
+				frag->data[c][i] = s * dB2lin(a);
+			}
+		}
+	}
+
+	splat_signal_free(&sig);
+}
+
 PyDoc_STRVAR(splat_sine_doc,
-"sine(fragment, frequency, levels)\n"
+"sine(fragment, levels, frequency, phase)\n"
 "\n"
-"Generate a sine wave with constant ``levels`` at the given ``frequency`` "
-"over the entire ``fragment``.\n");
+"Generate a sine wave for the given ``levels``, ``frequency`` and ``phase``"
+"signals over the entire ``fragment``.\n");
 
 static PyObject *splat_sine(PyObject *self, PyObject *args)
 {
 	Fragment *frag;
 	PyObject *levels_obj;
-	double freq;
-	double phase;
+	PyObject *freq;
+	PyObject *phase;
 
 	struct splat_levels_helper levels;
-	unsigned c;
-	size_t i;
-	double k;
+	int all_floats;
 
-	if (!PyArg_ParseTuple(args, "O!Odd", &splat_FragmentType, &frag,
-			      &levels_obj, &freq, &phase))
+	if (!PyArg_ParseTuple(args, "O!O!OO", &splat_FragmentType, &frag,
+			      &PyTuple_Type, &levels_obj, &freq, &phase))
 		return NULL;
 
 	if (frag_get_levels(frag, &levels, levels_obj))
 		return NULL;
 
-	k = 2 * M_PI * freq / frag->rate;
+	all_floats = levels.all_floats && splat_check_all_floats(freq, phase);
 
-	for (i = 0; i < frag->length; ++i) {
-		const double s = sin(k * i);
-
-		for (c = 0; c < frag->n_channels; ++c)
-			frag->data[c][i] = s * levels.fl[c];
-	}
+	if (all_floats)
+		splat_sine_floats(frag, levels.fl, PyFloat_AS_DOUBLE(freq),
+				  PyFloat_AS_DOUBLE(phase));
+	else
+		splat_sine_signals(frag, levels.obj, freq, phase);
 
 	Py_RETURN_NONE;
 }
