@@ -196,7 +196,7 @@ class OvertonesGenerator(SourceGenerator):
 
     """Overtones generator
 
-    Overtones are defined by an ``overtones`` dictionary.  For a description of
+    Overtones are defined by an ``overtones`` list.  For a description of
     the overtunes, see the :py:func:`splat.sources.overtones` source which is
     used by this generator.
 
@@ -206,7 +206,7 @@ class OvertonesGenerator(SourceGenerator):
 
     def __init__(self, *args, **kw):
         super(OvertonesGenerator, self).__init__(sources.overtones, *args,**kw)
-        self.overtones = { 1.0: 0.0 }
+        self.overtones = [(1.0, 0.0, 0.0)]
 
     def ot_decexp(self, k=1.0, n=24):
         """Set harmonic overtones levels following a decreasing exponential.
@@ -225,10 +225,10 @@ class OvertonesGenerator(SourceGenerator):
         A higher ``k`` value means the function will decrease faster causing
         less high-frequency harmonics.
         """
-        self.overtones = dict()
+        self.overtones = list()
         for j in (float(i) for i in range(n)):
             l = _splat.lin2dB(math.exp(-j / k))
-            self.overtones[j + 1] = l
+            self.overtones.append(((j + 1), 0.0, l))
 
     def _run(self, frag, levels, freq, phase=0.0, *args, **kw):
         super(OvertonesGenerator, self)._run(frag, levels, freq, phase,
