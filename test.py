@@ -49,7 +49,7 @@ test_gen_frag.test_name = "Generator Fragment"
 def test_sine():
     gen = splat.gen.SineGenerator()
     f = 1000.0
-    gen.run(f, 0.0, 1.0)
+    gen.run(0.0, 1.0, f)
     n = int(0.1234 * gen.frag.duration * gen.frag.sample_rate)
     s = math.sin(2 * math.pi * f * float(n) / gen.frag.sample_rate)
     return (check_samples(gen.frag, {n: (s, s)}) and
@@ -59,7 +59,7 @@ test_sine.test_name = "SineGenerator"
 def test_square():
     gen = splat.gen.SquareGenerator()
     f = 1000.0
-    gen.run(f, 0.0, 1.0)
+    gen.run(0.0, 1.0, f)
     nf = gen.frag.sample_rate / f
     samples = {int(nf * 0.1): (1.0, 1.0), int(nf * 0.9): (-1.0, -1.0)}
     return (check_samples(gen.frag, samples) and
@@ -70,7 +70,7 @@ def test_triangle():
     gen = splat.gen.TriangleGenerator()
     f = 1000.0
     ratio = 0.567
-    gen.run(f, 0.0, 1.0, (0.0, 0.0), ratio)
+    gen.run(0.0, 1.0, f, 0.0, ratio, levels=(0.0, 0.0))
     nf = gen.frag.sample_rate / f
     x1 = 0.25
     t1 = int(nf * ratio * x1)
@@ -90,7 +90,7 @@ def test_overtones():
     gen = splat.gen.OvertonesGenerator()
     gen.ot_decexp(1.0)
     f = 1000.0
-    gen.run(f, 0.0, 1.0)
+    gen.run(0.0, 1.0, f)
     return check_md5(gen.frag, 'ee045e012673ff7ed4ab9bd590b57368')
 test_overtones.test_name = "OvertonesGenerator"
 
