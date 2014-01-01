@@ -1007,16 +1007,17 @@ PyDoc_STRVAR(splat_sine_doc,
 static PyObject *splat_sine(PyObject *self, PyObject *args)
 {
 	Fragment *frag;
-	double freq;
 	PyObject *levels_obj;
+	double freq;
+	double phase;
 
 	struct splat_levels_helper levels;
 	unsigned c;
 	size_t i;
 	double k;
 
-	if (!PyArg_ParseTuple(args, "O!dO", &splat_FragmentType, &frag, &freq,
-			      &levels_obj))
+	if (!PyArg_ParseTuple(args, "O!Odd", &splat_FragmentType, &frag,
+			      &levels_obj, &freq, &phase))
 		return NULL;
 
 	if (frag_get_levels(frag, &levels, levels_obj))
@@ -1045,8 +1046,9 @@ PyDoc_STRVAR(splat_square_doc,
 static PyObject *splat_square(PyObject *self, PyObject *args)
 {
 	Fragment *frag;
-	double freq;
 	PyObject *levels_obj;
+	double freq;
+	double phase;
 	double ratio = 0.5;
 
 	struct splat_levels_helper levels;
@@ -1056,8 +1058,8 @@ static PyObject *splat_square(PyObject *self, PyObject *args)
 	size_t i;
 	double k;
 
-	if (!PyArg_ParseTuple(args, "O!dO|d", &splat_FragmentType, &frag,
-			      &freq, &levels_obj, &ratio))
+	if (!PyArg_ParseTuple(args, "O!Odd|d", &splat_FragmentType, &frag,
+			      &levels_obj, &freq, &phase, &ratio))
 		return NULL;
 
 	if (frag_get_levels(frag, &levels, levels_obj))
@@ -1101,8 +1103,9 @@ PyDoc_STRVAR(splat_triangle_doc,
 static PyObject *splat_triangle(PyObject *self, PyObject *args)
 {
 	Fragment *frag;
-	double freq;
 	PyObject *levels_obj;
+	double freq;
+	double phase;
 	double ratio = 0.5;
 
 	struct splat_levels_helper levels;
@@ -1113,8 +1116,8 @@ static PyObject *splat_triangle(PyObject *self, PyObject *args)
 	size_t i;
 	double k;
 
-	if (!PyArg_ParseTuple(args, "O!dO|d", &splat_FragmentType, &frag,
-			      &freq, &levels_obj, &ratio))
+	if (!PyArg_ParseTuple(args, "O!Odd|d", &splat_FragmentType, &frag,
+			      &levels_obj, &freq, &phase, &ratio))
 		return NULL;
 
 	if (frag_get_levels(frag, &levels, levels_obj))
@@ -1177,8 +1180,9 @@ static PyObject *splat_overtones(PyObject *self, PyObject *args)
 	};
 
 	Fragment *frag;
-	double freq;
 	PyObject *levels_obj;
+	double freq;
+	double phase;
 	PyObject *ot_obj;
 
 	struct splat_levels_helper levels;
@@ -1194,8 +1198,9 @@ static PyObject *splat_overtones(PyObject *self, PyObject *args)
 	double k;
 	int stat = 0;
 
-	if (!PyArg_ParseTuple(args, "O!dOO!", &splat_FragmentType, &frag,
-			      &freq, &levels_obj, &PyDict_Type, &ot_obj))
+	if (!PyArg_ParseTuple(args, "O!OddO!", &splat_FragmentType, &frag,
+			      &levels_obj, &freq, &phase,
+			      &PyDict_Type, &ot_obj))
 		return NULL;
 
 	if (frag_get_levels(frag, &levels, levels_obj))
