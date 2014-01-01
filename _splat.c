@@ -1223,42 +1223,22 @@ static PyObject *splat_square(PyObject *self, PyObject *args)
 
 /* -- triangle source -- */
 
-PyDoc_STRVAR(splat_triangle_doc,
-"triangle(fragment, frequency, levels, ratio=0.5)\n"
-"\n"
-"Generate a triangle wave with constant ``levels`` and ``ratio`` at the given "
-" ``frequency`` over the entire ``fragment``.\n");
-
-static PyObject *splat_triangle(PyObject *self, PyObject *args)
+static void splat_triangle_floats(Fragment *frag, const double *lvls,
+				  double freq, double phase, double ratio)
 {
-	Fragment *frag;
-	PyObject *levels_obj;
-	double freq;
-	double phase;
-	double ratio = 0.5;
-
-	struct splat_levels_helper levels;
+	const double k = freq / frag->rate;
+	const double ph0 = freq * phase;
 	double a1[MAX_CHANNELS], b1[MAX_CHANNELS];
 	double a2[MAX_CHANNELS], b2[MAX_CHANNELS];
 	const double *a, *b;
 	unsigned c;
-	size_t i;
-	double k;
+	Py_ssize_t i;
 
-	if (!PyArg_ParseTuple(args, "O!Odd|d", &splat_FragmentType, &frag,
-			      &levels_obj, &freq, &phase, &ratio))
-		return NULL;
-
-	if (frag_get_levels(frag, &levels, levels_obj))
-		return NULL;
-
-	if ((ratio < 0.0) || (ratio > 1.0)) {
-		PyErr_SetString(PyExc_ValueError, "invalid ratio value");
-		return NULL;
-	}
+	ratio = min(ratio, 1.0);
+	ratio = max(ratio, 0.0);
 
 	for (c = 0; c < frag->n_channels; ++c) {
-		const double llin = levels.fl[c];
+		const double llin = lvls[c];
 
 		a1[c] = 2 * llin / ratio;
 		b1[c] = -llin;
@@ -1266,11 +1246,9 @@ static PyObject *splat_triangle(PyObject *self, PyObject *args)
 		b2[c] = llin - (a2[c] * ratio);
 	}
 
-	k = freq / frag->rate;
-
 	for (i = 0; i < frag->length; ++i) {
 		double n_periods;
-		const double t_rel = modf((i * k), &n_periods);
+		const double t_rel = modf(((i * k) + ph0), &n_periods);
 
 		if (t_rel < ratio) {
 			a = a1;
@@ -1283,6 +1261,102 @@ static PyObject *splat_triangle(PyObject *self, PyObject *args)
 		for (c = 0; c < frag->n_channels; ++c)
 			frag->data[c][i] = (a[c] * t_rel) + b[c];
 	}
+}
+
+static void splat_triangle_signals(Fragment *frag, PyObject **levels,
+				   PyObject *freq, PyObject *phase,
+				   PyObject *ratio)
+{
+	enum {
+		SIG_FREQ = 0,
+		SIG_PHASE,
+		SIG_RATIO,
+		SIG_AMP,
+	};
+	struct splat_signal sig;
+	PyObject *signals[SIG_AMP + MAX_CHANNELS];
+	unsigned c;
+
+	signals[SIG_FREQ] = freq;
+	signals[SIG_PHASE] = phase;
+	signals[SIG_RATIO] = ratio;
+
+	for (c = 0; c < frag->n_channels; ++c)
+		signals[SIG_AMP + c] = levels[c];
+
+	if (splat_signal_init(&sig, frag, signals,
+			      (SIG_AMP + frag->n_channels)))
+		return;
+
+	while (splat_signal_next(&sig) == SIGNAL_VECTOR_CONTINUE) {
+		size_t i, j;
+
+		for (i = sig.cur, j = 0; i < sig.end; ++i, ++j) {
+			const double f = sig.vectors[SIG_FREQ].data[j];
+			const double ph = sig.vectors[SIG_PHASE].data[j];
+			const double t = (double)i / frag->rate;
+			double n_periods;
+			const double t_rel = modf((f * (t + ph)), &n_periods);
+			double ratio = sig.vectors[SIG_RATIO].data[j];
+
+			ratio = min(ratio, 1.0);
+			ratio = max(ratio, 0.0);
+
+			for (c = 0; c < frag->n_channels; ++c) {
+				const double l_log =
+					sig.vectors[SIG_AMP + c].data[j];
+				const double l = dB2lin(l_log);
+				double a, b;
+
+				if (t_rel < ratio) {
+					a = 2 * l / ratio;
+					b = -l;
+				} else {
+					a = -2 * l / (1 - ratio);
+					b = l - (a * ratio);
+				}
+
+				frag->data[c][i] = (a * t_rel) + b;
+			}
+		}
+	}
+}
+
+PyDoc_STRVAR(splat_triangle_doc,
+"triangle(fragment, levels, frequency, phase, ratio=0.5)\n"
+"\n"
+"Generate a triangle wave with the given ``ratio`` over the entire "
+"``fragment``.\n");
+
+static PyObject *splat_triangle(PyObject *self, PyObject *args)
+{
+	Fragment *frag;
+	PyObject *levels_obj;
+	PyObject *freq;
+	PyObject *phase;
+	PyObject *ratio = splat_init_source_ratio;
+
+	struct splat_levels_helper levels;
+	int all_floats;
+
+
+	if (!PyArg_ParseTuple(args, "O!O!OO|O", &splat_FragmentType, &frag,
+			      &PyTuple_Type, &levels_obj, &freq, &phase,
+			      &ratio))
+		return NULL;
+
+	if (frag_get_levels(frag, &levels, levels_obj))
+		return NULL;
+
+	all_floats = levels.all_floats;
+	all_floats = all_floats && splat_check_all_floats(freq, phase, ratio);
+
+	if (all_floats)
+		splat_triangle_floats(frag, levels.fl, PyFloat_AS_DOUBLE(freq),
+				      PyFloat_AS_DOUBLE(phase),
+				      PyFloat_AS_DOUBLE(ratio));
+	else
+		splat_triangle_signals(frag, levels.obj, freq, phase, ratio);
 
 	Py_RETURN_NONE;
 }
