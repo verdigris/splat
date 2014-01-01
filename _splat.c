@@ -64,6 +64,13 @@ typedef float v4sf __attribute__ ((vector_size(16)));
 #endif
 
 /* ----------------------------------------------------------------------------
+ * Module constants
+ */
+
+/* Initial ratio for sound sources (square, triangle) */
+static PyObject *splat_init_source_ratio;
+
+/* ----------------------------------------------------------------------------
  * Fragment class
  */
 
@@ -1093,57 +1100,123 @@ static PyObject *splat_sine(PyObject *self, PyObject *args)
 
 /* -- square source -- */
 
+static void splat_square_floats(Fragment *frag, const double *fl_pos,
+				double freq, double phase, double ratio)
+{
+	const double k = freq / frag->rate;
+	const double ph0 = freq * phase;
+	double fl_neg[MAX_CHANNELS];
+	unsigned c;
+	Py_ssize_t i;
+
+	ratio = min(ratio, 1.0);
+	ratio = max(ratio, 0.0);
+
+	for (c = 0; c < frag->n_channels; ++c)
+		fl_neg[c] = -fl_pos[c];
+
+	for (i = 0; i < frag->length; ++i) {
+		double n_periods;
+		const double t_rel = modf(((i * k) + ph0), &n_periods);
+		const double *levels;
+
+		if (t_rel < ratio)
+			levels = fl_pos;
+		else
+			levels = fl_neg;
+
+		for (c = 0; c < frag->n_channels; ++c)
+			frag->data[c][i] = levels[c];
+	}
+}
+
+static void splat_square_signals(Fragment *frag, PyObject **levels,
+				 PyObject *freq, PyObject *phase,
+				 PyObject *ratio)
+{
+	enum {
+		SIG_FREQ = 0,
+		SIG_PHASE,
+		SIG_RATIO,
+		SIG_AMP,
+	};
+	struct splat_signal sig;
+	PyObject *signals[SIG_AMP + MAX_CHANNELS];
+	unsigned c;
+
+	signals[SIG_FREQ] = freq;
+	signals[SIG_PHASE] = phase;
+	signals[SIG_RATIO] = ratio;
+
+	for (c = 0; c < frag->n_channels; ++c)
+		signals[SIG_AMP + c] = levels[c];
+
+	if (splat_signal_init(&sig, frag, signals,
+			      (SIG_AMP + frag->n_channels)))
+		return;
+
+	while (splat_signal_next(&sig) == SIGNAL_VECTOR_CONTINUE) {
+		size_t i, j;
+
+		for (i = sig.cur, j = 0; i < sig.end; ++i, ++j) {
+			const double f = sig.vectors[SIG_FREQ].data[j];
+			const double ph = sig.vectors[SIG_PHASE].data[j];
+			const double t = (double)i / frag->rate;
+			double n_periods;
+			const double t_rel = modf((f * (t + ph)), &n_periods);
+			double ratio = sig.vectors[SIG_RATIO].data[j];
+			double s;
+
+			ratio = min(ratio, 1.0);
+			ratio = max(ratio, 0.0);
+			s = (t_rel < ratio) ? 1.0 : -1.0;
+
+			for (c = 0; c < frag->n_channels; ++c) {
+				const double a =
+					sig.vectors[SIG_AMP + c].data[j];
+
+				frag->data[c][i] = dB2lin(a) * s;
+			}
+		}
+	}
+
+	splat_signal_free(&sig);
+}
+
 PyDoc_STRVAR(splat_square_doc,
-"square(fragment, frequency, levels, ratio=0.5)\n"
+"square(fragment, levels, frequency, phase, ratio=0.5)\n"
 "\n"
-"Generate a square wave with constant ``levels`` and ``ratio`` at the given "
-" ``frequency`` over the entire ``fragment``.\n");
+"Generate a square wave with the given ``ratio`` over the entire "
+"``fragment``.\n");
 
 static PyObject *splat_square(PyObject *self, PyObject *args)
 {
 	Fragment *frag;
 	PyObject *levels_obj;
-	double freq;
-	double phase;
-	double ratio = 0.5;
+	PyObject *freq;
+	PyObject *phase;
+	PyObject *ratio = splat_init_source_ratio;
 
 	struct splat_levels_helper levels;
-	const double *levels_pos = levels.fl;
-	double levels_neg[MAX_CHANNELS];
-	unsigned c;
-	size_t i;
-	double k;
+	int all_floats;
 
-	if (!PyArg_ParseTuple(args, "O!Odd|d", &splat_FragmentType, &frag,
-			      &levels_obj, &freq, &phase, &ratio))
+	if (!PyArg_ParseTuple(args, "O!O!OO|O", &splat_FragmentType, &frag,
+			      &PyTuple_Type, &levels_obj, &freq, &phase,
+			      &ratio))
 		return NULL;
 
 	if (frag_get_levels(frag, &levels, levels_obj))
 		return NULL;
 
-	if ((ratio < 0.0) || (ratio > 1.0)) {
-		PyErr_SetString(PyExc_ValueError, "invalid ratio value");
-		return NULL;
-	}
+	all_floats = levels.all_floats;
+	all_floats = all_floats && splat_check_all_floats(freq, phase, ratio);
 
-	for (c = 0; c < frag->n_channels; ++c)
-		levels_neg[c] = -levels_pos[c];
-
-	k = freq / frag->rate;
-
-	for (i = 0; i < frag->length; ++i) {
-		double n_periods;
-		const double t_rel = modf((i * k), &n_periods);
-		const double *cur_levels;
-
-		if (t_rel < ratio)
-			cur_levels = levels_pos;
-		else
-			cur_levels = levels_neg;
-
-		for (c = 0; c < frag->n_channels; ++c)
-			frag->data[c][i] = cur_levels[c];
-	}
+	if (all_floats)
+		splat_square_floats(frag, levels.fl, PyFloat_AS_DOUBLE(freq),
+				    PyFloat_AS_DOUBLE(phase),
+				    PyFloat_AS_DOUBLE(ratio));
+	else
+		splat_square_signals(frag, levels.obj, freq, phase, ratio);
 
 	Py_RETURN_NONE;
 }
@@ -1631,4 +1704,7 @@ PyMODINIT_FUNC init_splat(void)
 		Py_INCREF((PyObject *)it->type);
 		PyModule_AddObject(m, it->name, (PyObject *)it->type);
 	}
+
+	splat_init_source_ratio = PyFloat_FromDouble(0.5);
+	PyModule_AddObject(m, "_init_source_ratio", splat_init_source_ratio);
 }
