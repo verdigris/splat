@@ -21,4 +21,4 @@ __all__ = ['gen', 'data', 'filters', 'sources', 'scales', 'interpol']
 
 VERSION = (1, 0)
 VERSION_STR = '.'.join([str(v) for v in VERSION])
-BUILD = 5
+BUILD = 6
