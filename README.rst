@@ -38,7 +38,7 @@ with fade-in and fade-out:
 
     gen = splat.gen.SineGenerator()
     gen.filters = [splat.filters.linear_fade]
-    gen.run(440.0, 0.0, 1.0)
+    gen.run(0.0, 1.0, 440.0)
     gen.frag.save("A440.wav")
 
 
