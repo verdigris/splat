@@ -63,6 +63,11 @@ typedef float v4sf __attribute__ ((vector_size(16)));
 # define max(_a, _b) (((_a) > (_b)) ? (_a) : (_b))
 #endif
 
+#ifndef minmax
+# define minmax(_val, _min, _max) \
+	((_val) < (_min) ? (_min) : ((_val) > (_max) ? (_max) : (_val)))
+#endif
+
 /* ----------------------------------------------------------------------------
  * Module constants
  */
@@ -311,23 +316,34 @@ static PyGetSetDef Fragment_getsetters[] = {
 /* Fragment methods */
 
 PyDoc_STRVAR(Fragment_mix_doc,
-"mix(fragment, start=0.0)\n"
+"mix(fragment, offset=0.0, start=0.0, length=None)\n"
 "\n"
-"Mix the given other ``fragment`` data into this instance by simply adding "
-"the data together.  If specified, the other ``fragment`` data can be offset "
-"to the given ``start`` time in seconds.\n");
+"Mix the given other ``fragment`` data into this instance.\n"
+"\n"
+"This is achieved by simply adding up the samples of each fragment.  The "
+"``offset``, ``start`` and ``length`` values in seconds can be used to alter "
+"the mixing times.  The incoming fragment can start being mixed with an "
+"``offset`` into this fragment, the beginning can be skipped until the given "
+"``start`` time, and the ``length`` to be mixed can be manually limited.  "
+"These values will be automatically adjusted to remain within the available "
+"data.  The length of this fragment will be automatically increased if "
+"necessary to receive the incoming data.\n");
 
 static PyObject *Fragment_mix(Fragment *self, PyObject *args)
 {
 	Fragment *frag;
+	double offset = 0.0;
 	double start = 0.0;
+	PyObject *length_obj = NULL;
 
-	size_t start_sample;
+	ssize_t length;
+	ssize_t offset_sample;
+	ssize_t start_sample;
 	size_t total_length;
 	unsigned c;
 
-	if (!PyArg_ParseTuple(args, "O!|d", &splat_FragmentType, &frag,
-			      &start))
+	if (!PyArg_ParseTuple(args, "O!|ddO", &splat_FragmentType, &frag,
+			      &offset, &start, &length))
 		return NULL;
 
 	if (frag->n_channels != self->n_channels) {
@@ -340,16 +356,32 @@ static PyObject *Fragment_mix(Fragment *self, PyObject *args)
 		return NULL;
 	}
 
+	if (length_obj != NULL) {
+		if (!PyFloat_Check(length_obj)) {
+			PyErr_SetString(PyExc_ValueError,
+					"length must be float");
+			return NULL;
+		}
+
+		length = PyFloat_AS_DOUBLE(length_obj) * self->rate;
+	} else {
+		length = frag->length;
+	}
+
+	offset_sample = offset * self->rate;
+	offset_sample = max(offset_sample, 0);
 	start_sample = start * self->rate;
-	total_length = start_sample + frag->length;
+	start_sample = minmax(start_sample, 0, frag->length);
+	length = minmax(length, 0, (frag->length - start_sample));
+	total_length = offset_sample + length;
 
 	if (frag_resize(self, total_length))
 		return NULL;
 
 	for (c = 0; c < self->n_channels; ++c) {
-		const float *src = frag->data[c];
-		float *dst =  &self->data[c][start_sample];
-		Py_ssize_t i = frag->length;
+		const float *src = &frag->data[c][start_sample];
+		float *dst =  &self->data[c][offset_sample];
+		Py_ssize_t i = length;
 
 		while (i--)
 			*dst++ += *src++;
@@ -521,13 +553,15 @@ static PyObject *Fragment_as_bytes(Fragment *self, PyObject *args)
 }
 
 PyDoc_STRVAR(Fragment_normalize_doc,
-"normalize(level, zero=True)\n"
+"normalize(level=-0.05, zero=True)\n"
 "\n"
 "Normalize the amplitude.\n"
 "\n"
 "The ``level`` value in dB is the resulting maximum amplitude after "
-"normalization.  The same gain is applied to all channels, so the relative "
-"difference in levels between channels is preserved.\n"
+"normalization.  The default value of -0.05 dB is the maximum level while "
+"ensuring no clipping occurs, even when saving with 8-bit sample resolution. "
+"The same gain is applied to all channels, so the relative difference in "
+"levels between channels is preserved.\n"
 "\n"
 "When ``zero`` is ``True``, the average value is substracted from all the "
 "fragment prior to amplification to avoid any offset and achieve maximum "
@@ -613,8 +647,9 @@ static PyObject *Fragment_normalize(Fragment *self, PyObject *args)
 PyDoc_STRVAR(Fragment_amp_doc,
 "amp(gain)\n"
 "\n"
-"Amplify the fragment by the given ``gain`` in dB which can either be a float "
-"value to apply to all channels or a tuple with a value for each channel.\n");
+"Amplify the fragment by the given ``gain`` in dB which can either be a "
+"single floating point value to apply to all channels or a tuple with a value "
+"for each individual channel.\n");
 
 static PyObject *Fragment_amp(Fragment *self, PyObject *args)
 {
