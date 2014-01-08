@@ -83,7 +83,7 @@ class Fragment(_splat.Fragment):
     Create an empty sound fragment with the given number of ``channels``,
     sample ``rate`` in Hertz and initial ``duration`` in seconds.  The default
     number of channels is 2 and the default sample rate is 48000.  If no
-    ``duration`` is specified, the fragment will be empty.  All the samples are
+    duration is specified, the fragment will be empty.  All the samples are
     initialised to 0 (silence).
 
     All Splat sound data is contained in :py:class:`splat.data.Fragment`
@@ -91,6 +91,13 @@ class Fragment(_splat.Fragment):
     point values to represent the samples of the audio channels.  The length of
     each sample tuple is equal to the number of channels of the fragment, the
     maximum being fixed to 16.
+
+    .. note::
+
+       It is rather slow to access and modify all the samples of a Fragment
+       using the standard Python sequence interface.  The underlying
+       implementation in C can handle all common data manipulations much
+       faster using the Fragment methods documented below.
     """
 
     @classmethod
