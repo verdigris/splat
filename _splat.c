@@ -102,8 +102,9 @@ struct splat_levels_helper {
 
 static int frag_get_levels(Fragment *frag, struct splat_levels_helper *levels,
 			   PyObject *levels_obj);
-
 static int frag_resize(Fragment *self, size_t length);
+#define frag_grow(_frag, _length)					\
+	(((_length) <= (_frag)->length) ? 0 : frag_resize((_frag), (_length)))
 
 /* -- Fragment functions -- */
 
@@ -273,28 +274,11 @@ static PyObject *Fragment_get_sample_rate(Fragment *self, void *_)
 	return Py_BuildValue("I", self->rate);
 }
 
-PyDoc_STRVAR(duration_doc, "Get or set the fragment duration in seconds.");
+PyDoc_STRVAR(duration_doc, "Get the fragment duration in seconds.");
 
 static PyObject *Fragment_get_duration(Fragment *self, void *_)
 {
 	return Py_BuildValue("f", (float)self->length / self->rate);
-}
-
-static int Fragment_set_duration(Fragment *self, PyObject *value, void *_)
-{
-	size_t new_length;
-
-	if (!PyFloat_Check(value)) {
-		PyErr_SetString(PyExc_TypeError, "Duration must be a float");
-		return -1;
-	}
-
-	new_length = PyFloat_AS_DOUBLE(value) * self->rate;
-
-	if (frag_resize(self, new_length))
-		return -1;
-
-	return 0;
 }
 
 PyDoc_STRVAR(channels_doc, "Get the number of channels.");
@@ -307,8 +291,7 @@ static PyObject *Fragment_get_channels(Fragment *self, void *_)
 static PyGetSetDef Fragment_getsetters[] = {
 	{ "sample_rate", (getter)Fragment_get_sample_rate, NULL,
 	  sample_rate_doc },
-	{ "duration", (getter)Fragment_get_duration,
-	  (setter)Fragment_set_duration, duration_doc },
+	{ "duration", (getter)Fragment_get_duration, NULL, duration_doc },
 	{ "channels", (getter)Fragment_get_channels, NULL, channels_doc },
 	{ NULL }
 };
@@ -375,7 +358,7 @@ static PyObject *Fragment_mix(Fragment *self, PyObject *args)
 	length = minmax(length, 0, (frag->length - start_sample));
 	total_length = offset_sample + length;
 
-	if (frag_resize(self, total_length))
+	if (frag_grow(self, total_length))
 		return NULL;
 
 	for (c = 0; c < self->n_channels; ++c) {
@@ -441,7 +424,7 @@ static PyObject *Fragment_import_bytes(Fragment *self, PyObject *args)
 	n_samples = n_bytes / bytes_per_sample;
 	end = start + n_samples;
 
-	if (frag_resize(self, end))
+	if (frag_grow(self, end))
 		return NULL;
 
 	sample_bits = 8 * sample_width;
@@ -675,6 +658,30 @@ static PyObject *Fragment_amp(Fragment *self, PyObject *args)
 	Py_RETURN_NONE;
 }
 
+PyDoc_STRVAR(Fragment_resize_doc,
+"resize(duration)\n"
+"\n"
+"Resize the fragment to the given ``duration`` in seconds.  If the fragment "
+"grows, silence is added to the end.  When shrinking, the end of the fragment "
+"is lost.\n");
+
+static PyObject *Fragment_resize(Fragment *self, PyObject *args)
+{
+	double duration;
+
+	ssize_t length;
+
+	if (!PyArg_ParseTuple(args, "d", &duration))
+		return NULL;
+
+	length = duration * self->rate;
+
+	if (frag_resize(self, length))
+		return NULL;
+
+	Py_RETURN_NONE;
+}
+
 static PyMethodDef Fragment_methods[] = {
 	{ "mix", (PyCFunction)Fragment_mix, METH_VARARGS,
 	  Fragment_mix_doc },
@@ -686,6 +693,8 @@ static PyMethodDef Fragment_methods[] = {
 	  Fragment_normalize_doc },
 	{ "amp", (PyCFunction)Fragment_amp, METH_VARARGS,
 	  Fragment_amp_doc },
+	{ "resize", (PyCFunction)Fragment_resize, METH_VARARGS,
+	  Fragment_resize_doc },
 	{ NULL }
 };
 
@@ -786,33 +795,29 @@ static int frag_get_levels(Fragment *frag, struct splat_levels_helper *levels,
 	return 0;
 }
 
-static int frag_resize(Fragment *self, size_t length)
+static int frag_resize(Fragment *frag, size_t length)
 {
-	size_t start;
-	size_t data_size;
+	const size_t start = frag->length * sizeof(float);
+	const size_t size = length * sizeof(float);
+	const ssize_t extra = size - start;
 	unsigned c;
 
-	if (length <= self->length)
-		return 0;
-
-	start = self->length * sizeof(float);
-	data_size = length * sizeof(float);
-
-	for (c = 0; c < self->n_channels; ++c) {
-		if (self->data[c] == NULL)
-			self->data[c] = PyMem_Malloc(data_size);
+	for (c = 0; c < frag->n_channels; ++c) {
+		if (frag->data[c] == NULL)
+			frag->data[c] = PyMem_Malloc(size);
 		else
-			self->data[c] = PyMem_Realloc(self->data[c],data_size);
+			frag->data[c] = PyMem_Realloc(frag->data[c], size);
 
-		if (self->data[c] == NULL) {
+		if (frag->data[c] == NULL) {
 			PyErr_NoMemory();
 			return -1;
 		}
 
-		memset(&self->data[c][self->length], 0, (data_size - start));
+		if (extra > 0)
+			memset(&frag->data[c][frag->length], 0, extra);
 	}
 
-	self->length = length;
+	frag->length = length;
 
 	return 0;
 }
@@ -1906,7 +1911,7 @@ static PyObject *splat_reverb(PyObject *self, PyObject *args)
 	max_delay *= 4;
 #endif
 
-	if (frag_resize(frag, (frag->length + max_delay)))
+	if (frag_grow(frag, (frag->length + max_delay)))
 		return NULL;
 
 	for (c = 0; c < frag->n_channels; ++c) {
