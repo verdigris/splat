@@ -115,20 +115,12 @@ class Fragment(_splat.Fragment):
 
         raise Exception("Unsupported file format")
 
-    def resize(self, duration):
-        """Resize the fragment to the specified ``duration`` in seconds."""
-        n = int(duration * self.sample_rate)
-        self._resize(n)
-        return n
-
     def n2s(self, n):
-        """Convert a sample index number ``n`` into a time in seconds and
-        return it."""
+        """Convert a sample index number ``n`` into a time in seconds."""
         return float(n) / self.sample_rate
 
     def s2n(self, s):
-        """Convert a time in seconds ``s`` to a sample index number and return
-        it."""
+        """Convert a time in seconds ``s`` into a sample index number."""
         return int(s * self.sample_rate)
 
     def save(self, file_name, fmt=None, start=0, end=None, *args, **kw):
