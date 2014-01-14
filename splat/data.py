@@ -1,6 +1,6 @@
 # Splat - splat/data.py
 #
-# Copyright (C) 2012, 2013 Guillaume Tucker <guillaume@mangoz.org>
+# Copyright (C) 2012, 2013, 2014 Guillaume Tucker <guillaume@mangoz.org>
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU Lesser General Public License as published by the Free
@@ -102,11 +102,12 @@ class Fragment(_splat.Fragment):
 
     @classmethod
     def open(cls, file_name):
-        """Open a file to create a sound fragment
+        """Open a file to create a sound fragment by importing audio data.
 
         Open a sound file specified by ``file_name`` and import its contents
         into a new :py:class:`splat.data.Fragment` instance, which is then
-        returned.
+        returned.  Only a limited set of formats are supported (currently only
+        ``wav``).  All the samples are converted to floating point values.
         """
         for opener in audio_file_openers:
             frag = opener(file_name)
@@ -124,7 +125,7 @@ class Fragment(_splat.Fragment):
         return int(s * self.sample_rate)
 
     def save(self, file_name, fmt=None, start=0, end=None, *args, **kw):
-        """Save the contents of the audio fragment to a file.
+        """Save the contents of the audio fragment into a file.
 
         A file called ``file_name`` is created and the contents of the audio
         fragment are written to it.  It is possible to save only a part of the

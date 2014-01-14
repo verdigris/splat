@@ -1,6 +1,6 @@
 # Splat - splat/generator.py
 #
-# Copyright (C) 2012, 2013 Guillaume Tucker <guillaume@mangoz.org>
+# Copyright (C) 2012, 2013, 2014 Guillaume Tucker <guillaume@mangoz.org>
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU Lesser General Public License as published by the Free
@@ -23,14 +23,14 @@ import _splat
 
 class Generator(object):
 
-    """Sound data generator
+    """Sound data generator.
 
     This abstract class provides the basic interface to constitute a sound
     generator.  It uses a :py:class:`splat.data.Fragment` object to store the
     generated and mixed down sound data.  A generator typically runs a sound
-    source with a given base frequency, start and end times.  It allows
-    arbitrary extra arguments to be passed on to the sound source for extra
-    flexibility.
+    source with start and end times, and parameters such as a frequency and
+    amplitudes.  It allows arbitrary extra arguments to be passed on to the
+    sound source for extra flexibility.
 
     The main purpose is to allow a Splat piece to be run with different
     generators or sound sources without rewriting the code and data that define
@@ -122,6 +122,14 @@ class Generator(object):
         various types of generators, and will typically call
         :py:meth:`splat.gen.Generator._run` with a sound source and specific
         arguments.
+
+        The ``start`` and ``end`` arguments are when the sound should start and
+        end in seconds.  The rest of the arguments are passed to the ``_run``
+        method, with the ``levels`` keywords always in second place after the
+        internal fragment.
+
+        When ``_run`` has been run on the new fragment, filters are run on it
+        and it is then mixed with the main internal fragment.
         """
         levels = kw.pop('levels', self._levels)
         start *= self.time_stretch
