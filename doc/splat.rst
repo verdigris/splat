@@ -1,8 +1,14 @@
-``splat``
-=========
+Splat
+=====
 
-Fragment objects
-----------------
+This section describes all the Splat programming interface.  There are some
+concrete examples as `Gists on Github <https://gist.github.com/gctucker>`_.
+
+
+Fragment objects and sound data
+-------------------------------
+
+.. automodule:: splat.data
 
 .. autoclass:: splat.data.Fragment(channels, rate, duration)
    :members:
@@ -10,6 +16,7 @@ Fragment objects
    .. automethod:: splat.data.Fragment.mix
    .. automethod:: splat.data.Fragment.normalize
    .. automethod:: splat.data.Fragment.amp
+   .. automethod:: splat.data.Fragment.resize
    .. autoattribute:: splat.data.Fragment.sample_rate
    .. autoattribute:: splat.data.Fragment.duration
    .. autoattribute:: splat.data.Fragment.channels
@@ -17,6 +24,8 @@ Fragment objects
 
 Generator objects
 -----------------
+
+.. automodule:: splat.gen
 
 .. autoclass:: splat.gen.Generator
    :members:
@@ -43,6 +52,8 @@ Generator objects
 Sound sources
 -------------
 
+.. automodule:: splat.sources
+
 .. autofunction:: splat.sources.sine
 .. autofunction:: splat.sources.square
 .. autofunction:: splat.sources.triangle
@@ -53,6 +64,8 @@ Sound sources
 
 Filter functions and FilterChain objects
 ----------------------------------------
+
+.. automodule:: splat.filters
 
 A *filter function* takes a :py:class:`splat.data.Fragment` and a tuple of
 arguments with its specific parameters.  It is expected to run on the entirety
@@ -73,10 +86,12 @@ of the fragment.  Filter functions can be combined into a series via the
 Interpolation and Spline objects
 --------------------------------
 
-This module contains a set of classes designed to work together and provide
-polynomial interpolation functionality.  The principle is to build a continuous
-function for a given set of input discrete coordinates.  A
-:py:class:`splat.interpol.Polynomial` object represents a polynomial function
+.. automodule:: splat.interpol
+
+The :py:mod:`splat.interpol` module contains a set of classes designed to work
+together and provide polynomial interpolation functionality.  The principle is
+to build a continuous function for a given set of input discrete coordinates.
+A :py:class:`splat.interpol.Polynomial` object represents a polynomial function
 with a series of coefficients.  It can be calculated by reducing a matrix
 containing some coordinates using :py:class:`splat.interpol.PolyMatrix`.  It is
 usually preferred to use a :py:class:`splat.interpol.Spline` object to create a
