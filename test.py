@@ -9,8 +9,16 @@ import splat.data
 import splat.gen
 import splat.interpol
 
+g_id = 1
+
 # -----------------------------------------------------------------------------
 # utilities
+
+def set_id(test, name):
+    global g_id
+    setattr(test, 'test_name', name)
+    setattr(test, 'test_id', g_id)
+    g_id += 1
 
 def check_md5(frag, hexdigest):
     md5sum = md5.new(frag.as_bytes(2))
@@ -38,13 +46,13 @@ def test_frag():
     frag = splat.data.Fragment(duration=1.0)
     return (check_samples(frag, {int(len(frag) / 2): (0.0, 0.0)}) and
             check_md5(frag, 'fe384f668da282694c29a84ebd33481d'))
-test_frag.test_name = 'Fragment'
+set_id(test_frag, 'Fragment')
 
 def test_gen_frag():
     gen = splat.gen.SineGenerator()
     return (isinstance(gen.frag, splat.data.Fragment) and
             gen.frag.duration == 0.0)
-test_gen_frag.test_name = "Generator Fragment"
+set_id(test_gen_frag, "Generator Fragment")
 
 def test_sine():
     gen = splat.gen.SineGenerator()
@@ -54,7 +62,7 @@ def test_sine():
     s = math.sin(2 * math.pi * f * float(n) / gen.frag.sample_rate)
     return (check_samples(gen.frag, {n: (s, s)}) and
             check_md5(gen.frag, 'ec18389e198ee868d61c9439343a3337'))
-test_sine.test_name = "SineGenerator"
+set_id(test_sine, "SineGenerator")
 
 def test_square():
     gen = splat.gen.SquareGenerator()
@@ -64,7 +72,7 @@ def test_square():
     samples = {int(nf * 0.1): (1.0, 1.0), int(nf * 0.9): (-1.0, -1.0)}
     return (check_samples(gen.frag, samples) and
             check_md5(gen.frag, '0ca047e998f512280800012b05107c63'))
-test_square.test_name = "SquareGenerator"
+set_id(test_square, "SquareGenerator")
 
 def test_triangle():
     gen = splat.gen.TriangleGenerator()
@@ -84,7 +92,7 @@ def test_triangle():
     samples = {t1: (s1, s1), t2: (s2, s2)}
     return (check_samples(gen.frag, samples) and
             check_md5(gen.frag, 'b6d9eb000b328134cd500173b24f1c88'))
-test_triangle.test_name = "TriangleGenerator"
+set_id(test_triangle, "TriangleGenerator")
 
 def test_overtones():
     gen = splat.gen.OvertonesGenerator()
@@ -92,7 +100,7 @@ def test_overtones():
     f = 1000.0
     gen.run(0.0, 1.0, f)
     return check_md5(gen.frag, 'ee045e012673ff7ed4ab9bd590b57368')
-test_overtones.test_name = "OvertonesGenerator"
+set_id(test_overtones, "OvertonesGenerator")
 
 def test_spline():
     pts = [(1.23, 4.56), (4.32, 2.54, 1.25), (5.458, -4.247)]
@@ -104,7 +112,7 @@ def test_spline():
             print("Spline error: s({0}) = {1} instead of {2}".format(x, y1, y))
             return False
     return True
-test_spline.test_name = "Spline"
+set_id(test_spline, "Spline")
 
 # -----------------------------------------------------------------------------
 # main function
@@ -116,19 +124,19 @@ def main(argv):
             tests.append(value)
     failures = []
     n = len(tests)
-    for i, t in enumerate(tests):
+    for t in sorted(tests, cmp=lambda a, b: cmp(a.test_id, b.test_id)):
         res = t()
-        print("{0:03d}/{1:03d} {2:4s} - {3}".format(
-                i + 1, n, 'OK' if res is True else 'FAIL', t.test_name))
+        print("{:03d}/{:03d} {:4s} - {}".format(
+                t.test_id, n, 'OK' if res is True else 'FAIL', t.test_name))
         if res is False:
-            failures.append(t.test_name)
+            failures.append(t)
 
     print("--------------------------------------------------")
     print("Results: {0}/{1} passed".format((n - len(failures)), n))
     if failures:
         print("SOME TESTS FAILED:")
         for f in failures:
-            print("    {0}".format(f))
+            print("    {:03d} {}".format(f.test_id, f.test_name))
     else:
         print("All good.")
     return (len(failures) == 0)
