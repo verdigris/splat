@@ -1120,8 +1120,8 @@ static PyObject *splat_sine(PyObject *self, PyObject *args)
 	struct splat_levels_helper levels;
 	int all_floats;
 
-	if (!PyArg_ParseTuple(args, "O!O!OO", &splat_FragmentType, &frag,
-			      &PyTuple_Type, &levels_obj, &freq, &phase))
+	if (!PyArg_ParseTuple(args, "O!OOO", &splat_FragmentType, &frag,
+			      &levels_obj, &freq, &phase))
 		return NULL;
 
 	if (frag_get_levels(frag, &levels, levels_obj))
@@ -1240,9 +1240,8 @@ static PyObject *splat_square(PyObject *self, PyObject *args)
 	struct splat_levels_helper levels;
 	int all_floats;
 
-	if (!PyArg_ParseTuple(args, "O!O!OO|O", &splat_FragmentType, &frag,
-			      &PyTuple_Type, &levels_obj, &freq, &phase,
-			      &ratio))
+	if (!PyArg_ParseTuple(args, "O!OOO|O", &splat_FragmentType, &frag,
+			      &levels_obj, &freq, &phase, &ratio))
 		return NULL;
 
 	if (frag_get_levels(frag, &levels, levels_obj))
@@ -1380,9 +1379,8 @@ static PyObject *splat_triangle(PyObject *self, PyObject *args)
 	int all_floats;
 
 
-	if (!PyArg_ParseTuple(args, "O!O!OO|O", &splat_FragmentType, &frag,
-			      &PyTuple_Type, &levels_obj, &freq, &phase,
-			      &ratio))
+	if (!PyArg_ParseTuple(args, "O!OOO|O", &splat_FragmentType, &frag,
+			      &levels_obj, &freq, &phase, &ratio))
 		return NULL;
 
 	if (frag_get_levels(frag, &levels, levels_obj))
