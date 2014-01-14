@@ -1,7 +1,7 @@
 /*
     Splat - _splat.c
 
-    Copyright (C) 2012, 2013 Guillaume Tucker <guillaume@mangoz.org>
+    Copyright (C) 2012, 2013, 2014 Guillaume Tucker <guillaume@mangoz.org>
 
     This program is free software; you can redistribute it and/or modify it
     under the terms of the GNU Lesser General Public License as published by
@@ -303,14 +303,14 @@ PyDoc_STRVAR(Fragment_mix_doc,
 "\n"
 "Mix the given other ``fragment`` data into this instance.\n"
 "\n"
-"This is achieved by simply adding up the samples of each fragment.  The "
-"``offset``, ``start`` and ``length`` values in seconds can be used to alter "
-"the mixing times.  The incoming fragment can start being mixed with an "
-"``offset`` into this fragment, the beginning can be skipped until the given "
-"``start`` time, and the ``length`` to be mixed can be manually limited.  "
-"These values will be automatically adjusted to remain within the available "
-"data.  The length of this fragment will be automatically increased if "
-"necessary to receive the incoming data.\n");
+"This is achieved by simply adding up the samples of an incoming fragment "
+"to this fragment.  The ``offset``, ``start`` and ``length`` values in "
+"seconds can be used to alter the mixing times.  The incoming fragment can "
+"start being mixed with an ``offset`` into this fragment, the beginning can "
+"be skipped until the given ``start`` time, and the ``length`` to be mixed "
+"can be manually limited.  These values will be automatically adjusted to "
+"remain within the available data incoming.  The length of this fragment will "
+"be automatically increased if necessary to receive the incoming data.\n");
 
 static PyObject *Fragment_mix(Fragment *self, PyObject *args)
 {
@@ -1107,7 +1107,7 @@ static void splat_sine_signals(Fragment *frag, PyObject **levels,
 PyDoc_STRVAR(splat_sine_doc,
 "sine(fragment, levels, frequency, phase)\n"
 "\n"
-"Generate a sine wave for the given ``levels``, ``frequency`` and ``phase``"
+"Generate a sine wave for the given ``levels``, ``frequency`` and ``phase`` "
 "signals over the entire ``fragment``.\n");
 
 static PyObject *splat_sine(PyObject *self, PyObject *args)
