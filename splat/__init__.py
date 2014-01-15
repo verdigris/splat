@@ -15,7 +15,7 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from _splat import lin2dB, dB2lin
+from _splat import lin2dB, dB2lin, sample_precision
 
 __all__ = ['gen', 'data', 'filters', 'sources', 'scales', 'interpol']
 
