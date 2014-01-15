@@ -51,10 +51,6 @@
          19,18,17,16,15,14,13,12,11,10, \
          9,8,7,6,5,4,3,2,1,0
 
-#if USE_V4SF
-typedef float v4sf __attribute__ ((vector_size(16)));
-#endif
-
 #ifndef min
 # define min(_a, _b) (((_a) < (_b)) ? (_a) : (_b))
 #endif
@@ -66,6 +62,14 @@ typedef float v4sf __attribute__ ((vector_size(16)));
 #ifndef minmax
 # define minmax(_val, _min, _max) \
 	((_val) < (_min) ? (_min) : ((_val) > (_max) ? (_max) : (_val)))
+#endif
+
+/* Type of each sample */
+#if USE_V4SF /* for speed and smaller memory footprint */
+typedef float sample_t;
+typedef float v4sf __attribute__ ((vector_size(16)));
+#else /* for precision */
+typedef double sample_t;
 #endif
 
 /* ----------------------------------------------------------------------------
@@ -85,7 +89,7 @@ struct Fragment_object {
 	unsigned n_channels;
 	unsigned rate;
 	Py_ssize_t length;
-	float *data[MAX_CHANNELS];
+	sample_t *data[MAX_CHANNELS];
 };
 typedef struct Fragment_object Fragment;
 
@@ -104,7 +108,7 @@ struct splat_signal;
 struct Fragment;
 
 struct signal_vector {
-	double data[SIGNAL_VECTOR_LEN];
+	sample_t data[SIGNAL_VECTOR_LEN];
 	PyObject *obj;
 	int (*signal)(struct splat_signal *s, struct signal_vector *v);
 };
@@ -193,7 +197,7 @@ static int Fragment_init(Fragment *self, PyObject *args, PyObject *kw)
 	}
 
 	length = duration * rate;
-	data_size = length * sizeof(float);
+	data_size = length * sizeof(sample_t);
 
 	for (i = 0; i < n_channels; ++i) {
 		if (!data_size) {
@@ -255,7 +259,7 @@ static PyObject *Fragment_sq_item(Fragment *self, Py_ssize_t i)
 		return PyErr_NoMemory();
 
 	for (c = 0; c < self->n_channels; ++c) {
-		const double s = (double)self->data[c][i];
+		const sample_t s = self->data[c][i];
 		PyTuple_SetItem(sample, c, PyFloat_FromDouble(s));
 	}
 
@@ -290,7 +294,7 @@ static int Fragment_sq_ass_item(Fragment *self, Py_ssize_t i, PyObject *v)
 			return -1;
 		}
 
-		self->data[c][i] = (float)PyFloat_AS_DOUBLE(s);
+		self->data[c][i] = (sample_t)PyFloat_AS_DOUBLE(s);
 	}
 
 	return 0;
@@ -322,7 +326,7 @@ PyDoc_STRVAR(duration_doc, "Get the fragment duration in seconds.");
 
 static PyObject *Fragment_get_duration(Fragment *self, void *_)
 {
-	return Py_BuildValue("f", (float)self->length / self->rate);
+	return Py_BuildValue("f", (double)self->length / self->rate);
 }
 
 PyDoc_STRVAR(channels_doc, "Get the number of channels.");
@@ -406,8 +410,8 @@ static PyObject *Fragment_mix(Fragment *self, PyObject *args)
 		return NULL;
 
 	for (c = 0; c < self->n_channels; ++c) {
-		const float *src = &frag->data[c][start_sample];
-		float *dst =  &self->data[c][offset_sample];
+		const sample_t *src = &frag->data[c][start_sample];
+		sample_t *dst =  &self->data[c][offset_sample];
 		Py_ssize_t i = length;
 
 		while (i--)
@@ -434,7 +438,7 @@ static PyObject *Fragment_import_bytes(Fragment *self, PyObject *args)
 	unsigned c;
 	int32_t neg;
 	int32_t neg_mask;
-	float scale;
+	double scale;
 
 	if (!PyArg_ParseTuple(args, "O!iIII", &PyByteArray_Type, &bytes_obj,
 			      &start, &sample_width, &sample_rate,
@@ -478,7 +482,7 @@ static PyObject *Fragment_import_bytes(Fragment *self, PyObject *args)
 
 	for (c = 0; c < self->n_channels; ++c) {
 		const char *in = bytes + (sample_width * c);
-		float *out = &self->data[c][start];
+		sample_t *out = &self->data[c][start];
 		unsigned s;
 
 		if (sample_width == 2) {
@@ -513,7 +517,7 @@ static PyObject *Fragment_as_bytes(Fragment *self, PyObject *args)
 
 	PyObject *bytes_obj;
 	Py_ssize_t bytes_size;
-	const float *it[MAX_CHANNELS];
+	const sample_t *it[MAX_CHANNELS];
 	unsigned i;
 	unsigned c;
 	char *out;
@@ -544,7 +548,7 @@ static PyObject *Fragment_as_bytes(Fragment *self, PyObject *args)
 	if (sample_width == 2) {
 		for (i = 0; i < self->length; ++i) {
 			for (c = 0; c < self->n_channels; ++c) {
-				const float z = *(it[c]++);
+				const sample_t z = *(it[c]++);
 				int16_t s;
 
 				if (z < -1.0)
@@ -561,7 +565,7 @@ static PyObject *Fragment_as_bytes(Fragment *self, PyObject *args)
 	} else if (sample_width == 1) {
 		for (i = 0; i < self->length; ++i) {
 			for (c = 0; c < self->n_channels; ++c) {
-				const float z = *(it[c]++);
+				const sample_t z = *(it[c]++);
 				int8_t s;
 
 				if (z < -1.0)
@@ -620,13 +624,13 @@ static PyObject *Fragment_normalize(Fragment *self, PyObject *args)
 	do_zero = ((zero == NULL) || (zero == Py_True)) ? 1 : 0;
 
 	for (c = 0; c < self->n_channels; ++c) {
-		float * const chan_data = self->data[c];
-		const float * const end = &chan_data[self->length];
-		const float *it;
+		sample_t * const chan_data = self->data[c];
+		const sample_t * const end = &chan_data[self->length];
+		const sample_t *it;
 		double avg = 0.0;
-		float neg = 1.0;
-		float pos = -1.0;
-		float chan_peak;
+		double neg = 1.0;
+		double pos = -1.0;
+		double chan_peak;
 
 		for (it = self->data[c]; it != end; ++it) {
 			if (do_zero)
@@ -658,9 +662,9 @@ static PyObject *Fragment_normalize(Fragment *self, PyObject *args)
 
 	for (c = 0; c < self->n_channels; ++c) {
 		const double chan_avg = average[c];
-		float * const chan_data = self->data[c];
-		const float * const end = &chan_data[self->length];
-		float *it;
+		sample_t * const chan_data = self->data[c];
+		const sample_t * const end = &chan_data[self->length];
+		sample_t *it;
 
 		for (it = chan_data; it != end; ++it) {
 			*it -= chan_avg;
@@ -735,7 +739,7 @@ static PyObject *Fragment_offset(Fragment *self, PyObject *args)
 			size_t j;
 
 			for (i = sig.cur, j = 0; i < sig.end; ++i, ++j) {
-				const float value = sig.vectors[0].data[j];
+				const double value = sig.vectors[0].data[j];
 
 				for (c = 0; c < self->n_channels; ++c)
 					self->data[c][i] += value;
@@ -887,8 +891,8 @@ static int frag_get_levels(Fragment *frag, struct splat_levels_helper *levels,
 
 static int frag_resize(Fragment *frag, size_t length)
 {
-	const size_t start = frag->length * sizeof(float);
-	const size_t size = length * sizeof(float);
+	const size_t start = frag->length * sizeof(sample_t);
+	const size_t size = length * sizeof(sample_t);
 	const ssize_t extra = size - start;
 	unsigned c;
 
@@ -979,7 +983,7 @@ static int splat_signal_init(struct splat_signal *s, Fragment *frag,
 		PyObject *signal = signals[i];
 
 		if (PyFloat_Check(signal)) {
-			const double value = PyFloat_AS_DOUBLE(signal);
+			const sample_t value = PyFloat_AS_DOUBLE(signal);
 			size_t j;
 
 			for (j = 0; j < SIGNAL_VECTOR_LEN; ++j)
@@ -1978,7 +1982,7 @@ static PyObject *splat_reverb(PyObject *self, PyObject *args)
 #if USE_V4SF
 		v4sf *c_data = (v4sf *)frag->data[c];
 #else
-		float *c_data = frag->data[c];
+		sample_t *c_data = frag->data[c];
 #endif
 
 		i = max_index;
@@ -2009,7 +2013,7 @@ static PyObject *splat_reverb(PyObject *self, PyObject *args)
 #if USE_V4SF
 				const v4sf z = s * c_delay[d].gain4;
 #else
-				const float z = s * c_delay[d].gain;
+				const double z = s * c_delay[d].gain;
 #endif
 				c_data[i + c_delay[d].time] += z;
 			}
@@ -2020,6 +2024,18 @@ static PyObject *splat_reverb(PyObject *self, PyObject *args)
 		PyMem_Free(delays[c]);
 
 	Py_RETURN_NONE;
+}
+
+PyDoc_STRVAR(splat_sample_precision_doc,
+"sample_precision()\n"
+"\n"
+"Get the sound sample precision as the number of bits in each floating point "
+"sample value.  This is typically 64 or 32 when built with fast mode turned "
+"on.\n");
+
+static PyObject *splat_sample_precision(PyObject *self, PyObject *_)
+{
+	return PyLong_FromLong(sizeof(sample_t) * 8);
 }
 
 static PyMethodDef splat_methods[] = {
@@ -2041,6 +2057,8 @@ static PyMethodDef splat_methods[] = {
 	  splat_reverse_doc },
 	{ "reverb", splat_reverb, METH_VARARGS,
 	  splat_reverb_doc },
+	{ "sample_precision", splat_sample_precision, METH_NOARGS,
+	  splat_sample_precision_doc },
 	{ NULL, NULL, 0, NULL }
 };
 
