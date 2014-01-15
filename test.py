@@ -55,6 +55,25 @@ def test_frag():
             check_md5(frag, 'fe384f668da282694c29a84ebd33481d'))
 set_id(test_frag, 'Fragment')
 
+def test_frag_offset():
+    offset = 1234.5
+    frag = splat.data.Fragment(duration=1.0)
+    frag.offset(offset)
+    frag_twice = splat.data.Fragment(duration=1.0)
+    frag_twice.offset(offset)
+    offset2 = -57.25
+    offset_check = offset + offset2
+    frag_twice.offset(offset2)
+    frag_signal = splat.data.Fragment(duration=1.0)
+    frag_signal.offset(lambda x: offset)
+    n = int(0.5678 * frag.duration * frag.sample_rate)
+    return (check_samples(frag, { n: (offset, offset) }) and
+            check_samples(frag_signal, { n: (offset, offset) }) and
+            check_samples(frag_twice, { n: (offset_check, offset_check) }) and
+            check_multiple_md5([frag, frag_signal],
+                               '248070c79f99014cf800d05ea81e0679'))
+set_id(test_frag_offset, "Fragment offset")
+
 def test_gen_frag():
     gen = splat.gen.SineGenerator()
     return (isinstance(gen.frag, splat.data.Fragment) and
