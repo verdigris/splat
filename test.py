@@ -86,8 +86,13 @@ def test_sine():
     splat.sources.sine(frag_float, -0.5, freq, 0.0)
     frag_signal = splat.data.Fragment(duration=1.0)
     splat.sources.sine(frag_signal, -0.5, freq, lambda x: 0.0)
+    frag_freq = splat.data.Fragment(duration=1.0)
+    frag_freq.offset(freq)
+    frag_frag = splat.data.Fragment(duration=1.0)
+    splat.sources.sine(frag_frag, -0.5, frag_freq, 0.0)
     return check_multiple_md5(
-        [frag_float, frag_signal], 'a9ebe6ef64622f031241942203a668ff')
+        [frag_float, frag_signal, frag_frag],
+        '46a8962a759033371f45c4ade9f2bfbd')
 set_id(test_sine, "Sine source")
 
 def test_sine_gen():
@@ -106,8 +111,13 @@ def test_square():
     splat.sources.square(frag_float, -0.5, freq, 0.0)
     frag_signal = splat.data.Fragment(duration=1.0)
     splat.sources.square(frag_signal, -0.5, freq, lambda x: 0.0)
+    frag_freq = splat.data.Fragment(duration=1.0)
+    frag_freq.offset(freq)
+    frag_frag = splat.data.Fragment(duration=1.0)
+    splat.sources.square(frag_frag, -0.5, frag_freq, 0.0)
     return check_multiple_md5(
-        [frag_float, frag_signal], '6a6ab2e991baf48a6fe2c1d18700e40e')
+        [frag_float, frag_signal, frag_frag],
+        '6a6ab2e991baf48a6fe2c1d18700e40e')
 set_id(test_square, "Square source")
 
 def test_square_gen():
@@ -121,13 +131,18 @@ def test_square_gen():
 set_id(test_square_gen, "SquareGenerator")
 
 def test_triangle():
-    freq = 1237.9
+    freq = 1237.5
     frag_float = splat.data.Fragment(duration=1.0)
     splat.sources.triangle(frag_float, -0.5, freq, 0.0)
     frag_signal = splat.data.Fragment(duration=1.0)
     splat.sources.triangle(frag_signal, -0.5, freq, lambda x: 0.0)
+    frag_freq = splat.data.Fragment(duration=1.0)
+    frag_freq.offset(freq)
+    frag_frag = splat.data.Fragment(duration=1.0)
+    splat.sources.triangle(frag_frag, -0.5, frag_freq, 0.0)
     return check_multiple_md5(
-        [frag_float, frag_signal], 'e36ddcdb376741fb2ac5812453c42d14')
+        [frag_float, frag_signal, frag_frag],
+        '4bce3885732ba2f5450e79e42155adaa')
 set_id(test_triangle, "Triangle source")
 
 def test_triangle_gen():
@@ -151,7 +166,7 @@ def test_triangle_gen():
 set_id(test_triangle_gen, "TriangleGenerator")
 
 def test_overtones():
-    freq = 1237.9
+    freq = 1237.5
     ot = [(1.3, 0.0, -2.5), (5.7, 10.0, -12.9)]
     frag_float = splat.data.Fragment(duration=1.0)
     splat.sources.overtones(frag_float, -0.5, freq, 0.0, ot)
@@ -160,9 +175,13 @@ def test_overtones():
     frag_signal = splat.data.Fragment(duration=1.0)
     ot_signal = [(1.3, 0.0, -2.5), (5.7, lambda x: 10.0, -12.9)]
     splat.sources.overtones(frag_signal, -0.5, freq, lambda x: 0.0, ot_signal)
+    frag_freq = splat.data.Fragment(duration=1.0)
+    frag_freq.offset(1237.5)
+    frag_frag = splat.data.Fragment(duration=1.0)
+    splat.sources.overtones(frag_frag, -0.5, frag_freq, 0.0, ot)
     return check_multiple_md5(
-        [frag_float, frag_mixed, frag_signal],
-        '9c5be729c69b9e1a78614f9f1a471f8d')
+        [frag_float, frag_mixed, frag_signal, frag_frag],
+        '8974a1eea0db97af1aa171f531685e9d')
 set_id(test_overtones, "Overtones source")
 
 def test_overtones_gen():
@@ -189,6 +208,8 @@ set_id(test_spline, "Spline")
 # main function
 
 def main(argv):
+    print("Sample precision: {} bits".format(splat.sample_precision()))
+
     tests = []
     for name, value in globals().iteritems():
         if name.startswith('test_'):
