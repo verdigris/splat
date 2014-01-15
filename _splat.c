@@ -1087,7 +1087,7 @@ static void splat_sine_signals(Fragment *frag, PyObject **levels,
 		size_t i, j;
 
 		for (i = sig.cur, j = 0; i < sig.end; ++i, j++) {
-			const float t = (double)i / frag->rate;
+			const double t = (double)i / frag->rate;
 			const double f = sig.vectors[SIG_FREQ].data[j];
 			const double ph = sig.vectors[SIG_PHASE].data[j];
 			const double s = sin(k * f * (t + ph));
