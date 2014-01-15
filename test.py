@@ -7,6 +7,7 @@ except ImportError:
     from StringIO import StringIO
 import splat.data
 import splat.gen
+import splat.sources
 import splat.interpol
 
 g_id = 1
@@ -27,6 +28,12 @@ def check_md5(frag, hexdigest):
         return False
     else:
         return True
+
+def check_multiple_md5(frags, hexdigest):
+    for frag in frags:
+        if check_md5(frag, hexdigest) is False:
+            return False
+    return True
 
 def check_samples(frag, samples):
     for n, s in samples.iteritems():
@@ -55,6 +62,16 @@ def test_gen_frag():
 set_id(test_gen_frag, "Generator Fragment")
 
 def test_sine():
+    freq = 1237.9
+    frag_float = splat.data.Fragment(duration=1.0)
+    splat.sources.sine(frag_float, -0.5, freq, 0.0)
+    frag_signal = splat.data.Fragment(duration=1.0)
+    splat.sources.sine(frag_signal, -0.5, freq, lambda x: 0.0)
+    return check_multiple_md5(
+        [frag_float, frag_signal], 'a9ebe6ef64622f031241942203a668ff')
+set_id(test_sine, "Sine source")
+
+def test_sine_gen():
     gen = splat.gen.SineGenerator()
     f = 1000.0
     gen.run(0.0, 1.0, f)
@@ -62,9 +79,19 @@ def test_sine():
     s = math.sin(2 * math.pi * f * float(n) / gen.frag.sample_rate)
     return (check_samples(gen.frag, {n: (s, s)}) and
             check_md5(gen.frag, 'ec18389e198ee868d61c9439343a3337'))
-set_id(test_sine, "SineGenerator")
+set_id(test_sine_gen, "SineGenerator")
 
 def test_square():
+    freq = 1237.9
+    frag_float = splat.data.Fragment(duration=1.0)
+    splat.sources.square(frag_float, -0.5, freq, 0.0)
+    frag_signal = splat.data.Fragment(duration=1.0)
+    splat.sources.square(frag_signal, -0.5, freq, lambda x: 0.0)
+    return check_multiple_md5(
+        [frag_float, frag_signal], '6a6ab2e991baf48a6fe2c1d18700e40e')
+set_id(test_square, "Square source")
+
+def test_square_gen():
     gen = splat.gen.SquareGenerator()
     f = 1000.0
     gen.run(0.0, 1.0, f)
@@ -72,9 +99,19 @@ def test_square():
     samples = {int(nf * 0.1): (1.0, 1.0), int(nf * 0.9): (-1.0, -1.0)}
     return (check_samples(gen.frag, samples) and
             check_md5(gen.frag, '0ca047e998f512280800012b05107c63'))
-set_id(test_square, "SquareGenerator")
+set_id(test_square_gen, "SquareGenerator")
 
 def test_triangle():
+    freq = 1237.9
+    frag_float = splat.data.Fragment(duration=1.0)
+    splat.sources.triangle(frag_float, -0.5, freq, 0.0)
+    frag_signal = splat.data.Fragment(duration=1.0)
+    splat.sources.triangle(frag_signal, -0.5, freq, lambda x: 0.0)
+    return check_multiple_md5(
+        [frag_float, frag_signal], 'e36ddcdb376741fb2ac5812453c42d14')
+set_id(test_triangle, "Triangle source")
+
+def test_triangle_gen():
     gen = splat.gen.TriangleGenerator()
     f = 1000.0
     ratio = 0.567
@@ -92,15 +129,30 @@ def test_triangle():
     samples = {t1: (s1, s1), t2: (s2, s2)}
     return (check_samples(gen.frag, samples) and
             check_md5(gen.frag, 'b6d9eb000b328134cd500173b24f1c88'))
-set_id(test_triangle, "TriangleGenerator")
+set_id(test_triangle_gen, "TriangleGenerator")
 
 def test_overtones():
+    freq = 1237.9
+    ot = [(1.3, 0.0, -2.5), (5.7, 10.0, -12.9)]
+    frag_float = splat.data.Fragment(duration=1.0)
+    splat.sources.overtones(frag_float, -0.5, freq, 0.0, ot)
+    frag_mixed = splat.data.Fragment(duration=1.0)
+    splat.sources.overtones(frag_mixed, -0.5, freq, lambda x: 0.0, ot)
+    frag_signal = splat.data.Fragment(duration=1.0)
+    ot_signal = [(1.3, 0.0, -2.5), (5.7, lambda x: 10.0, -12.9)]
+    splat.sources.overtones(frag_signal, -0.5, freq, lambda x: 0.0, ot_signal)
+    return check_multiple_md5(
+        [frag_float, frag_mixed, frag_signal],
+        '9c5be729c69b9e1a78614f9f1a471f8d')
+set_id(test_overtones, "Overtones source")
+
+def test_overtones_gen():
     gen = splat.gen.OvertonesGenerator()
     gen.ot_decexp(1.0)
     f = 1000.0
     gen.run(0.0, 1.0, f)
     return check_md5(gen.frag, 'ee045e012673ff7ed4ab9bd590b57368')
-set_id(test_overtones, "OvertonesGenerator")
+set_id(test_overtones_gen, "OvertonesGenerator")
 
 def test_spline():
     pts = [(1.23, 4.56), (4.32, 2.54, 1.25), (5.458, -4.247)]
