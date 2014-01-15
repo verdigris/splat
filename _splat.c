@@ -76,7 +76,7 @@ typedef float v4sf __attribute__ ((vector_size(16)));
 static PyObject *splat_init_source_ratio;
 
 /* ----------------------------------------------------------------------------
- * Fragment class
+ * Fragment class interface
  */
 
 struct Fragment_object {
@@ -90,6 +90,50 @@ struct Fragment_object {
 typedef struct Fragment_object Fragment;
 
 static PyTypeObject splat_FragmentType;
+
+
+/* ----------------------------------------------------------------------------
+ * Signal vector interface
+ */
+
+#define SIGNAL_VECTOR_BITS 8
+#define SIGNAL_VECTOR_LEN (1 << SIGNAL_VECTOR_BITS)
+#define SIGNAL_VECTOR_MASK (SIGNAL_VECTOR_LEN - 1)
+
+struct splat_signal;
+struct Fragment;
+
+struct signal_vector {
+	double data[SIGNAL_VECTOR_LEN];
+	PyObject *obj;
+	int (*signal)(struct splat_signal *s, struct signal_vector *v);
+};
+
+enum signal_ret {
+	SIGNAL_VECTOR_CONTINUE = 0,
+	SIGNAL_VECTOR_STOP,
+};
+
+struct splat_signal {
+	Fragment *frag;
+	size_t n_vectors;
+	struct signal_vector *vectors;
+	PyObject *py_float;
+	PyObject *py_args;
+	size_t cur;
+	size_t end;
+	size_t len;
+	int error;
+};
+
+static int splat_signal_init(struct splat_signal *s, Fragment *frag,
+			     PyObject **signals, size_t n_signals);
+static void splat_signal_free(struct splat_signal *s);
+static int splat_signal_next(struct splat_signal *s);
+
+/* ----------------------------------------------------------------------------
+ * Fragment class
+ */
 
 /* -- internal functions -- */
 
@@ -658,6 +702,50 @@ static PyObject *Fragment_amp(Fragment *self, PyObject *args)
 	Py_RETURN_NONE;
 }
 
+PyDoc_STRVAR(Fragment_offset_doc,
+"offset(value)\n"
+"\n"
+"Add an offset to the data already in the fragment.  This is especially "
+"useful when generating a modulation fragment.\n");
+
+static PyObject *Fragment_offset(Fragment *self, PyObject *args)
+{
+	PyObject *offset;
+
+	unsigned c;
+	size_t i;
+
+	if (!PyArg_ParseTuple(args, "O", &offset))
+		return NULL;
+
+	if (PyFloat_Check(offset)) {
+		const double offset_float = PyFloat_AS_DOUBLE(offset);
+
+		for (c = 0; c < self->n_channels; ++c) {
+			for (i = 0; i < self->length; ++i)
+				self->data[c][i] += offset_float;
+		}
+	} else {
+		struct splat_signal sig;
+
+		if (splat_signal_init(&sig, self, &offset, 1))
+			return NULL;
+
+		while (splat_signal_next(&sig) == SIGNAL_VECTOR_CONTINUE) {
+			size_t j;
+
+			for (i = sig.cur, j = 0; i < sig.end; ++i, ++j) {
+				const float value = sig.vectors[0].data[j];
+
+				for (c = 0; c < self->n_channels; ++c)
+					self->data[c][i] += value;
+			}
+		}
+	}
+
+	Py_RETURN_NONE;
+}
+
 PyDoc_STRVAR(Fragment_resize_doc,
 "resize(duration)\n"
 "\n"
@@ -693,6 +781,8 @@ static PyMethodDef Fragment_methods[] = {
 	  Fragment_normalize_doc },
 	{ "amp", (PyCFunction)Fragment_amp, METH_VARARGS,
 	  Fragment_amp_doc },
+	{ "offset", (PyCFunction)Fragment_offset, METH_VARARGS,
+	  Fragment_offset_doc },
 	{ "resize", (PyCFunction)Fragment_resize, METH_VARARGS,
 	  Fragment_resize_doc },
 	{ NULL }
@@ -825,35 +915,6 @@ static int frag_resize(Fragment *frag, size_t length)
 /* ----------------------------------------------------------------------------
  * Signal vector
  */
-
-#define SIGNAL_VECTOR_BITS 8
-#define SIGNAL_VECTOR_LEN (1 << SIGNAL_VECTOR_BITS)
-#define SIGNAL_VECTOR_MASK (SIGNAL_VECTOR_LEN - 1)
-
-struct splat_signal;
-
-struct signal_vector {
-	double data[SIGNAL_VECTOR_LEN];
-	PyObject *obj;
-	int (*signal)(struct splat_signal *s, struct signal_vector *v);
-};
-
-enum signal_ret {
-	SIGNAL_VECTOR_CONTINUE = 0,
-	SIGNAL_VECTOR_STOP,
-};
-
-struct splat_signal {
-	Fragment *frag;
-	size_t n_vectors;
-	struct signal_vector *vectors;
-	PyObject *py_float;
-	PyObject *py_args;
-	size_t cur;
-	size_t end;
-	size_t len;
-	int error;
-};
 
 static int splat_signal_func(struct splat_signal *s, struct signal_vector *v)
 {
