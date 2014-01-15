@@ -116,3 +116,4 @@ General purpose functions
 
 .. autofunction:: splat.lin2dB
 .. autofunction:: splat.dB2lin
+.. autofunction:: splat.sample_precision

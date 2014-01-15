@@ -120,3 +120,8 @@ Your Splat programme will most likely do some or all of the following things:
 #. Import existing audio files into fragments (no generators involved here).
 #. Run any filters or edit the fragments.
 #. Finally mix all the fragments together and save the result into a file.
+
+.. rubric:: And now, an example in stereo (see ``example.py``)
+
+.. literalinclude:: ../example.py
+   :language: python
