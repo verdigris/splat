@@ -347,7 +347,7 @@ static PyGetSetDef Fragment_getsetters[] = {
 /* Fragment methods */
 
 PyDoc_STRVAR(Fragment_mix_doc,
-"mix(fragment, offset=0.0, start=0.0, length=None)\n"
+"mix(fragment, offset=0.0, start=0.0, levels=None, length=None)\n"
 "\n"
 "Mix the given other ``fragment`` data into this instance.\n"
 "\n"
@@ -360,21 +360,26 @@ PyDoc_STRVAR(Fragment_mix_doc,
 "remain within the available data incoming.  The length of this fragment will "
 "be automatically increased if necessary to receive the incoming data.\n");
 
-static PyObject *Fragment_mix(Fragment *self, PyObject *args)
+static PyObject *Fragment_mix(Fragment *self, PyObject *args, PyObject *kw)
 {
+	static char *kwlist[] = {
+		"frag", "offset", "start", "levels", "length", NULL };
 	Fragment *frag;
 	double offset = 0.0;
 	double start = 0.0;
 	PyObject *length_obj = NULL;
+	PyObject *levels_obj = NULL;
 
+	struct splat_levels_helper levels;
 	ssize_t length;
 	ssize_t offset_sample;
 	ssize_t start_sample;
 	size_t total_length;
 	unsigned c;
 
-	if (!PyArg_ParseTuple(args, "O!|ddO", &splat_FragmentType, &frag,
-			      &offset, &start, &length))
+	if (!PyArg_ParseTupleAndKeywords(args, kw, "O!|ddOd", kwlist,
+					 &splat_FragmentType, &frag, &offset,
+					 &start, &levels_obj, &length_obj))
 		return NULL;
 
 	if (frag->n_channels != self->n_channels) {
@@ -386,6 +391,10 @@ static PyObject *Fragment_mix(Fragment *self, PyObject *args)
 		PyErr_SetString(PyExc_ValueError, "sample rate mismatch");
 		return NULL;
 	}
+
+	if (levels_obj != NULL)
+		if (frag_get_levels(self, &levels, levels_obj))
+			return NULL;
 
 	if (length_obj != NULL) {
 		if (!PyFloat_Check(length_obj)) {
@@ -414,8 +423,16 @@ static PyObject *Fragment_mix(Fragment *self, PyObject *args)
 		sample_t *dst =  &self->data[c][offset_sample];
 		Py_ssize_t i = length;
 
-		while (i--)
-			*dst++ += *src++;
+		if (levels_obj == NULL) {
+
+			while (i--)
+				*dst++ += *src++;
+		} else {
+			const double g = levels.fl[c];
+
+			while (i--)
+				*dst++ += g * (*src++);
+		}
 	}
 
 	Py_RETURN_NONE;
@@ -775,7 +792,7 @@ static PyObject *Fragment_resize(Fragment *self, PyObject *args)
 }
 
 static PyMethodDef Fragment_methods[] = {
-	{ "mix", (PyCFunction)Fragment_mix, METH_VARARGS,
+	{ "mix", (PyCFunction)Fragment_mix, METH_KEYWORDS,
 	  Fragment_mix_doc },
 	{ "import_bytes", (PyCFunction)Fragment_import_bytes, METH_VARARGS,
 	  "Import data as raw bytes" },
