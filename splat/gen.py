@@ -67,10 +67,10 @@ class Generator(object):
         return self._levels
 
     @levels.setter
-    def levels(self, values):
-        if len(values) != self.frag.channels:
-            raise Exception("Channels mismatch")
-        self._levels = values
+    def levels(self, value):
+        if not isinstance(value, float) and len(value) != self.frag.channels:
+            raise ValueError("Invalid levels value")
+        self._levels = value
 
     @property
     def frag(self):
