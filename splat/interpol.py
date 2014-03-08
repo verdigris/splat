@@ -15,24 +15,27 @@ class Polynomial(object):
         length of ``coefs``.
         """
         self._coefs = tuple(coefs)
-        self._deriv = None
 
     def __repr__(self):
         return repr(self._coefs)
 
     @property
-    def pol(self):
+    def coefs(self):
         """A tuple with the polynomial coefficients."""
         return self._coefs
 
-    @property
     def derivative(self):
-        """A :py:class:`splat.interpol.Polynomial` object with the derivative
-        of this polynomial."""
-        if self._deriv is None:
-            coefs = tuple((k * (i + 1)) for i, k in enumerate(self._coefs[1:]))
-            self._deriv = Polynomial(coefs)
-        return self._deriv
+        """Create a :py:class:`splat.interpol.Polynomial` object with the
+        derivative of this polynomial."""
+        coefs = tuple((k * (i + 1)) for i, k in enumerate(self.coefs[1:]))
+        return Polynomial(coefs)
+
+    def integral(self, k0=0.0):
+        """Create a :py:class:`splat.interpol.Polynomial` object with an
+        integral of this polynomial.  The ``k0`` value is the arbitrary
+        constant coefficient."""
+        coefs = (k0,) + tuple((k / (i + 1)) for i, k in enumerate(self.coefs))
+        return Polynomial(coefs)
 
     def value(self, x):
         """Return the value of the polynomial for the given ``x`` input
@@ -214,7 +217,7 @@ class Spline(object):
 
     def _build(self):
         m = PolyMatrix(self._pts[:(self._n + 1)])
-        dpol = m.poly.derivative
+        dpol = m.poly.derivative()
 
         for i in range(len(self._pts) - (self._n - 1)):
             seg = self._pts[i:(i + self._n)]
@@ -234,7 +237,7 @@ class Spline(object):
                       + [dpol.value(x0)])
             if m0 is not None:
                 m.add_row(m0)
-            dpol = m.poly.derivative
+            dpol = m.poly.derivative()
             self._pols.append((x0, x1, m.poly))
 
         if self._n > 2:
