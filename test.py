@@ -192,6 +192,24 @@ def test_overtones_gen():
     return check_md5(gen.frag, 'ee045e012673ff7ed4ab9bd590b57368')
 set_id(test_overtones_gen, "OvertonesGenerator")
 
+def test_polynomial():
+    k0, k1, k2, k3 = coefs = (2.345, 3.6, 6.5, 100)
+    p = splat.interpol.Polynomial(coefs)
+    if coefs != p.coefs:
+        print("Polynomial coefs mismatch")
+        return False
+    d = p.derivative()
+    dcoefs = (k1, (k2 * 2), (k3 * 3))
+    if d.coefs != dcoefs:
+        print("Derivative error: {} instead of {}".format(d.coefs, dcoefs))
+        return False
+    i = d.integral(k0)
+    if i.coefs != coefs:
+        print("Integral error: {} instead of {}".format(i.coefs, coefs))
+        return False
+    return True
+set_id(test_polynomial, "Polynomial")
+
 def test_spline():
     pts = [(1.23, 4.56), (4.32, 2.54, 1.25), (5.458, -4.247)]
     s = splat.interpol.Spline(pts)
