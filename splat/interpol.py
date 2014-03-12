@@ -143,7 +143,7 @@ class Spline(object):
         default.  For points with a 3-tuple, the polynomial order will be ``n +
         1`` in order to match the specified slope value, so 3 by default.
         """
-        self._pts = sorted(pts)
+        self._pts = list(tuple(float(x) for x in pt) for pt in sorted(pts))
         self._n = 2
         self._pols = []
         self._build()
