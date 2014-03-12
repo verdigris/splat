@@ -1,6 +1,6 @@
 # Splat - test.py
 #
-# Copyright (C) 2012, 2013, 2014 Guillaume Tucker <guillaume@mangoz.org>
+# Copyright (C) 2012, 2013, 2014, 2015 Guillaume Tucker <guillaume@mangoz.org>
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU Lesser General Public License as published by the Free
@@ -29,6 +29,7 @@ import splat.gen
 import splat.sources
 import splat.interpol
 import splat.scales
+import splat.seq
 
 splat.check_version((1, 4))
 
@@ -665,6 +666,27 @@ class ScaleTest(SplatTest):
             ('D-1', f0 * 4 / 6), ('G-1', f0 * 16 / 18),
             ]
         self._check_note_freqs(s, note_freqs)
+
+
+class SequencerTest(SplatTest):
+
+    class TestPattern(splat.seq.Pattern):
+
+        def __init__(self, gen, *args, **kw):
+            super(SequencerTest.TestPattern, self).__init__(*args, **kw)
+            self.gen = gen
+
+        def play(self, frag, bar, beat, t, T):
+            freq = 220.0 * (beat + 1)
+            self.gen.frag = frag
+            self.gen.run(t, t + (T * 0.8), freq)
+
+
+    def test_pattern_sequencer(self):
+        p = SequencerTest.TestPattern(splat.gen.SineGenerator())
+        frag = splat.data.Fragment(channels=1)
+        splat.seq.PatternSequencer(120).run(frag, [(p,), (p,)])
+        self.assert_md5(frag, '3b9dbf48691e185339a461a493fc5e7e')
 
 # -----------------------------------------------------------------------------
 # main function

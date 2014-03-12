@@ -266,6 +266,38 @@ Scale objects
    :members:
 
 
+Sequencer
+=========
+
+.. automodule:: splat.seq
+
+A sequencer can be used to control when sounds are generated in
+time. :py:class:`splat.seq.PatternSequencer` objects periodically run a series
+of :py:class:`splat.seq.Pattern` objects, calling them for each beat in each
+bar so they can generate sounds at regular intervals and mix them into a main
+fragment.  For patterns that use existing sounds from files or other generated
+fragments, a :py:class:`splat.seq.SampleSet` object can be used to group
+equivalent sounds together and pick one randomly.
+
+.. autoclass:: splat.seq.SampleSet
+   :members:
+
+.. autoclass:: splat.seq.Pattern
+   :members:
+
+.. autoclass:: splat.seq.FuzzyPattern
+   :members:
+
+.. autoclass:: splat.seq.Silence
+   :members:
+
+.. autoclass:: splat.seq.Sequencer
+   :members:
+
+.. autoclass:: splat.seq.PatternSequencer
+   :members:
+
+
 .. _utilities:
 
 Utilities
