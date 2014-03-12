@@ -29,7 +29,7 @@
 #define lin2dB(level) (20 * log10(level))
 #define dB2lin(dB) (pow10((dB) / 20))
 
-/* Use PP_RSEQ_N to get the number of arguments in __VA_ARGS__ */
+/* Use PP_NARG to get the number of arguments in __VA_ARGS__ */
 #define PP_NARG(...) \
          PP_NARG_(__VA_ARGS__,PP_RSEQ_N())
 #define PP_NARG_(...) \
