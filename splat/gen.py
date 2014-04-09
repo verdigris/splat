@@ -152,7 +152,7 @@ class SourceGenerator(Generator):
     """
 
     def __init__(self, source, *args, **kw):
-        """The `source` argument is meant to be a source function.  This is
+        """The ``source`` argument is meant to be a source function.  This is
         then used in the :py:meth:`splat.gen.SourceGenerator._run`
         implementation of this class.
         """
@@ -247,7 +247,20 @@ class OvertonesGenerator(SourceGenerator):
 
 class Particle(object):
 
+    """Sound particle
+
+    A sound particle is a building element to generate complex sounds via a
+    :py:class:`splat.gen.ParticleGenerator` object.  It only contains the
+    parameters to be used in combination with a sound source to create a
+    usually short piece of sound.  Sound particles are usually grouped in a
+    :py:class:`splat.gen.ParticlePool` object.
+    """
+
     def __init__(self, start, end, f_log):
+        """The ``start`` and ``end`` arguments set the time limits of the
+        particle in seconds.  The ``f_log`` argument is a frequency on a
+        logarithmic scale, which is then typically used by the sound source to
+        generate the actual piece of sound."""
         self.start = start
         self.end = end
         self.f_log = f_log
@@ -257,13 +270,32 @@ class Particle(object):
 
     @property
     def freq(self):
+        """Frequency as a linear value in Hz."""
         return _splat.dB2lin(self.f_log)
 
 
 class ParticlePool(object):
 
+    """Pool of sound particles
+
+    The idea behind sound particles is to use statistics over a large
+    population of discrete particles to create a continuous sound.  To achieve
+    this, the ParticlePool can be used to create a population of particles with
+    an envelope of varying density with some randomness in the particle
+    parameters.
+    """
+
     def __init__(self, min_f_log, max_f_log, min_len, max_len, envelope,
                  n_slices, density):
+        """The ``min_f_log`` and ``max_f_log`` arguments give the boundaries
+        for the particle frequencies using logarithmic scale.  The ``min_len``
+        and ``max_len`` arguments are for the minimum and maximum length of the
+        particle in seconds.  The ``envelope`` is a
+        :py:class:`splat.interpol.Spline` object which is then used in slices
+        to create more or less particles around each point in time.  The number
+        of slices given by ``n_slices`` affects the granularity of the
+        envelope.  The ``density`` affects the average number of particle per
+        unit of time."""
         self._pts = []
         for y0 in range(n_slices):
             y0 = float(1 + y0) / n_slices
@@ -284,13 +316,18 @@ class ParticlePool(object):
 
     @property
     def start(self):
+        """Start time in seconds."""
         return self._start
 
     @property
     def end(self):
+        """End time in seconds."""
         return self._end
 
     def count(self, t_start=None, t_end=None):
+        """Number of particles left in the pool, either in total or in between
+        the ``t_start`` and ``t_end`` times in seconds if they are both
+        specified."""
         if (t_start is None) and (t_end is None):
             return len(self._pts)
         n = 0
@@ -300,6 +337,12 @@ class ParticlePool(object):
         return n
 
     def iterate(self, t_start=None, t_end=None, share=1.0):
+        """Python generator to iterate through all the particles in the pool
+        and remove them at the same time, or only in between the ``t_start``
+        and ``t_end`` times in second if they are both specified.  The
+        ``share`` argument can be used to only consume a share of the available
+        particles.  For example, a value ``share=0.5`` will only use half of
+        the available particles."""
         if t_start is None:
             t_start = self.start
         if t_end is None:
@@ -317,7 +360,17 @@ class ParticlePool(object):
 
 class ParticleGenerator(Generator):
 
+    """Generator with particles
+
+    This generator uses a :py:class:`splat.gen.ParticlePool` with an internal
+    :py:class:`splat.gen.Generator` and some parameters to generate a sound.
+    """
+
     def __init__(self, subgen, *args, **kw):
+        """The ``subgen`` object is a :py:class:`splat.gen.Generator` which is
+        called once for each :py:class:`splat.gen.Particle` object used to
+        produce the final sound.  Due to the nature of the Particle objects, it
+        should take a frequency argument."""
         super(ParticleGenerator, self).__init__(subgen.frag, *args, **kw)
         self._subgen = subgen
         self._start = None
@@ -335,58 +388,90 @@ class ParticleGenerator(Generator):
 
     @property
     def subgen(self):
+        """Sub-generator object."""
         return self._subgen
 
     @property
     def start(self):
+        """Start time in seconds."""
         return self._start
 
     @property
     def end(self):
+        """End time in seconds."""
         return self._end
 
     # ToDo: use dB instead of linear (0..1) levels?
     def set_z(self, z_pts, *args, **kw):
+        """Create the :py:class:`splat.interpol.Spline` object used for the
+        :py:class:`splat.gen.ParticlePool` amplitude envelope with the given
+        ``z_pts`` points."""
         self._z = interpol.Spline(z_pts, *args, **kw)
 
     @property
     def z(self):
+        """Get the amplitude envelope Spline object."""
         return self._z
 
     def set_eq(self, eq_pts, *args, **kw):
+        """Set the equalization :py:class:`splat.interpol.Spline` object used
+        to alter the amplitude of each particle in function of its frequency to
+        create an equalization.  The minimum and maximum frequencies used when
+        creating the :py:class:`splat.gen.ParticlePool` is derived from the
+        boundaries of the equalization Spline."""
         self._eq = interpol.Spline(eq_pts, *args, **kw)
         self._min_f_log = _splat.lin2dB(self._eq.start)
         self._max_f_log = _splat.lin2dB(self._eq.end)
 
     @property
     def eq(self):
+        """Get the equalization Spline object."""
         return self._eq
 
     def set_q(self, q_pts, *args, **kw):
+        """Set the distribution parameter :py:class:`splat.interpol.Spline`
+        object which is used to alter the random function used to pick the
+        frequency of each :py:class:`splat.gen.Particle` using the given
+        ``q_pts`` points."""
         self._q = interpol.Spline(q_pts, *args, **kw)
 
     @property
     def q(self):
+        """Get the distribution parameter Spline object."""
         return self._q
 
     def set_gain_fuzz(self, gain_fuzz, stereo_gain_fuzz):
+        """Set the level of gain fuzz which is the amount of randomness added
+        to the gain of each :py:class:`splat.gen.Particle` object.  The
+        ``gain_fuzz`` is applied to all channels, and the ``stereo_gain_fuzz``
+        is the difference between the 2 levels when using a stereo
+        generator.  These values are all in dB."""
         self._gain_fuzz = gain_fuzz
         self._stereo_gain_fuzz = stereo_gain_fuzz
 
     @property
     def gain_fuzz(self):
+        """Get a 2-tuple with the common and stereo gain fuzz values in dB."""
         return (self._gain_fuzz, self._stereo_gain_fuzz)
 
     def make_pool(self, min_len=0.05, max_len=0.1, n_slices=20, density=100):
+        """Build the particle pool of particles using all the parameters
+        currently defined.  This discards any existing pool, and can also be
+        used to create a new pool with the same parameters when the previous
+        one has been exhausted."""
         self._pool = ParticlePool(
             self._min_f_log, self._max_f_log, min_len, max_len, self._z,
             n_slices, density)
 
     @property
     def pool(self):
+        """Get the :py:class:`splat.gen.ParticlePool` object."""
         return self._pool
 
     def run(self, start, end, freq, share=1.0, levels=(0.0, 0.0), *args, **kw):
+        """Run the generator using the standard interface, with the extra
+        ``share`` argument which is passed to the internal
+        :py:meth:`splat.gen.ParticlePool.iterate` object."""
         if self.start is None:
             self._start = start
             self._end = end
@@ -425,6 +510,10 @@ class ParticleGenerator(Generator):
             self.subgen.run(p.start, p.end, p_freq, levels=levels, *args, **kw)
 
     def curve(self, freq, p_freq, q):
+        """This method implements the stastistical distribution used to pick
+        the frequency for each :py:class:`splat.gen.Particle` object.  It
+        returns a frequency ``freq`` in linear scale altered around the target
+        frequency ``p_freq`` with the parameter ``q``."""
         f_log = _splat.lin2dB(freq)
         s = _splat.lin2dB(p_freq)
         f_curve = s - 0.5 * ((2 * s) - (2 * f_log)) * math.exp(
@@ -432,4 +521,6 @@ class ParticleGenerator(Generator):
         return _splat.dB2lin(f_curve)
 
     def show_progress(self, progress):
+        """Print the ``progress`` in percentage of the
+        :py:meth:`splat.gen.ParticleGenerator.run` method call."""
         print("Progress: {0}%".format(progress))

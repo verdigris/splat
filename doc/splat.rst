@@ -31,8 +31,25 @@ Generator objects
    :members:
    :private-members:
 
+Source generators
+-----------------
+
 .. autoclass:: splat.gen.SourceGenerator
    :members:
+
+.. _sources:
+
+Sound sources
+_____________
+
+.. automodule:: splat.sources
+.. autofunction:: splat.sources.sine
+.. autofunction:: splat.sources.square
+.. autofunction:: splat.sources.triangle
+.. autofunction:: splat.sources.overtones
+
+Source generator objects
+________________________
 
 .. autoclass:: splat.gen.SineGenerator
    :members:
@@ -47,17 +64,17 @@ Generator objects
    :members:
 
 
-.. _sources:
+Particle generators
+-------------------
 
-Sound sources
--------------
+.. autoclass:: splat.gen.Particle
+   :members:
 
-.. automodule:: splat.sources
+.. autoclass:: splat.gen.ParticlePool
+   :members:
 
-.. autofunction:: splat.sources.sine
-.. autofunction:: splat.sources.square
-.. autofunction:: splat.sources.triangle
-.. autofunction:: splat.sources.overtones
+.. autoclass:: splat.gen.ParticleGenerator
+   :members:
 
 
 .. _filters:
