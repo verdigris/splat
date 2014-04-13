@@ -273,6 +273,11 @@ class Particle(object):
         """Frequency as a linear value in Hz."""
         return _splat.dB2lin(self.f_log)
 
+    @property
+    def length(self):
+        """Length in seconds."""
+        return self.end - self.start
+
 
 class ParticlePool(object):
 
@@ -302,11 +307,15 @@ class ParticlePool(object):
             seg = envelope.slices(y0)
 
             for x0, x1 in seg:
-                n_events = int((x1 - x0) * density / n_slices)
+                if (x1 - x0) < min_len:
+                    continue
 
+                slice_max_len = min((x1 - x0), max_len)
+                n_events = int((x1 - x0) * density / n_slices)
                 for i in range(n_events):
-                    start = random.uniform(x0, x1)
-                    end = random.uniform((start + min_len), (start + max_len))
+                    length = random.uniform(min_len, slice_max_len)
+                    start = random.uniform(x0, (x1 - length))
+                    end = start + length
                     f_log = random.uniform(min_f_log, max_f_log)
                     self._pts.append(Particle(start, end, f_log))
 
@@ -366,7 +375,7 @@ class ParticleGenerator(Generator):
     :py:class:`splat.gen.Generator` and some parameters to generate a sound.
     """
 
-    def __init__(self, subgen, *args, **kw):
+    def __init__(self, subgen, min_f=20.0, max_f=20000.0, *args, **kw):
         """The ``subgen`` object is a :py:class:`splat.gen.Generator` which is
         called once for each :py:class:`splat.gen.Particle` object used to
         produce the final sound.  Due to the nature of the Particle objects, it
@@ -378,10 +387,10 @@ class ParticleGenerator(Generator):
         self._z = None
         self._eq = None
         self._q = None
-        self._min_f_log = _splat.lin2dB(20)
-        self._max_f_log = _splat.lin2dB(20000)
+        self._min_f_log = _splat.lin2dB(min_f)
+        self._max_f_log = _splat.lin2dB(max_f)
         self._gain_fuzz = 0.0
-        self._stereo_gain_fuzz = 0.0
+        self._relative_gain_fuzz = 0.0
         self._pool = None
         self.progress_step = 10
         self.do_show_progress = True
@@ -440,19 +449,19 @@ class ParticleGenerator(Generator):
         """Get the distribution parameter Spline object."""
         return self._q
 
-    def set_gain_fuzz(self, gain_fuzz, stereo_gain_fuzz):
-        """Set the level of gain fuzz which is the amount of randomness added
-        to the gain of each :py:class:`splat.gen.Particle` object.  The
-        ``gain_fuzz`` is applied to all channels, and the ``stereo_gain_fuzz``
-        is the difference between the 2 levels when using a stereo
-        generator.  These values are all in dB."""
-        self._gain_fuzz = gain_fuzz
-        self._stereo_gain_fuzz = stereo_gain_fuzz
-
     @property
     def gain_fuzz(self):
-        """Get a 2-tuple with the common and stereo gain fuzz values in dB."""
-        return (self._gain_fuzz, self._stereo_gain_fuzz)
+        """Get a 2-tuple with the common and relative gain fuzz values in dB."""
+        return (self._gain_fuzz, self._relative_gain_fuzz)
+
+    @gain_fuzz.setter
+    def gain_fuzz(self, value):
+        """Set the level of gain fuzz which is the amount of randomness added
+        to the gain of each :py:class:`splat.gen.Particle` object.  The value
+        passed is a 2-tuple with the common gain fuzz applied to all channels
+        and the relative gain fuzz used to create a difference in between each
+        channel.  These values are in dB."""
+        self._gain_fuzz, self._relative_gain_fuzz = value
 
     def make_pool(self, min_len=0.05, max_len=0.1, n_slices=20, density=100):
         """Build the particle pool of particles using all the parameters
@@ -495,9 +504,9 @@ class ParticleGenerator(Generator):
             if self._gain_fuzz:
                 g += random.uniform(-self._gain_fuzz, self._gain_fuzz)
 
-            if self._stereo_gain_fuzz:
-                levels = tuple(g + random.uniform(-self._stereo_gain_fuzz,
-                                                   self._stereo_gain_fuzz)
+            if self._relative_gain_fuzz:
+                levels = tuple(g + random.uniform(-self._relative_gain_fuzz,
+                                                   self._relative_gain_fuzz)
                                for g in range(self.frag.channels))
             else:
                 levels = tuple(g for i in range(self.frag.channels))
