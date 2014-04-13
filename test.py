@@ -222,6 +222,109 @@ def test_spline():
     return True
 set_id(test_spline, "Spline")
 
+def test_particle():
+    start = 1.2
+    end = 3.4
+    f = 1234.56
+    p = splat.gen.Particle(start, end, splat.lin2dB(f))
+    if (p.start != start) or (p.end != end):
+        print("Start/end times error")
+    if not floatcmp(p.freq, f):
+        print("Frequency conversion error: {} instead of {}".format(f, p.freq))
+    return True
+set_id(test_particle, "Particle")
+
+def test_particle_pool():
+    min_f = 123.45
+    min_f_log = splat.lin2dB(min_f)
+    max_f = 678.9
+    max_f_log = splat.lin2dB(max_f)
+    min_len = 0.1
+    max_len = 0.3
+    envelope = splat.interpol.Spline([(0.5, 0.0), (1.3, 1.0), (2.1, 0.0)])
+    n_slices = 20
+    density = 200
+    count = 196
+    half_count = 103
+    pool = splat.gen.ParticlePool(min_f_log, max_f_log, min_len, max_len,
+                                  envelope, n_slices, density)
+    if (pool.start != envelope.start) or (pool.end != envelope.end):
+        print("Invalid start/end times")
+        return False
+    if pool.count() != count: # plain magic
+        print("Invalid number of particles: {}".format(pool.count()))
+        return False
+    for p in pool.iterate(share=0.5):
+        if (p.length < min_len) or (p.length > max_len):
+            print("Invalid particle length")
+            return False
+        if (p.start < envelope.start) or (p.start > envelope.end):
+            print("Invalid particle start/end times")
+            return False
+        if (p.freq < min_f) or (p.freq > max_f):
+            print("Invalid particle frequency")
+            return False
+    if abs(pool.count() - half_count) > (count / 35.0):
+        print("Invalid number of particles left: {}".format(pool.count()))
+        return False
+    return True
+set_id(test_particle_pool, "ParticlePool")
+
+def test_particle_gen():
+    class TestGenerator(splat.gen.Generator):
+        def __init__(self, start, end, f_min, f_max, *args, **kw):
+            super(TestGenerator, self).__init__(*args, **kw)
+            self._start = start
+            self._end = end
+            self._f_min = f_min
+            self._f_max = f_max
+
+        def run(self, start, end, freq, levels):
+            if (start < self._start) or (end > self._end):
+                print(start, end, self._start, self._end)
+                raise Exception("Invalid subgen start/end run times")
+            if (freq < self._f_min) or (freq > self._f_max):
+                raise Exception("Invalid subgen frequency")
+
+    z_start = 0.5
+    z_mid = 1.8
+    z_end = 2.5
+    eq_min_f = 100.0
+    eq_mid_f = 2345.0
+    eq_max_f = 8000.0
+    subgen = TestGenerator(z_start, z_end, eq_min_f, eq_max_f)
+    pgen = splat.gen.ParticleGenerator(subgen)
+    if pgen.subgen is not subgen:
+        print("Failed to get ParticleGenerator.subgen")
+        return False
+    pgen.set_z([(z_start, 0.0), (z_mid, 1.0, 0.0), (z_end, 0.0)])
+    if (pgen.z.start != z_start) or (pgen.z.end != z_end):
+        print("Incorrect envelope start/end times")
+        return False
+    pgen.set_eq([(eq_min_f, -30.0), (eq_mid_f, 10.0), (eq_max_f, -50)])
+    if (pgen.eq.start != eq_min_f) or (pgen.eq.end != eq_max_f):
+        print("Incorrect eq start/end frequencies")
+        return False
+    gfuzz = (3.0, 1.0)
+    pgen.gain_fuzz = gfuzz
+    if pgen.gain_fuzz != gfuzz:
+        print("Failed to get gain fuzz")
+        return False
+    pgen.make_pool()
+    if pgen.pool.count() != 126: # plain magic again
+        print("Incorrect number of particles")
+        return False
+    if not floatcmp(pgen.curve(123.45, 456.78, 56.78), 154.33118):
+        print("ParticleGenerator.curve error")
+        return False
+    pgen.do_show_progress = False
+    pgen.run(0.0, 5.0, 1234.56)
+    if pgen.pool.count() != 0:
+        print("Not all particles were consumed in the run")
+        return False
+    return True
+set_id(test_particle_gen, "ParticleGenerator")
+
 # -----------------------------------------------------------------------------
 # main function
 
