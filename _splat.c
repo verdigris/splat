@@ -1142,8 +1142,8 @@ static void splat_sine_floats(Fragment *frag, const double *levels,
 	}
 }
 
-static void splat_sine_signals(Fragment *frag, PyObject **levels,
-			       PyObject *freq, PyObject *phase)
+static int splat_sine_signals(Fragment *frag, PyObject **levels,
+			      PyObject *freq, PyObject *phase)
 {
 	enum {
 		SIG_FREQ = 0,
@@ -1163,7 +1163,7 @@ static void splat_sine_signals(Fragment *frag, PyObject **levels,
 
 	if (splat_signal_init(&sig, frag, signals,
 			      (SIG_AMP + frag->n_channels)))
-		return;
+		return -1;
 
 	while (splat_signal_next(&sig) == SIGNAL_VECTOR_CONTINUE) {
 		size_t i, j;
@@ -1184,6 +1184,8 @@ static void splat_sine_signals(Fragment *frag, PyObject **levels,
 	}
 
 	splat_signal_free(&sig);
+
+	return 0;
 }
 
 PyDoc_STRVAR(splat_sine_doc,
@@ -1214,8 +1216,8 @@ static PyObject *splat_sine(PyObject *self, PyObject *args)
 	if (all_floats)
 		splat_sine_floats(frag, levels.fl, PyFloat_AS_DOUBLE(freq),
 				  PyFloat_AS_DOUBLE(phase));
-	else
-		splat_sine_signals(frag, levels.obj, freq, phase);
+	else if (splat_sine_signals(frag, levels.obj, freq, phase))
+		return NULL;
 
 	Py_RETURN_NONE;
 }
@@ -1252,9 +1254,9 @@ static void splat_square_floats(Fragment *frag, const double *fl_pos,
 	}
 }
 
-static void splat_square_signals(Fragment *frag, PyObject **levels,
-				 PyObject *freq, PyObject *phase,
-				 PyObject *ratio)
+static int splat_square_signals(Fragment *frag, PyObject **levels,
+				PyObject *freq, PyObject *phase,
+				PyObject *ratio)
 {
 	enum {
 		SIG_FREQ = 0,
@@ -1275,7 +1277,7 @@ static void splat_square_signals(Fragment *frag, PyObject **levels,
 
 	if (splat_signal_init(&sig, frag, signals,
 			      (SIG_AMP + frag->n_channels)))
-		return;
+		return -1;
 
 	while (splat_signal_next(&sig) == SIGNAL_VECTOR_CONTINUE) {
 		size_t i, j;
@@ -1303,6 +1305,8 @@ static void splat_square_signals(Fragment *frag, PyObject **levels,
 	}
 
 	splat_signal_free(&sig);
+
+	return 0;
 }
 
 PyDoc_STRVAR(splat_square_doc,
@@ -1336,8 +1340,8 @@ static PyObject *splat_square(PyObject *self, PyObject *args)
 		splat_square_floats(frag, levels.fl, PyFloat_AS_DOUBLE(freq),
 				    PyFloat_AS_DOUBLE(phase),
 				    PyFloat_AS_DOUBLE(ratio));
-	else
-		splat_square_signals(frag, levels.obj, freq, phase, ratio);
+	else if (splat_square_signals(frag, levels.obj, freq, phase, ratio))
+		return NULL;
 
 	Py_RETURN_NONE;
 }
@@ -1384,9 +1388,9 @@ static void splat_triangle_floats(Fragment *frag, const double *lvls,
 	}
 }
 
-static void splat_triangle_signals(Fragment *frag, PyObject **levels,
-				   PyObject *freq, PyObject *phase,
-				   PyObject *ratio)
+static int splat_triangle_signals(Fragment *frag, PyObject **levels,
+				  PyObject *freq, PyObject *phase,
+				  PyObject *ratio)
 {
 	enum {
 		SIG_FREQ = 0,
@@ -1407,7 +1411,7 @@ static void splat_triangle_signals(Fragment *frag, PyObject **levels,
 
 	if (splat_signal_init(&sig, frag, signals,
 			      (SIG_AMP + frag->n_channels)))
-		return;
+		return -1;
 
 	while (splat_signal_next(&sig) == SIGNAL_VECTOR_CONTINUE) {
 		size_t i, j;
@@ -1441,6 +1445,10 @@ static void splat_triangle_signals(Fragment *frag, PyObject **levels,
 			}
 		}
 	}
+
+	splat_signal_free(&sig);
+
+	return 0;
 }
 
 PyDoc_STRVAR(splat_triangle_doc,
@@ -1460,7 +1468,6 @@ static PyObject *splat_triangle(PyObject *self, PyObject *args)
 	struct splat_levels_helper levels;
 	int all_floats;
 
-
 	if (!PyArg_ParseTuple(args, "O!OOO|O", &splat_FragmentType, &frag,
 			      &levels_obj, &freq, &phase, &ratio))
 		return NULL;
@@ -1475,8 +1482,8 @@ static PyObject *splat_triangle(PyObject *self, PyObject *args)
 		splat_triangle_floats(frag, levels.fl, PyFloat_AS_DOUBLE(freq),
 				      PyFloat_AS_DOUBLE(phase),
 				      PyFloat_AS_DOUBLE(ratio));
-	else
-		splat_triangle_signals(frag, levels.obj, freq, phase, ratio);
+	else if (splat_triangle_signals(frag, levels.obj, freq, phase, ratio))
+		return NULL;
 
 	Py_RETURN_NONE;
 }
@@ -1527,9 +1534,9 @@ static void splat_overtones_float(Fragment *frag, const double *levels,
 	}
 }
 
-static void splat_overtones_mixed(Fragment *frag, PyObject **levels,
-				  PyObject *freq, PyObject *phase,
-				  struct overtone *overtones, Py_ssize_t n)
+static int splat_overtones_mixed(Fragment *frag, PyObject **levels,
+				 PyObject *freq, PyObject *phase,
+				 struct overtone *overtones, Py_ssize_t n)
 {
 	enum {
 		SIG_FREQ = 0,
@@ -1552,7 +1559,7 @@ static void splat_overtones_mixed(Fragment *frag, PyObject **levels,
 
 	if (splat_signal_init(&sig, frag, signals,
 			      (SIG_AMP + frag->n_channels)))
-		return;
+		return -1;
 
 	while (splat_signal_next(&sig) == SIGNAL_VECTOR_CONTINUE) {
 		size_t i, j;
@@ -1583,11 +1590,15 @@ static void splat_overtones_mixed(Fragment *frag, PyObject **levels,
 			}
 		}
 	}
+
+	splat_signal_free(&sig);
+
+	return 0;
 }
 
-static void splat_overtones_signal(Fragment *frag, PyObject **levels,
-				   PyObject *freq, PyObject *phase,
-				   struct overtone *overtones, Py_ssize_t n)
+static int splat_overtones_signal(Fragment *frag, PyObject **levels,
+				  PyObject *freq, PyObject *phase,
+				  struct overtone *overtones, Py_ssize_t n)
 {
 	enum {
 		SIG_FREQ = 0,
@@ -1613,7 +1624,7 @@ static void splat_overtones_signal(Fragment *frag, PyObject **levels,
 
 	if (signals == NULL) {
 		PyErr_NoMemory();
-		return;
+		return -1;
 	}
 
 	signals[sig_freq] = freq;
@@ -1635,7 +1646,7 @@ static void splat_overtones_signal(Fragment *frag, PyObject **levels,
 	}
 
 	if (splat_signal_init(&sig, frag, signals, sig_n))
-		return;
+		return -1;
 
 	while (splat_signal_next(&sig) == SIGNAL_VECTOR_CONTINUE) {
 		size_t i, j;
@@ -1673,7 +1684,10 @@ static void splat_overtones_signal(Fragment *frag, PyObject **levels,
 		}
 	}
 
+	splat_signal_free(&sig);
 	PyMem_Free(signals);
+
+	return 0;
 }
 
 PyDoc_STRVAR(splat_overtones_doc,
@@ -1766,11 +1780,11 @@ static PyObject *splat_overtones(PyObject *self, PyObject *args)
 		splat_overtones_float(frag, levels.fl, PyFloat_AS_DOUBLE(freq),
 				      PyFloat_AS_DOUBLE(phase), overtones, n);
 	else if (ot_all_floats)
-		splat_overtones_mixed(frag, levels.obj, freq, phase,
-				      overtones, n);
+		stat = splat_overtones_mixed(frag, levels.obj, freq, phase,
+					     overtones, n);
 	else
-		splat_overtones_signal(frag, levels.obj, freq, phase,
-				       overtones, n);
+		stat = splat_overtones_signal(frag, levels.obj, freq, phase,
+					      overtones, n);
 free_overtones:
 	PyMem_Free(overtones);
 
