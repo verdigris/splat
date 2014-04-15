@@ -24,3 +24,8 @@ VERSION_STR = '.'.join([str(v) for v in VERSION])
 BUILD = 7
 
 __version__ = VERSION_STR
+
+def check_version(ver):
+    if ver != VERSION:
+        raise Exception("Version mismatch: {0}, required: {1}".format(
+                VERSION, ver))
