@@ -83,6 +83,32 @@ def test_gen_frag():
             gen.frag.duration == 0.0)
 set_id(test_gen_frag, "Generator Fragment")
 
+def test_signal():
+    frag = splat.data.Fragment(duration=0.01)
+    float_value = 1.234
+    sig_float = splat.Signal(frag, float_value)
+    for i in range(len(frag)):
+        if sig_float.next() != float_value:
+            print("Incorrect float signal value")
+            return False
+    func = lambda x: x * 0.1469
+    sig_func = splat.Signal(frag, func)
+    for i in range(len(frag)):
+        x, y = func(frag.n2s(i)), sig_func.next()
+        if not floatcmp(x, y):
+            print("Incorrect function signal value: {} {}".format(x, y))
+            return False
+    frag2 = splat.data.Fragment(duration=0.01, channels=1)
+    splat.sources.sine(frag2, 456.789, 0.0, 0.0)
+    sig_frag = splat.Signal(frag, frag2)
+    for x in frag2:
+        y = (sig_frag.next(),)
+        if x != y:
+            print("Incorrect fragment signal value: {} {}".format(x, y))
+            return False
+    return True
+set_id(test_signal, "Signal")
+
 def test_sine():
     freq = 1237.9
     frag_float = splat.data.Fragment(duration=1.0)

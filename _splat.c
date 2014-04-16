@@ -105,7 +105,6 @@ static PyTypeObject splat_FragmentType;
 #define SIGNAL_VECTOR_MASK (SIGNAL_VECTOR_LEN - 1)
 
 struct splat_signal;
-struct Fragment;
 
 struct signal_vector {
 	sample_t data[SIGNAL_VECTOR_LEN];
@@ -134,6 +133,264 @@ static int splat_signal_init(struct splat_signal *s, Fragment *frag,
 			     PyObject **signals, size_t n_signals);
 static void splat_signal_free(struct splat_signal *s);
 static int splat_signal_next(struct splat_signal *s);
+
+/* -- Signal class -- */
+
+struct Signal_object {
+	PyObject_HEAD;
+	int init;
+	PyObject *signal;
+	struct splat_signal sig;
+	enum signal_ret stat;
+	unsigned offset;
+};
+typedef struct Signal_object Signal;
+
+static PyTypeObject splat_SignalType;
+
+static void Signal_dealloc(Signal *self)
+{
+	if (self->init) {
+		splat_signal_free(&self->sig);
+		self->init = 0;
+	}
+
+	self->ob_type->tp_free((PyObject *)self);
+}
+
+static int Signal_init(Signal *self, PyObject *args)
+{
+	Fragment *frag;
+	PyObject *sig_obj;
+
+	if (!PyArg_ParseTuple(args, "O!O", &splat_FragmentType, &frag,
+			      &sig_obj))
+		return -1;
+
+	self->signal = sig_obj;
+
+	if (splat_signal_init(&self->sig, frag, &self->signal, 1))
+		return -1;
+
+	Py_INCREF(self->signal);
+	Py_INCREF(self->sig.frag);
+	self->offset = 0;
+	self->stat = SIGNAL_VECTOR_CONTINUE;
+	self->init = 1;
+
+	return 0;
+}
+
+static PyObject *Signal_new(PyTypeObject *type, PyObject *args, PyObject *kw)
+{
+	Signal *self;
+
+	self = (Signal *)type->tp_alloc(type, 0);
+
+	if (self == NULL)
+		return PyErr_NoMemory();
+
+	self->init = 0;
+
+	return (PyObject *)self;
+}
+
+/* Signal methods */
+
+PyDoc_STRVAR(Signal_next_doc,
+"next()\n"
+"\n"
+"Get the next float value from the signal or None if end of fragment length "
+"has been reached.\n");
+
+static PyObject *Signal_next(Signal *self, PyObject *_)
+{
+	if ((self->offset == self->sig.end) &&
+	    (self->stat == SIGNAL_VECTOR_CONTINUE)) {
+		self->stat = splat_signal_next(&self->sig);
+		self->offset = 0;
+	}
+
+	if (self->stat == SIGNAL_VECTOR_STOP)
+		Py_RETURN_NONE;
+
+	return PyFloat_FromDouble(self->sig.vectors[0].data[self->offset++]);
+}
+
+static PyMethodDef Signal_methods[] = {
+	{ "next", (PyCFunction)Signal_next, METH_NOARGS, Signal_next_doc },
+	{ NULL }
+};
+
+static PyTypeObject splat_SignalType = {
+	PyObject_HEAD_INIT(NULL)
+	0,                                 /* ob_size */
+	"_splat.Signal",                   /* tp_name */
+	sizeof(Signal),                    /* tp_basicsize */
+	0,                                 /* tp_itemsize */
+	(destructor)Signal_dealloc,        /* tp_dealloc */
+	0,                                 /* tp_print */
+	0,                                 /* tp_getattr */
+	0,                                 /* tp_setattr */
+	0,                                 /* tp_compare */
+	0,                                 /* tp_repr */
+	0,                                 /* tp_as_number */
+	0,                                 /* tp_as_sequence */
+	0,                                 /* tp_as_mapping */
+	0,                                 /* tp_hash  */
+	0,                                 /* tp_call */
+	0,                                 /* tp_str */
+	0,                                 /* tp_getattro */
+	0,                                 /* tp_setattro */
+	0,                                 /* tp_as_buffer */
+	BASE_TYPE_FLAGS,                   /* tp_flags */
+	"Signal object",                   /* tp_doc */
+	0,                                 /* tp_traverse */
+	0,                                 /* tp_clear */
+	0,                                 /* tp_richcompare */
+	0,                                 /* tp_weaklistoffset */
+	0,                                 /* tp_iter */
+	0,                                 /* tp_iternext */
+	Signal_methods,                    /* tp_methods */
+	0,                                 /* tp_members */
+	0,                                 /* tp_getset */
+	0,                                 /* tp_base */
+	0,                                 /* tp_dict */
+	0,                                 /* tp_descr_get */
+	0,                                 /* tp_descr_set */
+	0,                                 /* tp_dictoffset */
+	(initproc)Signal_init,             /* tp_init */
+	0,                                 /* tp_alloc */
+	Signal_new,                        /* tp_new */
+};
+
+/* -- Signal internal functions -- */
+
+static int splat_signal_func(struct splat_signal *s, struct signal_vector *v)
+{
+	const double rate = s->frag->rate;
+	size_t i;
+
+	for (i = s->cur; i < s->end; ++i) {
+		PyObject *ret;
+
+		PyFloat_AS_DOUBLE(s->py_float) = i / rate;
+		ret = PyObject_Call(v->obj, s->py_args, NULL);
+
+		if (!PyFloat_Check(ret))
+			return -1;
+
+		v->data[i & SIGNAL_VECTOR_MASK] = PyFloat_AS_DOUBLE(ret);
+	}
+
+	return 0;
+}
+
+static int splat_signal_frag(struct splat_signal *s, struct signal_vector *v)
+{
+	Fragment *frag = (Fragment *)v->obj;
+	size_t i;
+
+	for (i = s->cur; i < s->end; ++i)
+		v->data[i & SIGNAL_VECTOR_MASK] = frag->data[0][i];
+
+	return 0;
+}
+
+static int splat_signal_init(struct splat_signal *s, Fragment *frag,
+			     PyObject **signals, size_t n_signals)
+{
+	size_t i;
+
+	s->frag = frag;
+	s->n_vectors = n_signals;
+	s->vectors = PyMem_Malloc(n_signals * sizeof(struct signal_vector));
+
+	if (s->vectors == NULL) {
+		PyErr_NoMemory();
+		return -1;
+	}
+
+	s->py_float = PyFloat_FromDouble(0);
+
+	if (s->py_float == NULL)
+		return -1;
+
+	s->py_args = PyTuple_New(1);
+
+	if (s->py_args == NULL)
+		return -1;
+
+	PyTuple_SET_ITEM(s->py_args, 0, s->py_float);
+
+	for (i = 0; i < n_signals; ++i) {
+		struct signal_vector *v = &s->vectors[i];
+		PyObject *signal = signals[i];
+
+		if (PyFloat_Check(signal)) {
+			const sample_t value = PyFloat_AS_DOUBLE(signal);
+			size_t j;
+
+			for (j = 0; j < SIGNAL_VECTOR_LEN; ++j)
+				v->data[j] = value;
+
+			v->signal = NULL;
+		} else if (PyCallable_Check(signal)) {
+			v->signal = splat_signal_func;
+		} else if (PyObject_TypeCheck(signal, &splat_FragmentType)) {
+			Fragment *sig_frag = (Fragment *)signal;
+
+			if (sig_frag->length != frag->length) {
+				PyErr_SetString(PyExc_ValueError,
+						"fragment size mismatch");
+				return -1;
+			}
+
+			v->signal = splat_signal_frag;
+		} else {
+			PyErr_SetString(PyExc_TypeError,
+					"unsupported signal type");
+			return -1;
+		}
+
+		v->obj = signal;
+	}
+
+	s->cur = 0;
+	s->end = 0;
+	s->len = 0;
+	s->error = 0;
+
+	return 0;
+}
+
+static void splat_signal_free(struct splat_signal *s)
+{
+	Py_DECREF(s->py_args);
+	PyMem_Free(s->vectors);
+}
+
+static int splat_signal_next(struct splat_signal *s)
+{
+	size_t i;
+
+	s->cur += s->len;
+	s->end = min((s->cur + SIGNAL_VECTOR_LEN), s->frag->length);
+	s->len = s->end - s->cur;
+
+	if (!s->len)
+		return SIGNAL_VECTOR_STOP;
+
+	for (i = 0; i < s->n_vectors; ++i) {
+		struct signal_vector *v = &s->vectors[i];
+
+		if ((v->signal != NULL) && (v->signal(s, v)))
+			return SIGNAL_VECTOR_STOP;
+	}
+
+	return SIGNAL_VECTOR_CONTINUE;
+}
+
 
 /* ----------------------------------------------------------------------------
  * Fragment class
@@ -851,7 +1108,7 @@ static PyTypeObject splat_FragmentType = {
 	Fragment_new,                      /* tp_new */
 };
 
-/* -- internal Fragment functions -- */
+/* -- Fragment internal functions -- */
 
 static int frag_get_levels(Fragment *frag, struct splat_levels_helper *levels,
 			   PyObject *levels_obj)
@@ -933,135 +1190,6 @@ static int frag_resize(Fragment *frag, size_t length)
 	return 0;
 }
 
-/* ----------------------------------------------------------------------------
- * Signal vector
- */
-
-static int splat_signal_func(struct splat_signal *s, struct signal_vector *v)
-{
-	const double rate = s->frag->rate;
-	size_t i;
-
-	for (i = s->cur; i < s->end; ++i) {
-		PyObject *ret;
-
-		PyFloat_AS_DOUBLE(s->py_float) = i / rate;
-		ret = PyObject_Call(v->obj, s->py_args, NULL);
-
-		if (!PyFloat_Check(ret))
-			return -1;
-
-		v->data[i & SIGNAL_VECTOR_MASK] = PyFloat_AS_DOUBLE(ret);
-	}
-
-	return 0;
-}
-
-static int splat_signal_frag(struct splat_signal *s, struct signal_vector *v)
-{
-	Fragment *frag = (Fragment *)v->obj;
-	size_t i;
-
-	for (i = s->cur; i < s->end; ++i)
-		v->data[i & SIGNAL_VECTOR_MASK] = frag->data[0][i];
-
-	return 0;
-}
-
-static int splat_signal_init(struct splat_signal *s, Fragment *frag,
-			     PyObject **signals, size_t n_signals)
-{
-	size_t i;
-
-	s->frag = frag;
-	s->n_vectors = n_signals;
-
-	s->vectors = PyMem_Malloc(n_signals * sizeof(struct signal_vector));
-
-	if (s->vectors == NULL) {
-		PyErr_NoMemory();
-		return -1;
-	}
-
-	s->py_float = PyFloat_FromDouble(0);
-
-	if (s->py_float == NULL)
-		return -1;
-
-	s->py_args = PyTuple_New(1);
-
-	if (s->py_args == NULL)
-		return -1;
-
-	PyTuple_SET_ITEM(s->py_args, 0, s->py_float);
-
-	for (i = 0; i < n_signals; ++i) {
-		struct signal_vector *v = &s->vectors[i];
-		PyObject *signal = signals[i];
-
-		if (PyFloat_Check(signal)) {
-			const sample_t value = PyFloat_AS_DOUBLE(signal);
-			size_t j;
-
-			for (j = 0; j < SIGNAL_VECTOR_LEN; ++j)
-				v->data[j] = value;
-
-			v->signal = NULL;
-		} else if (PyCallable_Check(signal)) {
-			v->signal = splat_signal_func;
-		} else if (PyObject_TypeCheck(signal, &splat_FragmentType)) {
-			Fragment *sig_frag = (Fragment *)signal;
-
-			if (sig_frag->length != frag->length) {
-				PyErr_SetString(PyExc_ValueError,
-						"fragment size mismatch");
-				return -1;
-			}
-
-			v->signal = splat_signal_frag;
-		} else {
-			PyErr_SetString(PyExc_TypeError,
-					"unsupported signal type");
-			return -1;
-		}
-
-		v->obj = signal;
-	}
-
-	s->cur = 0;
-	s->end = 0;
-	s->len = 0;
-	s->error = 0;
-
-	return 0;
-}
-
-static void splat_signal_free(struct splat_signal *s)
-{
-	Py_DECREF(s->py_args);
-	PyMem_Free(s->vectors);
-}
-
-static int splat_signal_next(struct splat_signal *s)
-{
-	size_t i;
-
-	s->cur += s->len;
-	s->end = min((s->cur + SIGNAL_VECTOR_LEN), s->frag->length);
-	s->len = s->end - s->cur;
-
-	if (!s->len)
-		return SIGNAL_VECTOR_STOP;
-
-	for (i = 0; i < s->n_vectors; ++i) {
-		struct signal_vector *v = &s->vectors[i];
-
-		if ((v->signal != NULL) && (v->signal(s, v)))
-			return SIGNAL_VECTOR_STOP;
-	}
-
-	return SIGNAL_VECTOR_CONTINUE;
-}
 
 /* ----------------------------------------------------------------------------
  * _splat methods
@@ -2100,6 +2228,7 @@ PyMODINIT_FUNC init_splat(void)
 		const char *name;
 	};
 	static const struct splat_type splat_types[] = {
+		{ &splat_SignalType, "Signal" },
 		{ &splat_FragmentType, "Fragment" },
 		{ NULL, NULL }
 	};

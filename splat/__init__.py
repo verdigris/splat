@@ -16,6 +16,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from _splat import lin2dB, dB2lin, sample_precision
+from _splat import Signal
 
 __all__ = ['gen', 'data', 'filters', 'sources', 'scales', 'interpol']
 
