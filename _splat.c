@@ -139,7 +139,7 @@ static int splat_signal_next(struct splat_signal *s);
 struct Signal_object {
 	PyObject_HEAD;
 	int init;
-	PyObject *signal;
+	PyObject **signals;
 	struct splat_signal sig;
 	enum signal_ret stat;
 	unsigned offset;
@@ -148,10 +148,22 @@ typedef struct Signal_object Signal;
 
 static PyTypeObject splat_SignalType;
 
+static void Signal_free_signals(Signal *self, size_t n)
+{
+	size_t i;
+
+	for (i = 0; i < n; ++i)
+		Py_DECREF(self->signals[i]);
+
+	PyMem_Free(self->signals);
+}
+
 static void Signal_dealloc(Signal *self)
 {
 	if (self->init) {
 		splat_signal_free(&self->sig);
+		Signal_free_signals(self, self->sig.n_vectors);
+		Py_DECREF(self->sig.frag);
 		self->init = 0;
 	}
 
@@ -163,16 +175,40 @@ static int Signal_init(Signal *self, PyObject *args)
 	Fragment *frag;
 	PyObject *sig_obj;
 
+	size_t n_signals;
+	size_t i;
+
 	if (!PyArg_ParseTuple(args, "O!O", &splat_FragmentType, &frag,
 			      &sig_obj))
 		return -1;
 
-	self->signal = sig_obj;
+	if (PyTuple_Check(sig_obj))
+		n_signals = PyTuple_GET_SIZE(sig_obj);
+	else
+		n_signals = 1;
 
-	if (splat_signal_init(&self->sig, frag, &self->signal, 1))
+	self->signals = PyMem_Malloc(sizeof(PyObject *) * n_signals);
+
+	if (self->signals == NULL) {
+		PyErr_NoMemory();
 		return -1;
+	}
 
-	Py_INCREF(self->signal);
+	if (PyTuple_Check(sig_obj)) {
+		for (i = 0; i < n_signals; ++i)
+			self->signals[i] = PyTuple_GET_ITEM(sig_obj, i);
+	} else {
+		self->signals[0] = sig_obj;
+	}
+
+	for (i = 0; i < n_signals; ++i)
+		Py_INCREF(self->signals[i]);
+
+	if (splat_signal_init(&self->sig, frag, self->signals, n_signals)) {
+		Signal_free_signals(self, n_signals);
+		return -1;
+	}
+
 	Py_INCREF(self->sig.frag);
 	self->offset = 0;
 	self->stat = SIGNAL_VECTOR_CONTINUE;
@@ -205,6 +241,9 @@ PyDoc_STRVAR(Signal_next_doc,
 
 static PyObject *Signal_next(Signal *self, PyObject *_)
 {
+	PyObject *ret_tuple;
+	size_t i;
+
 	if ((self->offset == self->sig.end) &&
 	    (self->stat == SIGNAL_VECTOR_CONTINUE)) {
 		self->stat = splat_signal_next(&self->sig);
@@ -214,7 +253,24 @@ static PyObject *Signal_next(Signal *self, PyObject *_)
 	if (self->stat == SIGNAL_VECTOR_STOP)
 		Py_RETURN_NONE;
 
-	return PyFloat_FromDouble(self->sig.vectors[0].data[self->offset++]);
+	ret_tuple = PyTuple_New(self->sig.n_vectors);
+
+	if (ret_tuple == NULL)
+		return NULL;
+
+	for (i = 0; i < self->sig.n_vectors; ++i) {
+		PyObject *val = PyFloat_FromDouble(
+			self->sig.vectors[i].data[self->offset]);
+
+		if (val == NULL)
+			return NULL;
+
+		PyTuple_SET_ITEM(ret_tuple, i, val);
+	}
+
+	self->offset++;
+
+	return ret_tuple;
 }
 
 static PyMethodDef Signal_methods[] = {
@@ -513,7 +569,7 @@ static PyObject *Fragment_sq_item(Fragment *self, Py_ssize_t i)
 	sample = PyTuple_New(self->n_channels);
 
 	if (sample == NULL)
-		return PyErr_NoMemory();
+		return NULL;
 
 	for (c = 0; c < self->n_channels; ++c) {
 		const sample_t s = self->data[c][i];

@@ -88,13 +88,13 @@ def test_signal():
     float_value = 1.234
     sig_float = splat.Signal(frag, float_value)
     for i in range(len(frag)):
-        if sig_float.next() != float_value:
+        if sig_float.next() != (float_value,):
             print("Incorrect float signal value")
             return False
     func = lambda x: x * 0.1469
     sig_func = splat.Signal(frag, func)
     for i in range(len(frag)):
-        x, y = func(frag.n2s(i)), sig_func.next()
+        x, (y,) = func(frag.n2s(i)), sig_func.next()
         if not floatcmp(x, y):
             print("Incorrect function signal value: {} {}".format(x, y))
             return False
@@ -102,9 +102,16 @@ def test_signal():
     splat.sources.sine(frag2, 456.789, 0.0, 0.0)
     sig_frag = splat.Signal(frag, frag2)
     for x in frag2:
-        y = (sig_frag.next(),)
+        y = sig_frag.next()
         if x != y:
             print("Incorrect fragment signal value: {} {}".format(x, y))
+            return False
+    sig_mixed = splat.Signal(frag, (func, float_value))
+    for i in range(len(frag)):
+        x, (y, z) = func(frag.n2s(i)), sig_mixed.next()
+        if not floatcmp(x, y) or z != float_value:
+            print("Incorrect mixed signal value: {} {}".format(
+                    (x, float_value), (y, z)))
             return False
     return True
 set_id(test_signal, "Signal")
