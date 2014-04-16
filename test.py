@@ -5,10 +5,13 @@ try:
     from cStringIO import StringIO
 except ImportError:
     from StringIO import StringIO
+import splat
 import splat.data
 import splat.gen
 import splat.sources
 import splat.interpol
+
+splat.check_version((1, 1))
 
 g_id = 1
 
