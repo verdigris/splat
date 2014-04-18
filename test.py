@@ -84,31 +84,40 @@ def test_gen_frag():
 set_id(test_gen_frag, "Generator Fragment")
 
 def test_signal():
-    frag = splat.data.Fragment(duration=0.01)
+    duration = 0.0123
+    x1 = int(duration * 0.234)
+    x2 = int(duration * 0.789)
+    frag = splat.data.Fragment(duration=duration)
     float_value = 1.234
+    float_tuple = (float_value,)
     sig_float = splat.Signal(frag, float_value)
-    for i in range(len(frag)):
-        if sig_float.next() != (float_value,):
-            print("Incorrect float signal value")
+    if len(sig_float) != len(frag):
+        print("Signal and Fragment lengths mismatch: {} {}".format(
+                len(sig_float), len(frag)))
+        return False
+    for i, s in enumerate(splat.Signal(frag, float_value)):
+        if s != float_tuple:
+            print("Incorrect float signal value[{}]: {} {}".format(
+                    i, s, float_tuple))
             return False
+    if sig_float[x1] != sig_float[x2] != float_tuple:
+        print("Incorrect float signal indexed values")
+        return False
     func = lambda x: x * 0.1469
-    sig_func = splat.Signal(frag, func)
-    for i in range(len(frag)):
-        x, (y,) = func(frag.n2s(i)), sig_func.next()
+    (y1, y2) = (func(x) for x in (x1, x2))
+    for i, (y,) in enumerate(splat.Signal(frag, func)):
+        x = func(frag.n2s(i))
         if not floatcmp(x, y):
-            print("Incorrect function signal value: {} {}".format(x, y))
+            print("Incorrect function signal value[{}]: {} {}".format(i, x, y))
             return False
-    frag2 = splat.data.Fragment(duration=0.01, channels=1)
+    frag2 = splat.data.Fragment(duration=duration, channels=1)
     splat.sources.sine(frag2, 456.789, 0.0, 0.0)
-    sig_frag = splat.Signal(frag, frag2)
-    for x in frag2:
-        y = sig_frag.next()
+    for x, y in zip(frag2, splat.Signal(frag, frag2)):
         if x != y:
             print("Incorrect fragment signal value: {} {}".format(x, y))
             return False
-    sig_mixed = splat.Signal(frag, (func, float_value))
-    for i in range(len(frag)):
-        x, (y, z) = func(frag.n2s(i)), sig_mixed.next()
+    for i, (y, z) in enumerate(splat.Signal(frag, (func, float_value))):
+        x = func(frag.n2s(i))
         if not floatcmp(x, y) or z != float_value:
             print("Incorrect mixed signal value: {} {}".format(
                     (x, float_value), (y, z)))

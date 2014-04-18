@@ -133,6 +133,8 @@ static int splat_signal_init(struct splat_signal *s, Fragment *frag,
 			     PyObject **signals, size_t n_signals);
 static void splat_signal_free(struct splat_signal *s);
 static int splat_signal_next(struct splat_signal *s);
+static ssize_t splat_signal_get(struct splat_signal *s, size_t n);
+static PyObject *splat_signal_tuple(struct splat_signal *s, size_t offset);
 
 /* -- Signal class -- */
 
@@ -231,51 +233,36 @@ static PyObject *Signal_new(PyTypeObject *type, PyObject *args, PyObject *kw)
 	return (PyObject *)self;
 }
 
-/* Signal methods */
+/* Signal sequence interface */
 
-PyDoc_STRVAR(Signal_next_doc,
-"next()\n"
-"\n"
-"Get the next float value from the signal or None if end of fragment length "
-"has been reached.\n");
-
-static PyObject *Signal_next(Signal *self, PyObject *_)
+static Py_ssize_t SignalObj_sq_length(Signal *self)
 {
-	PyObject *ret_tuple;
-	size_t i;
-
-	if ((self->offset == self->sig.end) &&
-	    (self->stat == SIGNAL_VECTOR_CONTINUE)) {
-		self->stat = splat_signal_next(&self->sig);
-		self->offset = 0;
-	}
-
-	if (self->stat == SIGNAL_VECTOR_STOP)
-		Py_RETURN_NONE;
-
-	ret_tuple = PyTuple_New(self->sig.n_vectors);
-
-	if (ret_tuple == NULL)
-		return NULL;
-
-	for (i = 0; i < self->sig.n_vectors; ++i) {
-		PyObject *val = PyFloat_FromDouble(
-			self->sig.vectors[i].data[self->offset]);
-
-		if (val == NULL)
-			return NULL;
-
-		PyTuple_SET_ITEM(ret_tuple, i, val);
-	}
-
-	self->offset++;
-
-	return ret_tuple;
+	return self->sig.frag->length;
 }
 
-static PyMethodDef Signal_methods[] = {
-	{ "next", (PyCFunction)Signal_next, METH_NOARGS, Signal_next_doc },
-	{ NULL }
+static PyObject *SignalObj_sq_item(Signal *self, Py_ssize_t i)
+{
+	ssize_t offset;
+
+	offset = splat_signal_get(&self->sig, i);
+
+	if (offset < 0)
+		return NULL;
+
+	return splat_signal_tuple(&self->sig, offset);
+}
+
+static PySequenceMethods Signal_as_sequence = {
+	(lenfunc)SignalObj_sq_length, /* sq_length (lenfunc) */
+	NULL, /* sq_concat (binaryfunc) */
+	NULL, /* sq_repeat (ssizeargfunc) */
+	(ssizeargfunc)SignalObj_sq_item, /* sq_item (ssizeargfunc) */
+	NULL, /* sq_slice (ssizessizeargfunc) */
+	NULL, /* sq_ass_item (ssizeobjargproc) */
+	NULL, /* sq_ass_slice (ssizessizeobjargproc) */
+	NULL, /* sq_contains (objobjproc) */
+	NULL, /* sq_inplace_concat (binaryfunc) */
+	NULL, /* sq_inplace_repeat (ssizeargfunc) */
 };
 
 static PyTypeObject splat_SignalType = {
@@ -291,7 +278,7 @@ static PyTypeObject splat_SignalType = {
 	0,                                 /* tp_compare */
 	0,                                 /* tp_repr */
 	0,                                 /* tp_as_number */
-	0,                                 /* tp_as_sequence */
+	&Signal_as_sequence,               /* tp_as_sequence */
 	0,                                 /* tp_as_mapping */
 	0,                                 /* tp_hash  */
 	0,                                 /* tp_call */
@@ -307,7 +294,7 @@ static PyTypeObject splat_SignalType = {
 	0,                                 /* tp_weaklistoffset */
 	0,                                 /* tp_iter */
 	0,                                 /* tp_iternext */
-	Signal_methods,                    /* tp_methods */
+	0,                                 /* tp_methods */
 	0,                                 /* tp_members */
 	0,                                 /* tp_getset */
 	0,                                 /* tp_base */
@@ -426,16 +413,19 @@ static void splat_signal_free(struct splat_signal *s)
 	PyMem_Free(s->vectors);
 }
 
-static int splat_signal_next(struct splat_signal *s)
+static int splat_signal_cache(struct splat_signal *s, size_t cur)
 {
 	size_t i;
 
-	s->cur += s->len;
+	if (cur >= s->frag->length)
+		return SIGNAL_VECTOR_STOP;
+
+	if ((cur == s->cur) && s->len)
+		return SIGNAL_VECTOR_CONTINUE;
+
+	s->cur = cur;
 	s->end = min((s->cur + SIGNAL_VECTOR_LEN), s->frag->length);
 	s->len = s->end - s->cur;
-
-	if (!s->len)
-		return SIGNAL_VECTOR_STOP;
 
 	for (i = 0; i < s->n_vectors; ++i) {
 		struct signal_vector *v = &s->vectors[i];
@@ -445,6 +435,52 @@ static int splat_signal_next(struct splat_signal *s)
 	}
 
 	return SIGNAL_VECTOR_CONTINUE;
+}
+
+static int splat_signal_next(struct splat_signal *s)
+{
+	return splat_signal_cache(s, (s->cur + s->len));
+}
+
+static ssize_t splat_signal_get(struct splat_signal *s, size_t n)
+{
+	div_t co; /* cursor, offset */
+	size_t cur;
+
+	if (n >= s->frag->length)
+		return -1;
+
+	co = div(n, SIGNAL_VECTOR_LEN);
+	cur = co.quot * SIGNAL_VECTOR_LEN;
+
+	if (splat_signal_cache(s, cur) == SIGNAL_VECTOR_STOP)
+		return -1;
+
+	return co.rem;
+}
+
+static PyObject *splat_signal_tuple(struct splat_signal *s, size_t offset)
+{
+	PyObject *sig_tuple;
+	size_t i;
+
+	sig_tuple = PyTuple_New(s->n_vectors);
+
+	if (sig_tuple == NULL)
+		return NULL;
+
+	for (i = 0; i < s->n_vectors; ++i) {
+		PyObject *val = PyFloat_FromDouble(s->vectors[i].data[offset]);
+
+		if (val == NULL) {
+			Py_DECREF(sig_tuple);
+			return NULL;
+		}
+
+		PyTuple_SET_ITEM(sig_tuple, i, val);
+	}
+
+	return sig_tuple;
 }
 
 
