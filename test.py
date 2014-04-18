@@ -33,8 +33,9 @@ def check_md5(frag, hexdigest):
         return True
 
 def check_multiple_md5(frags, hexdigest):
-    for frag in frags:
+    for i, frag in enumerate(frags):
         if check_md5(frag, hexdigest) is False:
+            print("frag {}".format(i))
             return False
     return True
 
