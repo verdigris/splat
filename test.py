@@ -257,14 +257,18 @@ def test_polynomial():
 set_id(test_polynomial, "Polynomial")
 
 def test_spline():
-    pts = [(1.23, 4.56), (4.32, 2.54, 1.25), (5.458, -4.247)]
-    s = splat.interpol.Spline(pts)
+    pts = [(1.45, 6.78), (2.56, -3.56), (12.65, 9.6), (13.8, 1.2), (18.9, 5.0)]
+    n = len(pts) - 1
+    s0 = splat.interpol.Spline(pts)
+    s1 = splat.interpol.Spline(pts, n=n)
     for p in pts:
         x, y = p[0], p[1]
-        y1 = s.value(x)
-        if not floatcmp(y, y1):
-            print("Spline error: s({0}) = {1} instead of {2}".format(x, y1, y))
+        y0, y1 = (s.value(x) for s in (s0, s1))
+        if not floatcmp(y, y0) or not floatcmp(y, y1):
+            print("Spline error: s({}) = ({}, {}) instead of {}".format(
+                    x, y0, y1, y))
             return False
+
     return True
 set_id(test_spline, "Spline")
 
