@@ -144,7 +144,7 @@ class Spline(object):
         1`` in order to match the specified slope value, so 3 by default.
         """
         self._pts = list(tuple(float(x) for x in pt) for pt in sorted(pts))
-        self._n = 2
+        self._n = n
         self._pols = []
         self._build()
 
@@ -241,4 +241,4 @@ class Spline(object):
             self._pols.append((x0, x1, m.poly))
 
         if self._n > 2:
-            self._pols.append((x1, pts[-1][0], m.poly))
+            self._pols.append((x1, self._pts[-1][0], m.poly))
