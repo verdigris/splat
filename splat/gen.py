@@ -488,6 +488,7 @@ class ParticleGenerator(Generator):
             self._start = min(self.start, start)
             self._end = max(self.end, end)
 
+        freq = _splat.Signal(self.frag, freq)
         n_events = self._pool.count()
         step = n_events / self.progress_step
         progress = 0
@@ -512,7 +513,8 @@ class ParticleGenerator(Generator):
                 levels = tuple(g for i in range(self.frag.channels))
 
             if self._q:
-                p_freq = self.curve(freq, p.freq, self._q.value(p.start))
+                p_freq = self.curve(freq[self.frag.s2n(p.start)][0], p.freq,
+                                    self._q.value(p.start))
             else:
                 p_freq = p.freq
 
