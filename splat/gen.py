@@ -488,7 +488,7 @@ class ParticleGenerator(Generator):
             self._start = min(self.start, start)
             self._end = max(self.end, end)
 
-        freq = _splat.Signal(self.frag, freq)
+        freq = _splat.Signal(self.frag, freq, (self.end - self.start))
         n_events = self._pool.count()
         step = n_events / self.progress_step
         progress = 0
