@@ -118,7 +118,8 @@ enum signal_ret {
 };
 
 struct splat_signal {
-	Fragment *frag;
+	size_t length;
+	unsigned rate;
 	size_t n_vectors;
 	struct signal_vector *vectors;
 	PyObject *py_float;
@@ -126,11 +127,11 @@ struct splat_signal {
 	size_t cur;
 	size_t end;
 	size_t len;
-	int error;
 };
 
-static int splat_signal_init(struct splat_signal *s, Fragment *frag,
-			     PyObject **signals, size_t n_signals);
+static int splat_signal_init(struct splat_signal *s, size_t length,
+			     unsigned rate, PyObject **signals,
+			     size_t n_signals);
 static void splat_signal_free(struct splat_signal *s);
 static int splat_signal_next(struct splat_signal *s);
 static ssize_t splat_signal_get(struct splat_signal *s, size_t n);
@@ -165,7 +166,6 @@ static void Signal_dealloc(Signal *self)
 	if (self->init) {
 		splat_signal_free(&self->sig);
 		Signal_free_signals(self, self->sig.n_vectors);
-		Py_DECREF(self->sig.frag);
 		self->init = 0;
 	}
 
@@ -176,18 +176,31 @@ static int Signal_init(Signal *self, PyObject *args)
 {
 	Fragment *frag;
 	PyObject *sig_obj;
+	double duration = 0.0;
 
 	size_t n_signals;
 	size_t i;
+	size_t length;
 
-	if (!PyArg_ParseTuple(args, "O!O", &splat_FragmentType, &frag,
-			      &sig_obj))
+	if (!PyArg_ParseTuple(args, "O!O|d", &splat_FragmentType, &frag,
+			      &sig_obj, &duration))
 		return -1;
 
 	if (PyTuple_Check(sig_obj))
 		n_signals = PyTuple_GET_SIZE(sig_obj);
 	else
 		n_signals = 1;
+
+	if (duration != 0.0) {
+		if (duration < 0.0) {
+			PyErr_SetString(PyExc_ValueError, "negative duration");
+			return -1;
+		}
+
+		length = duration * frag->rate;
+	} else {
+		length = frag->length;
+	}
 
 	self->signals = PyMem_Malloc(sizeof(PyObject *) * n_signals);
 
@@ -206,12 +219,12 @@ static int Signal_init(Signal *self, PyObject *args)
 	for (i = 0; i < n_signals; ++i)
 		Py_INCREF(self->signals[i]);
 
-	if (splat_signal_init(&self->sig, frag, self->signals, n_signals)) {
+	if (splat_signal_init(&self->sig, length, frag->rate,
+			      self->signals, n_signals)) {
 		Signal_free_signals(self, n_signals);
 		return -1;
 	}
 
-	Py_INCREF(self->sig.frag);
 	self->offset = 0;
 	self->stat = SIGNAL_VECTOR_CONTINUE;
 	self->init = 1;
@@ -237,7 +250,7 @@ static PyObject *Signal_new(PyTypeObject *type, PyObject *args, PyObject *kw)
 
 static Py_ssize_t SignalObj_sq_length(Signal *self)
 {
-	return self->sig.frag->length;
+	return self->sig.length;
 }
 
 static PyObject *SignalObj_sq_item(Signal *self, Py_ssize_t i)
@@ -246,8 +259,10 @@ static PyObject *SignalObj_sq_item(Signal *self, Py_ssize_t i)
 
 	offset = splat_signal_get(&self->sig, i);
 
-	if (offset < 0)
+	if (offset < 0) {
+		PyErr_SetString(PyExc_IndexError, "out of signal range");
 		return NULL;
+	}
 
 	return splat_signal_tuple(&self->sig, offset);
 }
@@ -311,7 +326,7 @@ static PyTypeObject splat_SignalType = {
 
 static int splat_signal_func(struct splat_signal *s, struct signal_vector *v)
 {
-	const double rate = s->frag->rate;
+	const double rate = s->rate;
 	size_t i;
 
 	for (i = s->cur; i < s->end; ++i) {
@@ -340,12 +355,14 @@ static int splat_signal_frag(struct splat_signal *s, struct signal_vector *v)
 	return 0;
 }
 
-static int splat_signal_init(struct splat_signal *s, Fragment *frag,
-			     PyObject **signals, size_t n_signals)
+static int splat_signal_init(struct splat_signal *s, size_t length,
+			     unsigned rate, PyObject **signals,
+			     size_t n_signals)
 {
 	size_t i;
 
-	s->frag = frag;
+	s->length = length;
+	s->rate = rate;
 	s->n_vectors = n_signals;
 	s->vectors = PyMem_Malloc(n_signals * sizeof(struct signal_vector));
 
@@ -383,9 +400,15 @@ static int splat_signal_init(struct splat_signal *s, Fragment *frag,
 		} else if (PyObject_TypeCheck(signal, &splat_FragmentType)) {
 			Fragment *sig_frag = (Fragment *)signal;
 
-			if (sig_frag->length != frag->length) {
+			if (sig_frag->n_channels != 1) {
 				PyErr_SetString(PyExc_ValueError,
-						"fragment size mismatch");
+				"Fragment signal must have only 1 channel");
+				return -1;
+			}
+
+			if (s->length > sig_frag->length) {
+				PyErr_SetString(PyExc_ValueError,
+				"Fragment signal length too short");
 				return -1;
 			}
 
@@ -402,7 +425,6 @@ static int splat_signal_init(struct splat_signal *s, Fragment *frag,
 	s->cur = 0;
 	s->end = 0;
 	s->len = 0;
-	s->error = 0;
 
 	return 0;
 }
@@ -417,14 +439,14 @@ static int splat_signal_cache(struct splat_signal *s, size_t cur)
 {
 	size_t i;
 
-	if (cur >= s->frag->length)
+	if (cur >= s->length)
 		return SIGNAL_VECTOR_STOP;
 
 	if ((cur == s->cur) && s->len)
 		return SIGNAL_VECTOR_CONTINUE;
 
 	s->cur = cur;
-	s->end = min((s->cur + SIGNAL_VECTOR_LEN), s->frag->length);
+	s->end = min((s->cur + SIGNAL_VECTOR_LEN), s->length);
 	s->len = s->end - s->cur;
 
 	for (i = 0; i < s->n_vectors; ++i) {
@@ -447,7 +469,7 @@ static ssize_t splat_signal_get(struct splat_signal *s, size_t n)
 	div_t co; /* cursor, offset */
 	size_t cur;
 
-	if (n >= s->frag->length)
+	if (n >= s->length)
 		return -1;
 
 	co = div(n, SIGNAL_VECTOR_LEN);
@@ -1098,7 +1120,8 @@ static PyObject *Fragment_offset(Fragment *self, PyObject *args)
 	} else {
 		struct splat_signal sig;
 
-		if (splat_signal_init(&sig, self, &offset, 1))
+		if (splat_signal_init(&sig, self->length, self->rate, &offset,
+				      1))
 			return NULL;
 
 		while (splat_signal_next(&sig) == SIGNAL_VECTOR_CONTINUE) {
@@ -1111,6 +1134,8 @@ static PyObject *Fragment_offset(Fragment *self, PyObject *args)
 					self->data[c][i] += value;
 			}
 		}
+
+		splat_signal_free(&sig);
 	}
 
 	Py_RETURN_NONE;
@@ -1381,7 +1406,7 @@ static int splat_sine_signals(Fragment *frag, PyObject **levels,
 	for (c = 0; c < frag->n_channels; ++c)
 		signals[SIG_AMP + c] = levels[c];
 
-	if (splat_signal_init(&sig, frag, signals,
+	if (splat_signal_init(&sig, frag->length, frag->rate, signals,
 			      (SIG_AMP + frag->n_channels)))
 		return -1;
 
@@ -1495,7 +1520,7 @@ static int splat_square_signals(Fragment *frag, PyObject **levels,
 	for (c = 0; c < frag->n_channels; ++c)
 		signals[SIG_AMP + c] = levels[c];
 
-	if (splat_signal_init(&sig, frag, signals,
+	if (splat_signal_init(&sig, frag->length, frag->rate, signals,
 			      (SIG_AMP + frag->n_channels)))
 		return -1;
 
@@ -1629,7 +1654,7 @@ static int splat_triangle_signals(Fragment *frag, PyObject **levels,
 	for (c = 0; c < frag->n_channels; ++c)
 		signals[SIG_AMP + c] = levels[c];
 
-	if (splat_signal_init(&sig, frag, signals,
+	if (splat_signal_init(&sig, frag->length, frag->rate, signals,
 			      (SIG_AMP + frag->n_channels)))
 		return -1;
 
@@ -1777,7 +1802,7 @@ static int splat_overtones_mixed(Fragment *frag, PyObject **levels,
 	for (c = 0; c < frag->n_channels; ++c)
 		signals[SIG_AMP + c] = levels[c];
 
-	if (splat_signal_init(&sig, frag, signals,
+	if (splat_signal_init(&sig, frag->length, frag->rate, signals,
 			      (SIG_AMP + frag->n_channels)))
 		return -1;
 
@@ -1865,7 +1890,7 @@ static int splat_overtones_signal(Fragment *frag, PyObject **levels,
 		}
 	}
 
-	if (splat_signal_init(&sig, frag, signals, sig_n))
+	if (splat_signal_init(&sig, frag->length, frag->rate, signals, sig_n))
 		return -1;
 
 	while (splat_signal_next(&sig) == SIGNAL_VECTOR_CONTINUE) {
