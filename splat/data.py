@@ -26,11 +26,11 @@ def file_ext(file_name):
 # -----------------------------------------------------------------------------
 # Audio file openers
 
-def open_wav(file_name):
-    if file_ext(file_name) != 'wav':
+def open_wav(file, fmt=None):
+    if fmt != 'wav' and file_ext(file) != 'wav':
         return None
 
-    w = wave.open(file_name, 'rb')
+    w = wave.open(file, 'rb')
     channels = w.getnchannels()
     n_frames = w.getnframes()
     sample_rate = w.getframerate()
@@ -58,17 +58,19 @@ audio_file_openers = [open_wav,]
 # -----------------------------------------------------------------------------
 # Audio file savers
 
-def save_wav(file_name, frag, start, end, sample_width=2):
-    w = wave.open(file_name, 'w')
+def save_wav(file, frag, start=None, end=None, sample_width=2):
+    w = wave.open(file, 'w')
     w.setnchannels(frag.channels)
     w.setsampwidth(sample_width)
     w.setframerate(frag.sample_rate)
     w.setnframes(len(frag))
-    raw_bytes = frag.as_bytes(sample_width)
-    k = frag.channels * sample_width
-    start_n = start * k
-    end_n = end * k
-    w.writeframes(raw_bytes[start_n:end_n])
+    args = (sample_width,)
+    if start is not None:
+        args += (start,)
+    if end is not None:
+        args += (end,)
+    raw_bytes = frag.as_bytes(*args)
+    w.writeframes(buffer(raw_bytes))
     w.close()
 
 audio_file_savers = { 'wav': save_wav, }
@@ -101,7 +103,7 @@ class Fragment(_splat.Fragment):
     """
 
     @classmethod
-    def open(cls, file_name):
+    def open(cls, file, fmt=None):
         """Open a file to create a sound fragment by importing audio data.
 
         Open a sound file specified by ``file_name`` and import its contents
@@ -109,8 +111,9 @@ class Fragment(_splat.Fragment):
         returned.  Only a limited set of formats are supported (currently only
         ``wav``).  All the samples are converted to floating point values.
         """
+        fmt = Fragment._get_fmt(file, fmt)
         for opener in audio_file_openers:
-            frag = opener(file_name)
+            frag = opener(file, fmt)
             if frag is not None:
                 return frag
 
@@ -124,31 +127,36 @@ class Fragment(_splat.Fragment):
         """Convert a time in seconds ``s`` into a sample index number."""
         return int(s * self.sample_rate)
 
-    def save(self, file_name, fmt=None, start=0, end=None, *args, **kw):
+    def save(self, file, fmt=None, start=None, end=None, *args, **kw):
         """Save the contents of the audio fragment into a file.
 
-        A file called ``file_name`` is created and the contents of the audio
-        fragment are written to it.  It is possible to save only a part of the
+        If ``file`` is a string, a file is create with this name; otherwise, it
+        must be a file-like object.  The contents of the audio fragment are
+        written to this file.  It is possible to save only a part of the
         fragment using the ``start`` and ``end`` arguments with times in
         seconds.
 
         The ``fmt`` argument is a string to identify the output file format to
         use.  If ``None``, the file name extension is used.  Currently only
-        ``wav`` is supported.  Extra arguments that are specific to the file
-        format can be added.
+        ``wav`` is supported.  When using a file-like object, the format needs
+        to be specified.  Extra arguments that are specific to the file format
+        can be added.
 
         The ``wav`` format accepts an extra ``sample_width`` argument to
         specify the number of bytes per sample for each channel, which is 2 by
         default (16 bits).
         """
-        if fmt is None:
-            fmt = file_ext(file_name)
+        fmt = Fragment._get_fmt(file, fmt)
         saver = audio_file_savers.get(fmt, None)
         if saver is None:
             raise Exception("Unsupported file format: {0}".format(fmt))
-        if end is None:
-            end_n = len(self)
-        else:
-            end_n = int(end * self.sample_rate)
-        start_n = int(start * self.sample_rate)
-        saver(file_name, self, start_n, end_n, *args, **kw)
+        saver(file, self, start, end, *args, **kw)
+
+    @classmethod
+    def _get_fmt(self, file, fmt):
+        if fmt is None:
+            if isinstance(file, str) is True:
+                fmt = file_ext(file)
+            else:
+                raise Exception("Format required with file objects")
+        return fmt

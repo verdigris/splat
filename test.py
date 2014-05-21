@@ -47,8 +47,8 @@ def check_samples(frag, samples):
                 return False
     return True
 
-def floatcmp(f1, f2):
-    return abs(f1 - f2) < (10 ** -6)
+def floatcmp(f1, f2, e=(10 ** -6)):
+    return abs(f1 - f2) < e
 
 # -----------------------------------------------------------------------------
 # test functions
@@ -77,6 +77,65 @@ def test_frag_offset():
             check_multiple_md5([frag, frag_signal],
                                '248070c79f99014cf800d05ea81e0679'))
 set_id(test_frag_offset, "Fragment offset")
+
+def test_frag_as_bytes():
+    duration = 0.1
+    sample_width = 2
+    frag = splat.data.Fragment(duration=duration, channels=1)
+    length = len(frag)
+    for i in range(length):
+        frag[i] = (float(i) / length,)
+    x = list(int(length * r) for r in (0.0, 0.123, 0.345, 0.623, 0.987, 0.99))
+    y = list((float(i) / length) for i in x)
+    bytes = frag.as_bytes(sample_width)
+    max16 = (2 ** 15) - 1
+    for i, j in zip(x, y):
+        val16 = bytes[i * 2] + (bytes[(i * 2) + 1] * 256)
+        cmp16 = int(j * max16)
+        if val16 != cmp16:
+            print("Incorrect 16 bits value: {} instead of {}".format(
+                    val16, cmp16))
+            return False
+    i0, i1 = (int(length * r) for r in (0.23, 0.83))
+    x0, x1 = (frag.n2s(i) for i in (i0, i1))
+    bytes = frag.as_bytes(sample_width, x0, x1)
+    if len(bytes) != ((i1 - i0) * sample_width):
+        print("Incorrect length of bytes array")
+        return False
+    for i, j in zip(x, y):
+        if (i < i0) or (i > i1):
+            continue
+        k = i - i0
+        val16 = bytes[k * 2] + (bytes[(k * 2) + 1] * 256)
+        cmp16 = int(j * max16)
+        if val16 != cmp16:
+            print("Incorrect 16 bits value: {} instead of {}".format(
+                    val16, cmp16))
+            return False
+    bytes = frag.as_bytes(sample_width, -2.3, (duration * 1.2))
+    cmp_len = len(frag) * sample_width
+    if len(bytes) != cmp_len:
+        print("Incorrect data length: {} instead of P{".format(
+                len(bytes), cmp_len))
+    return True
+set_id(test_frag_as_bytes, "Fragment.as_bytes")
+
+def test_frag_save():
+    duration = 0.1
+    frag = splat.data.Fragment(duration=duration, channels=1)
+    length = len(frag)
+    for i in range(length):
+        frag[i] = (float(i) * 0.9 / length,)
+    f = StringIO()
+    frag.save(f, 'wav')
+    f.reset()
+    frag2 = splat.data.Fragment.open(f, 'wav')
+    for i in range(length):
+        if not floatcmp(frag[i][0], frag2[i][0], (10 ** -4)):
+            print("Fragment mismatch", i, frag[i], frag2[i])
+            return False
+    return True
+set_id(test_frag_save, "Fragment.save")
 
 def test_gen_frag():
     gen = splat.gen.SineGenerator()

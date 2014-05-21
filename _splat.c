@@ -64,6 +64,8 @@
 	((_val) < (_min) ? (_min) : ((_val) > (_max) ? (_max) : (_val)))
 #endif
 
+#define NO_DOUBLE ((double)0xFFFFFFFF)
+
 /* Type of each sample */
 #if USE_V4SF /* for speed and smaller memory footprint */
 typedef float sample_t;
@@ -902,15 +904,20 @@ static PyObject *Fragment_import_bytes(Fragment *self, PyObject *args)
 static PyObject *Fragment_as_bytes(Fragment *self, PyObject *args)
 {
 	unsigned sample_width;
+	double start = NO_DOUBLE;
+	double end = NO_DOUBLE;
 
 	PyObject *bytes_obj;
 	Py_ssize_t bytes_size;
 	const sample_t *it[MAX_CHANNELS];
-	unsigned i;
-	unsigned c;
+	Py_ssize_t start_n;
+	Py_ssize_t end_n;
+	Py_ssize_t length;
+	Py_ssize_t i;
+	Py_ssize_t c;
 	char *out;
 
-	if (!PyArg_ParseTuple(args, "I", &sample_width))
+	if (!PyArg_ParseTuple(args, "I|dd", &sample_width, &start, &end))
 		return NULL;
 
 	if ((sample_width != 1) && (sample_width != 2)) {
@@ -918,23 +925,39 @@ static PyObject *Fragment_as_bytes(Fragment *self, PyObject *args)
 		return NULL;
 	}
 
+	if (start == NO_DOUBLE)
+		start_n = 0;
+	else
+		start_n = max(start, 0.0) * self->rate;
+
+	if (end == NO_DOUBLE)
+		end_n = self->length;
+	else
+		end_n = min((end * self->rate), self->length);
+
+	if (end_n < start_n) {
+		PyErr_SetString(PyExc_ValueError, "end before start time");
+		return NULL;
+	}
+
+	length = end_n - start_n;
 	bytes_obj = PyByteArray_FromStringAndSize("", 0);
 
 	if (bytes_obj == NULL)
 		return PyErr_NoMemory();
 
-	bytes_size = self->length * self->n_channels * sample_width;
+	bytes_size = length * self->n_channels * sample_width;
 
 	if (PyByteArray_Resize(bytes_obj, bytes_size))
 		return PyErr_NoMemory();
 
 	for (c = 0; c < self->n_channels; ++c)
-		it[c] = self->data[c];
+		it[c] = &self->data[c][start_n];
 
 	out = PyByteArray_AS_STRING(bytes_obj);
 
 	if (sample_width == 2) {
-		for (i = 0; i < self->length; ++i) {
+		for (i = 0; i < length; ++i) {
 			for (c = 0; c < self->n_channels; ++c) {
 				const sample_t z = *(it[c]++);
 				int16_t s;
@@ -951,7 +974,7 @@ static PyObject *Fragment_as_bytes(Fragment *self, PyObject *args)
 			}
 		}
 	} else if (sample_width == 1) {
-		for (i = 0; i < self->length; ++i) {
+		for (i = 0; i < length; ++i) {
 			for (c = 0; c < self->n_channels; ++c) {
 				const sample_t z = *(it[c]++);
 				int8_t s;
