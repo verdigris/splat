@@ -15,8 +15,8 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import _splat
 from _splat import lin2dB, dB2lin, sample_precision
-from _splat import Signal
 
 __all__ = ['gen', 'data', 'filters', 'sources', 'scales', 'interpol']
 
@@ -30,3 +30,38 @@ def check_version(ver):
     if ver != VERSION:
         raise Exception("Version mismatch: {0}, required: {1}".format(
                 VERSION, ver))
+
+class Signal(_splat.Signal):
+
+    """A general purpose signal.
+
+    This class provides a thin Python wrapper around the signal functionality
+    implemented in the C ``_splat`` extension.  It takes a signal and provides
+    a sequence object which can be indexed and itertated.  Signals are limited
+    in time and have a fixed duration.
+    """
+
+    def __init__(self, frag, sig_obj, duration=None):
+        """The ``frag`` argument is a :py:class:`splat.data.Fragment` object
+        with which the Signal will be compatible.  This is used to determine
+        the sample rate and the duration of the signal.  Then ``sig_obj`` is
+        the signal, which can be either a floating point value, a callable or a
+        Fragment object.  The ``duration`` can be optionally used to provide an
+        arbitrary Signal duration in seconds, different from the ``frag``
+        duration which is used by default.
+
+        When using a **callable** signal, it must accept a single floating
+        point argument and return a floating point value.  As a minimal
+        example, it may be a lambda function (that's a tremolo)::
+
+          sig = splat.Signal(frag, lambda x: 0.8 + 0.2 * sin(x * 1000.0))
+
+        The input value is often a time value, but it may be any dimension
+        depending on the usage of the Signal.  This is compatible with the
+        :py:meth:`splat.interpol.Spline.value` method, so a Spline object can
+        be used in conjunction with a Signal.
+        """
+        args = (frag, sig_obj)
+        if duration is not None:
+            args += (duration,)
+        super(Signal, self).__init__(*args)

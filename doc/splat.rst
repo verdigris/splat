@@ -128,9 +128,12 @@ low-degree polynomials than a single high degree polynomial.
 
 .. _general_purpose_functions:
 
-General purpose functions
--------------------------
+General purpose functions and classes
+-------------------------------------
 
 .. autofunction:: splat.lin2dB
 .. autofunction:: splat.dB2lin
 .. autofunction:: splat.sample_precision
+
+.. autoclass:: splat.Signal
+   :members:

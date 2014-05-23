@@ -96,16 +96,37 @@ returns interpolated numbers.  There are endless ways to use it within Splat.
 
 .. rubric:: Signals
 
-Finally, there is a recurring Splat concept called **signals**.  They can
-either be a constant floating point value, a Python *callable* (function,
-method...) or a Fragment object.  Splat signals can be used in many places to
-provide modulations and other dynamic behaviour.  For example, sources can be
-called with a :py:meth:`splat.interpol.Spline.value` method as their ampliture
-parameter in order to generate an arbitrary envelope (or amplitude
-modulation).
+Finally, there is a recurring Splat concept called **signals**.  They refer to
+objects which can be either of the following types:
 
-Note: Standard ``_splat`` functions usually detect when all their arguments are
-fixed floating point values and run a faster optimised implementation.
+* a constant *floating point value*,
+* a Python *callable* (function, object method...),
+* a :py:class:`splat.data.Fragment` object.
+
+Splat signals can be used in many places to provide modulations and other
+dynamic behaviour.  For example, sources can be called with a
+:py:meth:`splat.interpol.Spline.value` method as their amplitude parameter in
+order to generate an arbitrary envelope (or amplitude modulation).
+
+This is handled under the hood in the **C extension module** ``_splat`` by
+looking at the type of signal parameters.  Functions usually automatically
+detect when all their arguments are plain floating point values and run a
+faster optimised implementation.  Below is an example with a phase modulation
+to produce a vibrato effect (sounds more like a siren)::
+
+    import math
+    import splat.gen
+
+    gen = splat.gen.TriangleGenerator()
+    vibrato = lambda t: 0.01 * math.sin(15.0 * t)
+    gen.run(0.0, 1.0, 880.0, phase=vibrato)
+    gen.frag.normalize()
+    gen.frag.save("vibrato.wav")
+
+It's also possible to create a :py:class:`splat.Signal` object to use the
+functionality at the Python level.  This basically takes a signal argument
+(float, callable or Fragment) and creates a sequence object which can then be
+indexed.
 
 Typical Splat programme
 -----------------------
