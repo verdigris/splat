@@ -37,7 +37,7 @@ class Signal(_splat.Signal):
 
     This class provides a thin Python wrapper around the signal functionality
     implemented in the C ``_splat`` extension.  It takes a signal and provides
-    a sequence object which can be indexed and itertated.  Signals are limited
+    a sequence object which can be indexed and iterated.  Signals are limited
     in time and have a fixed duration.
     """
 
@@ -57,9 +57,9 @@ class Signal(_splat.Signal):
           sig = splat.Signal(frag, lambda x: 0.8 + 0.2 * sin(x * 1000.0))
 
         The input value is often a time value, but it may be any dimension
-        depending on the usage of the Signal.  This is compatible with the
+        depending on the usage of the signal.  This is compatible with the
         :py:meth:`splat.interpol.Spline.value` method, so a Spline object can
-        be used in conjunction with a Signal.
+        be used in conjunction with a Signal object.
         """
         args = (frag, sig_obj)
         if duration is not None:

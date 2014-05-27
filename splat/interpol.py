@@ -131,10 +131,10 @@ class Spline(object):
     ``n`` or ``n + 1`` if the slope is specified.  This can then be used as a
     continuous ``f(x) = y`` function.  Each polynomial is used to interpolate
     between 2 input points, except at the end where 3 points may share a same
-    polynomial.  They are calculated so that they go through the all of the
-    given ``(x, y)`` 2-tuple coordinates.  The slope (or derivative value) at
-    each point is either determined by the interpolation polynomial or
-    constrained in the last value in 3-tuple input points.
+    polynomial.  They are calculated so that they go through all of the given
+    ``(x, y)`` 2-tuple coordinates.  The slope (or derivative value) at each
+    point is either determined by the interpolation polynomial or constrained
+    in the last value in 3-tuple input points.
     """
 
     def __init__(self, pts, n=2):

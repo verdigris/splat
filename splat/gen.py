@@ -25,16 +25,16 @@ import _splat
 
 class Generator(object):
 
-    """Sound data generator.
+    """Sound data generator
 
     This abstract class provides the basic interface to constitute a sound
     generator.  It uses a :py:class:`splat.data.Fragment` object to store the
     generated and mixed down sound data.  A generator typically runs a sound
     source with start and end times, and parameters such as a frequency and
-    amplitudes.  It allows arbitrary extra arguments to be passed on to the
+    amplitude.  It allows arbitrary additional arguments to be passed on to the
     sound source for extra flexibility.
 
-    The main purpose is to allow a Splat piece to be run with different
+    The main purpose is to allow a *splat* to be run with different
     generators or sound sources without rewriting the code and data that define
     the contents of the piece.
 
@@ -47,7 +47,7 @@ class Generator(object):
     def __init__(self, frag=None, filters=None):
         """The ``frag`` argument must be a :py:class:`splat.data.Fragment`
         instance.  If `None`, a default empty fragment will be automatically
-        created.
+        created (2 channels, 48kHz).
 
         A chain of ``filters`` can also be initialised here with a list of
         filter functions and internally create a
@@ -221,9 +221,10 @@ class OvertonesGenerator(SourceGenerator):
     def ot_decexp(self, k=1.0, n=24):
         """Set harmonic overtones levels following a decreasing exponential.
 
-        For a given ratio ``k`` and a harmonic ``i`` from 1 to a total number
-        of harmonics ``n``, the amplitude of each overtone is set following
-        this function:
+        Harmonics are defined here as overtones with positive integer ratios.
+        For a given parameter ``k`` and a harmonic ``i`` from 1 to a total
+        number of harmonics ``n``, the amplitude of each overtone is set
+        following this function:
 
         .. math::
 
@@ -249,7 +250,7 @@ class Particle(object):
 
     """Sound particle
 
-    A sound particle is a building element to generate complex sounds via a
+    A sound particle is a basic element to generate complex sounds via a
     :py:class:`splat.gen.ParticleGenerator` object.  It only contains the
     parameters to be used in combination with a sound source to create a
     usually short piece of sound.  Sound particles are usually grouped in a
@@ -261,12 +262,22 @@ class Particle(object):
         particle in seconds.  The ``f_log`` argument is a frequency on a
         logarithmic scale, which is then typically used by the sound source to
         generate the actual piece of sound."""
-        self.start = start
-        self.end = end
+        self._start = start
+        self._end = end
         self.f_log = f_log
 
     def __repr__(self):
         return u"[{0}, {1}] {2}".format(self.start, self.end, self.freq)
+
+    @property
+    def start(self):
+        """Start time in seconds."""
+        return self._start
+
+    @property
+    def end(self):
+        """End time in seconds."""
+        return self._end
 
     @property
     def freq(self):
@@ -283,10 +294,10 @@ class ParticlePool(object):
 
     """Pool of sound particles
 
-    The idea behind sound particles is to use statistics over a large
-    population of discrete particles to create a continuous sound.  To achieve
-    this, the ParticlePool can be used to create a population of particles with
-    an envelope of varying density with some randomness in the particle
+    The idea behind sound particles is to use statistics over a large quantity
+    of discrete particles to create a continuous sound.  To achieve this, the
+    ParticlePool can be used to create a population of particles with an
+    envelope of varying density with some randomness in each particle
     parameters.
     """
 
@@ -464,10 +475,10 @@ class ParticleGenerator(Generator):
         self._gain_fuzz, self._relative_gain_fuzz = value
 
     def make_pool(self, min_len=0.05, max_len=0.1, n_slices=20, density=100):
-        """Build the particle pool of particles using all the parameters
-        currently defined.  This discards any existing pool, and can also be
-        used to create a new pool with the same parameters when the previous
-        one has been exhausted."""
+        """Build the pool of particles using all the parameters currently
+        defined.  This discards any existing pool, and can also be used to
+        create a new pool with the same parameters when the previous one has
+        been exhausted."""
         self._pool = ParticlePool(
             self._min_f_log, self._max_f_log, min_len, max_len, self._z,
             n_slices, density)
@@ -477,7 +488,7 @@ class ParticleGenerator(Generator):
         """Get the :py:class:`splat.gen.ParticlePool` object."""
         return self._pool
 
-    def run(self, start, end, freq, share=1.0, levels=(0.0, 0.0), *args, **kw):
+    def run(self, start, end, freq, share=1.0, levels=None, *args, **kw):
         """Run the generator using the standard interface, with the extra
         ``share`` argument which is passed to the internal
         :py:meth:`splat.gen.ParticlePool.iterate` object."""
@@ -524,7 +535,9 @@ class ParticleGenerator(Generator):
         """This method implements the stastistical distribution used to pick
         the frequency for each :py:class:`splat.gen.Particle` object.  It
         returns a frequency ``freq`` in linear scale altered around the target
-        frequency ``p_freq`` with the parameter ``q``."""
+        frequency ``p_freq`` with the parameter ``q``. The default
+        implementation produces something a little bit like a normal
+        distribution but is not a standard function."""
         f_log = _splat.lin2dB(freq)
         s = _splat.lin2dB(p_freq)
         f_curve = s - 0.5 * ((2 * s) - (2 * f_log)) * math.exp(

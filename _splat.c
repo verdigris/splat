@@ -724,14 +724,15 @@ PyDoc_STRVAR(Fragment_mix_doc,
 "\n"
 "Mix the given other ``fragment`` data into this instance.\n"
 "\n"
-"This is achieved by simply adding up the samples of an incoming fragment "
-"to this fragment.  The ``offset``, ``start`` and ``length`` values in "
-"seconds can be used to alter the mixing times.  The incoming fragment can "
-"start being mixed with an ``offset`` into this fragment, the beginning can "
-"be skipped until the given ``start`` time, and the ``length`` to be mixed "
-"can be manually limited.  These values will be automatically adjusted to "
-"remain within the available data incoming.  The length of this fragment will "
-"be automatically increased if necessary to receive the incoming data.\n");
+"This is achieved by simply adding the corresponding samples of an incoming "
+"fragment to this fragment' samples.  The ``offset``, ``start`` and "
+"``length`` values in seconds can be used to alter the mixing times.  The "
+"incoming fragment can start being mixed with an ``offset`` into this "
+"fragment, its beginning can be skipped until the given ``start`` time, and "
+"the ``length`` to be mixed can be manually limited.  These values will be "
+"automatically adjusted to remain within the available incoming data.  The "
+"length of this fragment will be automatically increased if necessary to hold "
+"the mixed data.\n");
 
 static PyObject *Fragment_mix(Fragment *self, PyObject *args, PyObject *kw)
 {
@@ -1001,7 +1002,8 @@ PyDoc_STRVAR(Fragment_normalize_doc,
 "\n"
 "The ``level`` value in dB is the resulting maximum amplitude after "
 "normalization.  The default value of -0.05 dB is the maximum level while "
-"ensuring no clipping occurs, even when saving with 8-bit sample resolution. "
+"ensuring no clipping occurs due to rounding errors, even when saving with "
+"8-bit sample resolution. "
 "The same gain is applied to all channels, so the relative difference in "
 "levels between channels is preserved.\n"
 "\n"
@@ -1168,7 +1170,7 @@ PyDoc_STRVAR(Fragment_resize_doc,
 "resize(duration)\n"
 "\n"
 "Resize the fragment to the given ``duration`` in seconds.  If the fragment "
-"grows, silence is added to the end.  When shrinking, the end of the fragment "
+"grows, silence is added at the end.  When shrinking, the end of the fragment "
 "is lost.\n");
 
 static PyObject *Fragment_resize(Fragment *self, PyObject *args)
@@ -1966,9 +1968,10 @@ PyDoc_STRVAR(splat_overtones_doc,
 "\n"
 "The ``overtones`` are described with a list of 3-tuples containing the "
 "ratio between the overtone and the fundamental frequency, the phase and "
-"levels: (ratio, phase, levels).  All these values can be signals, and the "
-"levels can either be a single value for all channels or individual values."
-"The generation is performed over the entire fragment.\n");
+"levels: ``(ratio, phase, levels)``.  All these values can be signals, and "
+"the levels can either be a single value for all channels or individual "
+"values for each channel.  The generation is performed over the entire "
+"fragment.\n");
 
 static PyObject *splat_overtones(PyObject *self, PyObject *args)
 {
