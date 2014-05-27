@@ -1,6 +1,6 @@
 from distutils.core import setup, Extension
 
-setup(name='splat', version='1.1',
+setup(name='splat', version='1.2',
       description="Splat - sound generator",
       author="Guillaume Tucker - http://verdigris.mu",
       author_email="guillaume@mangoz.org",

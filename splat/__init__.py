@@ -20,7 +20,7 @@ from _splat import lin2dB, dB2lin, sample_precision
 
 __all__ = ['gen', 'data', 'filters', 'sources', 'scales', 'interpol']
 
-VERSION = (1, 1)
+VERSION = (1, 2)
 VERSION_STR = '.'.join([str(v) for v in VERSION])
 BUILD = 7
 

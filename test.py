@@ -11,7 +11,7 @@ import splat.gen
 import splat.sources
 import splat.interpol
 
-splat.check_version((1, 1))
+splat.check_version((1, 2))
 
 g_id = 1
 
