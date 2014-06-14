@@ -26,7 +26,7 @@ class SplatTest(unittest.TestCase):
         if isinstance(frags, splat.data.Fragment):
             frags = [frags]
         for frag in frags:
-            md5sum = md5.new(frag.as_bytes(2)).hexdigest()
+            md5sum = frag.md5()
             self.assertEqual(md5sum, hexdigest,
                              "MD5 mismatch: {0} {1}".format(md5sum, hexdigest))
 
@@ -49,6 +49,13 @@ class FragmentTest(SplatTest):
         frag = splat.data.Fragment(duration=1.0)
         self.assert_samples(frag, {int(len(frag) / 2): (0.0, 0.0)})
         self.assert_md5(frag, 'fe384f668da282694c29a84ebd33481d')
+
+    def test_frag_md5(self):
+        """Fragment.md5"""
+        frag = splat.data.Fragment()
+        splat.gen.SineGenerator(frag=frag).run(0.0, 0.3, 123.0)
+        md5sum = md5.new(frag.as_bytes(2)).hexdigest()
+        self.assertEqual(md5sum, frag.md5())
 
     def test_frag_offset(self):
         """Fragment.offset"""
@@ -109,6 +116,14 @@ class FragmentTest(SplatTest):
         self.assertEqual(
             b_len, ref_len,
             "Incorrect data length: {} instead of {}".format(b_len, ref_len))
+
+    def test_frag_dup(self):
+        """Fragment.dup"""
+        frag1 = splat.data.Fragment(channels=1)
+        splat.gen.SineGenerator(frag=frag1).run(0.0, 0.93, 1234.0)
+        frag2 = frag1.dup()
+        self.assertEqual(frag1.md5(), frag2.md5(),
+                         "Duplicated fragment MD5 mismatch")
 
     def test_frag_save(self):
         """Fragment.save"""
