@@ -18,6 +18,7 @@
 import os
 import struct
 import wave
+import md5
 import _splat
 
 def file_ext(file_name):
@@ -130,6 +131,16 @@ class Fragment(_splat.Fragment):
         dup_frag = Fragment(channels=self.channels, rate=self.sample_rate)
         dup_frag.mix(self)
         return dup_frag
+
+    def md5(self, sample_width=2, as_md5_obj=False):
+        """Get the MD5 checksum of all this fragment's data.
+
+        The data is first converted to integer samples with ``sample_width`` in
+        bytes, which is 2 by default for 16-bit samples.  Then the MD5 checksum
+        is return as a string unless ``as_md5_obj`` is set to True in which
+        case an ``md5`` object is returned."""
+        md5sum = md5.new(self.as_bytes(sample_width))
+        return md5sum if as_md5_obj is True else md5sum.hexdigest()
 
     def n2s(self, n):
         """Convert a sample index number ``n`` into a time in seconds."""
