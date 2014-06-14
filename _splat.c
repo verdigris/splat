@@ -902,9 +902,27 @@ static PyObject *Fragment_import_bytes(Fragment *self, PyObject *args)
 	Py_RETURN_NONE;
 }
 
+/*"normalize(level=-0.05, zero=True)\n"
+"\n"
+"Normalize the amplitude.\n"
+"\n"
+"The ``level`` value in dB is the resulting maximum amplitude after "
+"normalization.  The default value of -0.05 dB is the maximum level while "
+*/
+
+PyDoc_STRVAR(Fragment_as_bytes_doc,
+"as_bytes(sample_width=0, start=None, end=None)\n"
+"\n"
+"Get the fragment's data in a given raw byte format.\n"
+"\n"
+"The ``sample_width`` can be set to 1 or 2 to get 8-bit or 16-bit integer "
+"samples.  The default is 0 to get the native 64-bit floating-point samples.  "
+"The ``start`` and ``end`` arguments can be specified in seconds to only get "
+"a subset of the data.\n");
+
 static PyObject *Fragment_as_bytes(Fragment *self, PyObject *args)
 {
-	unsigned sample_width;
+	unsigned sample_width = 0;
 	double start = NO_DOUBLE;
 	double end = NO_DOUBLE;
 
@@ -918,10 +936,14 @@ static PyObject *Fragment_as_bytes(Fragment *self, PyObject *args)
 	Py_ssize_t c;
 	char *out;
 
-	if (!PyArg_ParseTuple(args, "I|dd", &sample_width, &start, &end))
+	if (!PyArg_ParseTuple(args, "|Idd", &sample_width, &start, &end))
 		return NULL;
 
-	if ((sample_width != 1) && (sample_width != 2)) {
+	if (sample_width == 0)
+		sample_width = sizeof(sample_t);
+
+	if ((sample_width != 1) && (sample_width != 2) &&
+	    (sample_width != sizeof(sample_t))) {
 		PyErr_SetString(PyExc_ValueError, "unsupported sample width");
 		return NULL;
 	}
@@ -942,14 +964,10 @@ static PyObject *Fragment_as_bytes(Fragment *self, PyObject *args)
 	}
 
 	length = end_n - start_n;
-	bytes_obj = PyByteArray_FromStringAndSize("", 0);
+	bytes_size = length * self->n_channels * sample_width;
+	bytes_obj = PyByteArray_FromStringAndSize(NULL, bytes_size);
 
 	if (bytes_obj == NULL)
-		return PyErr_NoMemory();
-
-	bytes_size = length * self->n_channels * sample_width;
-
-	if (PyByteArray_Resize(bytes_obj, bytes_size))
 		return PyErr_NoMemory();
 
 	for (c = 0; c < self->n_channels; ++c)
@@ -957,7 +975,16 @@ static PyObject *Fragment_as_bytes(Fragment *self, PyObject *args)
 
 	out = PyByteArray_AS_STRING(bytes_obj);
 
-	if (sample_width == 2) {
+	switch (sample_width) {
+	case sizeof(sample_t): {
+		sample_t *sample_out = (sample_t *)out;
+
+		for (i = 0; i < length; ++i)
+			for (c = 0; c < self->n_channels; ++c)
+				*sample_out++ = *(it[c]++);
+		break;
+	}
+	case 2:
 		for (i = 0; i < length; ++i) {
 			for (c = 0; c < self->n_channels; ++c) {
 				const sample_t z = *(it[c]++);
@@ -974,7 +1001,8 @@ static PyObject *Fragment_as_bytes(Fragment *self, PyObject *args)
 				*out++ = (s >> 8) & 0xFF;
 			}
 		}
-	} else if (sample_width == 1) {
+		break;
+	case 1:
 		for (i = 0; i < length; ++i) {
 			for (c = 0; c < self->n_channels; ++c) {
 				const sample_t z = *(it[c]++);
@@ -990,6 +1018,7 @@ static PyObject *Fragment_as_bytes(Fragment *self, PyObject *args)
 				*out++ = s & 0xFF;
 			}
 		}
+		break;
 	}
 
 	return bytes_obj;
@@ -1196,7 +1225,7 @@ static PyMethodDef Fragment_methods[] = {
 	{ "import_bytes", (PyCFunction)Fragment_import_bytes, METH_VARARGS,
 	  "Import data as raw bytes" },
 	{ "as_bytes", (PyCFunction)Fragment_as_bytes, METH_VARARGS,
-	  "Make a byte buffer with the data" },
+	  Fragment_as_bytes_doc },
 	{ "normalize", (PyCFunction)Fragment_normalize, METH_VARARGS,
 	  Fragment_normalize_doc },
 	{ "amp", (PyCFunction)Fragment_amp, METH_VARARGS,
