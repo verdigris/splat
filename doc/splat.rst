@@ -14,8 +14,11 @@ Fragment objects and sound data
    :members:
 
    .. automethod:: splat.data.Fragment.mix
+   .. automethod:: splat.data.Fragment.import_bytes
+   .. automethod:: splat.data.Fragment.as_bytes
    .. automethod:: splat.data.Fragment.normalize
    .. automethod:: splat.data.Fragment.amp
+   .. automethod:: splat.data.Fragment.offset
    .. automethod:: splat.data.Fragment.resize
    .. autoattribute:: splat.data.Fragment.sample_rate
    .. autoattribute:: splat.data.Fragment.duration
