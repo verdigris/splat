@@ -54,15 +54,18 @@ class FragmentTest(SplatTest):
         """Fragment.offset"""
         offset = 1234.5
         frag = splat.data.Fragment(duration=1.0)
+        n = int(0.5678 * frag.duration * frag.sample_rate)
         frag.offset(offset)
         frag_twice = splat.data.Fragment(duration=1.0)
+        gen = splat.gen.SineGenerator(frag=frag_twice)
+        gen.run(0.0, 1.0, 1000.0)
         frag_twice.offset(offset)
+        frag_twice_ref = frag_twice[n][0]
         offset2 = -57.25
-        offset_check = offset + offset2
+        offset_check = frag_twice_ref + offset2
         frag_twice.offset(offset2)
         frag_sig = splat.data.Fragment(duration=1.0)
         frag_sig.offset(lambda x: offset)
-        n = int(0.5678 * frag.duration * frag.sample_rate)
         self.assert_samples(frag, {n: (offset, offset)})
         self.assert_samples(frag_sig, {n: (offset, offset)})
         self.assert_samples(frag_twice, {n: (offset_check, offset_check)})
