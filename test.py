@@ -53,9 +53,10 @@ class FragmentTest(SplatTest):
     def test_frag_md5(self):
         """Fragment.md5"""
         frag = splat.data.Fragment()
-        splat.gen.SineGenerator(frag=frag).run(0.0, 0.3, 123.0)
-        md5sum = md5.new(frag.as_bytes(2)).hexdigest()
-        self.assertEqual(md5sum, frag.md5())
+        splat.gen.SineGenerator(frag=frag).run(0.0, 0.345, 123.0)
+        for n in range(3):
+            md5sum = md5.new(frag.as_bytes(n)).hexdigest()
+            self.assertEqual(md5sum, frag.md5(n))
 
     def test_frag_offset(self):
         """Fragment.offset"""
@@ -88,30 +89,30 @@ class FragmentTest(SplatTest):
             frag[i] = (float(i) / length,)
         x = list(int(length * r) for r in (0.0, 0.12, 0.34, 0.62, 0.987, 0.99))
         y = list((float(i) / length) for i in x)
-        bytes = frag.as_bytes(sample_width)
+        frag_bytes = frag.as_bytes(sample_width)
         max16 = (2 ** 15) - 1
         for i, j in zip(x, y):
-            val = bytes[i * 2] + (bytes[(i * 2) + 1] * 256)
+            val = frag_bytes[i * 2] + (frag_bytes[(i * 2) + 1] * 256)
             ref = int(j * max16)
             self.assertEqual(
                 val, ref,
                 "Incorrect 16 bits value: {} instead of {}".format(val, ref))
         i0, i1 = (int(length * r) for r in (0.23, 0.83))
         x0, x1 = (frag.n2s(i) for i in (i0, i1))
-        bytes = frag.as_bytes(sample_width, x0, x1)
-        self.assertEqual(len(bytes), ((i1 - i0) * sample_width),
+        frag_bytes = frag.as_bytes(sample_width, x0, x1)
+        self.assertEqual(len(frag_bytes), ((i1 - i0) * sample_width),
                          "Incorrect length of bytes array")
         for i, j in zip(x, y):
             if (i < i0) or (i > i1):
                 continue
             k = i - i0
-            val = bytes[k * 2] + (bytes[(k * 2) + 1] * 256)
+            val = frag_bytes[k * 2] + (frag_bytes[(k * 2) + 1] * 256)
             ref = int(j * max16)
             self.assertEqual(
                 val, ref,
                 "Incorrect 16 bits value: {} instead of {}".format(val, ref))
-        bytes = frag.as_bytes(sample_width, -2.3, (duration * 1.2))
-        b_len = len(bytes)
+        frag_bytes = frag.as_bytes(sample_width, -2.3, (duration * 1.2))
+        b_len = len(frag_bytes)
         ref_len = len(frag) * sample_width
         self.assertEqual(
             b_len, ref_len,
