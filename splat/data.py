@@ -125,6 +125,12 @@ class Fragment(_splat.Fragment):
 
         raise Exception("Unsupported file format")
 
+    def dup(self):
+        """Duplicate this fragment into a new one and return it."""
+        dup_frag = Fragment(channels=self.channels, rate=self.sample_rate)
+        dup_frag.mix(self)
+        return dup_frag
+
     def n2s(self, n):
         """Convert a sample index number ``n`` into a time in seconds."""
         return float(n) / self.sample_rate
