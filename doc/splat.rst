@@ -136,7 +136,7 @@ General purpose functions and classes
 
 .. autofunction:: splat.lin2dB
 .. autofunction:: splat.dB2lin
-.. autofunction:: splat.sample_precision
+.. autofunction:: splat.get_sample_precision
 
 .. autoclass:: splat.Signal
    :members:

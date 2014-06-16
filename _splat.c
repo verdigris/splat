@@ -2357,14 +2357,14 @@ static PyObject *splat_reverb(PyObject *self, PyObject *args)
 	Py_RETURN_NONE;
 }
 
-PyDoc_STRVAR(splat_sample_precision_doc,
-"sample_precision()\n"
+PyDoc_STRVAR(splat_get_sample_precision_doc,
+"get_sample_precision()\n"
 "\n"
 "Get the sound sample precision as the number of bits in each floating point "
 "sample value.  This is typically 64 or 32 when built with fast mode turned "
 "on.\n");
 
-static PyObject *splat_sample_precision(PyObject *self, PyObject *_)
+static PyObject *splat_get_sample_precision(PyObject *self, PyObject *_)
 {
 	return PyLong_FromLong(sizeof(sample_t) * 8);
 }
@@ -2388,8 +2388,8 @@ static PyMethodDef splat_methods[] = {
 	  splat_reverse_doc },
 	{ "reverb", splat_reverb, METH_VARARGS,
 	  splat_reverb_doc },
-	{ "sample_precision", splat_sample_precision, METH_NOARGS,
-	  splat_sample_precision_doc },
+	{ "get_sample_precision", splat_get_sample_precision, METH_NOARGS,
+	  splat_get_sample_precision_doc },
 	{ NULL, NULL, 0, NULL }
 };
 

@@ -20,7 +20,7 @@ splat.check_version((1, 2))
 class SplatTest(unittest.TestCase):
 
     def setUp(self):
-        self._places = 12 if splat.sample_precision() == 64 else 4
+        self._places = 12 if splat.sample_precision == 64 else 4
 
     def assert_md5(self, frags, hexdigest):
         if isinstance(frags, splat.data.Fragment):
@@ -451,5 +451,5 @@ class ParticleTest(SplatTest):
 # main function
 
 if __name__ == '__main__':
-    print("Sample precision: {}-bit".format(splat.sample_precision()))
+    print("Sample precision: {}-bit".format(splat.sample_precision))
     unittest.main()
