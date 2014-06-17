@@ -10,7 +10,7 @@ Fragment objects and sound data
 
 .. automodule:: splat.data
 
-.. autoclass:: splat.data.Fragment(channels, rate, duration)
+.. autoclass:: splat.data.Fragment(channels, rate, duration=0.0, length=0)
    :members:
 
    .. automethod:: splat.data.Fragment.mix

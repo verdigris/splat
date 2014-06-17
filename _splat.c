@@ -545,23 +545,20 @@ static void Fragment_dealloc(Fragment *self)
 
 static int Fragment_init(Fragment *self, PyObject *args, PyObject *kw)
 {
-	static char *kwlist[] = { "channels", "rate", "duration", NULL };
+	static char *kwlist[] = {
+		"channels", "rate", "duration", "length", NULL };
 	unsigned n_channels = 2;
 	unsigned rate = 48000;
 	double duration = 0.0;
+	unsigned long length = 0;
 
 	unsigned i;
-	size_t length;
 	size_t data_size;
 
-	if (!PyArg_ParseTupleAndKeywords(args, kw, "|IId", kwlist,
-					 &n_channels, &rate, &duration))
+	if (!PyArg_ParseTupleAndKeywords(args, kw, "|IIdk", kwlist,
+					 &n_channels, &rate, &duration,
+					 &length))
 		return -1;
-
-	if (duration < 0.0) {
-		PyErr_SetString(PyExc_ValueError, "negative duration");
-		return -1;
-	}
 
 	if (n_channels > MAX_CHANNELS) {
 		PyErr_SetString(PyExc_ValueError,
@@ -569,7 +566,24 @@ static int Fragment_init(Fragment *self, PyObject *args, PyObject *kw)
 		return -1;
 	}
 
-	length = duration * rate;
+	if (!rate) {
+		PyErr_SetString(PyExc_ValueError, "rate cannot be 0Hz");
+		return -1;
+	}
+
+	if (duration < 0.0) {
+		PyErr_SetString(PyExc_ValueError, "negative duration");
+		return -1;
+	}
+
+	if (!length) {
+		length = duration * rate;
+	} else if (duration != 0.0) {
+		PyErr_SetString(PyExc_ValueError,
+				"cannot specify both length and duration");
+		return -1;
+	}
+
 	data_size = length * sizeof(sample_t);
 
 	for (i = 0; i < n_channels; ++i) {
@@ -811,6 +825,17 @@ static PyObject *Fragment_mix(Fragment *self, PyObject *args, PyObject *kw)
 	Py_RETURN_NONE;
 }
 
+PyDoc_STRVAR(Fragment_import_bytes_doc,
+"import_bytes(raw_bytes, start, sample_width, rate, channels)\n"
+"\n"
+"Import data as raw bytes.\n"
+"\n"
+"The ``sample_width`` can be set to 1 or 2 for 8-bit or 16-bit integer "
+"samples.  The default is 0 for the native 64-bit floating-point samples.  "
+"The ``start`` argument can be used to specify the start sample number where "
+"the data should be imported, typically 0.  The ``rate`` and ``channels`` "
+"need to match the Fragment instance values.\n");
+
 static PyObject *Fragment_import_bytes(Fragment *self, PyObject *args)
 {
 	PyObject *bytes_obj;
@@ -834,7 +859,7 @@ static PyObject *Fragment_import_bytes(Fragment *self, PyObject *args)
 			      &start, &sample_width, &rate, &n_channels))
 		return NULL;
 
-	if ((sample_width != 2) && (sample_width != 3)) {
+	if (sample_width && (sample_width != 2) && (sample_width != 3)) {
 		PyErr_SetString(PyExc_ValueError, "unsupported sample width");
 		return NULL;
 	}
@@ -848,6 +873,9 @@ static PyObject *Fragment_import_bytes(Fragment *self, PyObject *args)
 		PyErr_SetString(PyExc_ValueError, "wrong sample rate");
 		return NULL;
 	}
+
+	if (!sample_width)
+		sample_width = sizeof(sample_t);
 
 	n_bytes = PyByteArray_Size(bytes_obj);
 	bytes_per_sample = n_channels * sample_width;
@@ -874,12 +902,20 @@ static PyObject *Fragment_import_bytes(Fragment *self, PyObject *args)
 		sample_t *out = &self->data[c][start];
 		unsigned s;
 
-		if (sample_width == 2) {
+		switch (sample_width) {
+		case sizeof(sample_t):
+			for (s = start; s < end; ++s) {
+				*out++ = *(sample_t *)in;
+				in += bytes_per_sample;
+			}
+			break;
+		case 2:
 			for (s = start; s < end; ++s) {
 				*out++ = *(int16_t *)in / scale;
 				in += bytes_per_sample;
 			}
-		} else {
+			break;
+		case 3:
 			for (s = start; s < end; ++s) {
 				const uint8_t *b = (const uint8_t *)in;
 				int32_t sample = 0;
@@ -894,19 +930,12 @@ static PyObject *Fragment_import_bytes(Fragment *self, PyObject *args)
 				*out++ = sample / scale;
 				in += bytes_per_sample;
 			}
+			break;
 		}
 	}
 
 	Py_RETURN_NONE;
 }
-
-/*"normalize(level=-0.05, zero=True)\n"
-"\n"
-"Normalize the amplitude.\n"
-"\n"
-"The ``level`` value in dB is the resulting maximum amplitude after "
-"normalization.  The default value of -0.05 dB is the maximum level while "
-*/
 
 PyDoc_STRVAR(Fragment_as_bytes_doc,
 "as_bytes(sample_width=0, start=None, end=None)\n"
@@ -1194,22 +1223,34 @@ static PyObject *Fragment_offset(Fragment *self, PyObject *args)
 }
 
 PyDoc_STRVAR(Fragment_resize_doc,
-"resize(duration)\n"
+"resize(duration=0.0, length=0)\n"
 "\n"
-"Resize the fragment to the given ``duration`` in seconds.  If the fragment "
-"grows, silence is added at the end.  When shrinking, the end of the fragment "
-"is lost.\n");
+"Resize the fragment to the given ``duration`` in seconds or ``length`` in "
+"number of samples per channel.  If the fragment grows, silence is added at "
+"the end.  When shrinking, the end of the fragment is lost.\n");
 
-static PyObject *Fragment_resize(Fragment *self, PyObject *args)
+static PyObject *Fragment_resize(Fragment *self, PyObject *args, PyObject *kw)
 {
-	double duration;
+	static char *kwlist[] = { "duration", "length", NULL };
+	double duration = 0.0;
+	unsigned long length = 0;
 
-	ssize_t length;
-
-	if (!PyArg_ParseTuple(args, "d", &duration))
+	if (!PyArg_ParseTupleAndKeywords(args, kw, "|dk", kwlist,
+					 &duration,&length))
 		return NULL;
 
-	length = duration * self->rate;
+	if (duration < 0.0) {
+		PyErr_SetString(PyExc_ValueError, "negative duration");
+		return NULL;
+	}
+
+	if (!length) {
+		length = duration * self->rate;
+	} else if (duration != 0.0) {
+		PyErr_SetString(PyExc_ValueError,
+				"cannot specify both length and duration");
+		return NULL;
+	}
 
 	if (frag_resize(self, length))
 		return NULL;
@@ -1221,7 +1262,7 @@ static PyMethodDef Fragment_methods[] = {
 	{ "mix", (PyCFunction)Fragment_mix, METH_KEYWORDS,
 	  Fragment_mix_doc },
 	{ "import_bytes", (PyCFunction)Fragment_import_bytes, METH_VARARGS,
-	  "Import data as raw bytes" },
+	  Fragment_import_bytes_doc },
 	{ "as_bytes", (PyCFunction)Fragment_as_bytes, METH_VARARGS,
 	  Fragment_as_bytes_doc },
 	{ "normalize", (PyCFunction)Fragment_normalize, METH_VARARGS,
@@ -1230,7 +1271,7 @@ static PyMethodDef Fragment_methods[] = {
 	  Fragment_amp_doc },
 	{ "offset", (PyCFunction)Fragment_offset, METH_VARARGS,
 	  Fragment_offset_doc },
-	{ "resize", (PyCFunction)Fragment_resize, METH_VARARGS,
+	{ "resize", (PyCFunction)Fragment_resize, METH_KEYWORDS,
 	  Fragment_resize_doc },
 	{ NULL }
 };
