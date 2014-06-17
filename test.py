@@ -62,7 +62,7 @@ class FragmentTest(SplatTest):
         """Fragment.offset"""
         offset = 1234.5
         frag = splat.data.Fragment(duration=1.0)
-        n = int(0.5678 * frag.duration * frag.sample_rate)
+        n = int(0.5678 * frag.duration * frag.rate)
         frag.offset(offset)
         frag_twice = splat.data.Fragment(duration=1.0)
         gen = splat.gen.SineGenerator(frag=frag_twice)
@@ -260,8 +260,8 @@ class GeneratorTest(SplatTest):
         gen = splat.gen.SineGenerator()
         f = 1000.0
         gen.run(0.0, 1.0, f)
-        n = int(0.1234 * gen.frag.duration * gen.frag.sample_rate)
-        s = math.sin(2 * math.pi * f * float(n) / gen.frag.sample_rate)
+        n = int(0.1234 * gen.frag.duration * gen.frag.rate)
+        s = math.sin(2 * math.pi * f * float(n) / gen.frag.rate)
         self.assert_samples(gen.frag, {n: (s, s)})
         self.assert_md5(gen.frag, 'ec18389e198ee868d61c9439343a3337')
 
@@ -284,7 +284,7 @@ class GeneratorTest(SplatTest):
         gen = splat.gen.SquareGenerator()
         f = 1000.0
         gen.run(0.0, 1.0, f)
-        nf = gen.frag.sample_rate / f
+        nf = gen.frag.rate / f
         samples = {int(nf * 0.1): (1.0, 1.0), int(nf * 0.9): (-1.0, -1.0)}
         self.assert_samples(gen.frag, samples)
         self.assert_md5(gen.frag, '0ca047e998f512280800012b05107c63')
@@ -309,7 +309,7 @@ class GeneratorTest(SplatTest):
         f = 1000.0
         ratio = 0.567
         gen.run(0.0, 1.0, f, 0.0, ratio, levels=(0.0, 0.0))
-        nf = gen.frag.sample_rate / f
+        nf = gen.frag.rate / f
         x1 = 0.25
         t1 = int(nf * ratio * x1)
         s1 = (t1 * 2.0 / (ratio * nf)) - 1.0

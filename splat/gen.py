@@ -84,9 +84,9 @@ class Generator(object):
         return self._frag.channels
 
     @property
-    def sample_rate(self):
+    def rate(self):
         """Sample rate in Hz."""
-        return self._frag.sample_rate
+        return self._frag.rate
 
     @property
     def filters(self):
@@ -136,7 +136,7 @@ class Generator(object):
         levels = kw.pop('levels', self._levels)
         start *= self.time_stretch
         end *= self.time_stretch
-        frag = Fragment(self.channels, self.sample_rate, (end - start))
+        frag = Fragment(self.channels, self.rate, (end - start))
         self._run(frag, levels, *args, **kw)
         self.filters.run(frag)
         self.frag.mix(frag, start)

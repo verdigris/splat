@@ -688,9 +688,9 @@ static PySequenceMethods Fragment_as_sequence = {
 
 /* Fragment getsetters */
 
-PyDoc_STRVAR(sample_rate_doc, "Get the sample rate in Hz.");
+PyDoc_STRVAR(rate_doc, "Get the sample rate in Hz.");
 
-static PyObject *Fragment_get_sample_rate(Fragment *self, void *_)
+static PyObject *Fragment_get_rate(Fragment *self, void *_)
 {
 	return Py_BuildValue("I", self->rate);
 }
@@ -710,8 +710,7 @@ static PyObject *Fragment_get_channels(Fragment *self, void *_)
 }
 
 static PyGetSetDef Fragment_getsetters[] = {
-	{ "sample_rate", (getter)Fragment_get_sample_rate, NULL,
-	  sample_rate_doc },
+	{ "rate", (getter)Fragment_get_rate, NULL, rate_doc },
 	{ "duration", (getter)Fragment_get_duration, NULL, duration_doc },
 	{ "channels", (getter)Fragment_get_channels, NULL, channels_doc },
 	{ NULL }
@@ -817,7 +816,7 @@ static PyObject *Fragment_import_bytes(Fragment *self, PyObject *args)
 	PyObject *bytes_obj;
 	int start;
 	unsigned sample_width;
-	unsigned sample_rate;
+	unsigned rate;
 	unsigned n_channels;
 
 	const char *bytes;
@@ -832,8 +831,7 @@ static PyObject *Fragment_import_bytes(Fragment *self, PyObject *args)
 	double scale;
 
 	if (!PyArg_ParseTuple(args, "O!iIII", &PyByteArray_Type, &bytes_obj,
-			      &start, &sample_width, &sample_rate,
-			      &n_channels))
+			      &start, &sample_width, &rate, &n_channels))
 		return NULL;
 
 	if ((sample_width != 2) && (sample_width != 3)) {
@@ -846,7 +844,7 @@ static PyObject *Fragment_import_bytes(Fragment *self, PyObject *args)
 		return NULL;
 	}
 
-	if (sample_rate != self->rate) {
+	if (rate != self->rate) {
 		PyErr_SetString(PyExc_ValueError, "wrong sample rate");
 		return NULL;
 	}

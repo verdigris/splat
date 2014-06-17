@@ -34,11 +34,11 @@ def open_wav(wav_file, fmt=None):
     w = wave.open(wav_file, 'rb')
     channels = w.getnchannels()
     n_frames = w.getnframes()
-    sample_rate = w.getframerate()
-    duration = n_frames / float(sample_rate)
+    rate = w.getframerate()
+    duration = n_frames / float(rate)
     sample_width = w.getsampwidth()
 
-    frag = Fragment(channels, sample_rate, duration)
+    frag = Fragment(channels, rate, duration)
     rem = len(frag)
     cur = 0
     chunk_size = (64 * 1024) / (sample_width * channels)
@@ -46,7 +46,7 @@ def open_wav(wav_file, fmt=None):
     while rem > 0:
         n = chunk_size if (rem >= chunk_size) else rem
         raw_bytes = bytearray(w.readframes(n))
-        frag.import_bytes(raw_bytes, cur, sample_width, sample_rate, channels)
+        frag.import_bytes(raw_bytes, cur, sample_width, rate, channels)
         rem -= n
         cur += n
 
@@ -63,7 +63,7 @@ def save_wav(wav_file, frag, start=None, end=None, sample_width=2):
     w = wave.open(wav_file, 'w')
     w.setnchannels(frag.channels)
     w.setsampwidth(sample_width)
-    w.setframerate(frag.sample_rate)
+    w.setframerate(frag.rate)
     w.setnframes(len(frag))
     args = (sample_width,)
     if start is not None:
@@ -128,7 +128,7 @@ class Fragment(_splat.Fragment):
 
     def dup(self):
         """Duplicate this fragment into a new one and return it."""
-        dup_frag = Fragment(channels=self.channels, rate=self.sample_rate)
+        dup_frag = Fragment(channels=self.channels, rate=self.rate)
         dup_frag.mix(self)
         return dup_frag
 
@@ -144,11 +144,11 @@ class Fragment(_splat.Fragment):
 
     def n2s(self, n):
         """Convert a sample index number ``n`` into a time in seconds."""
-        return float(n) / self.sample_rate
+        return float(n) / self.rate
 
     def s2n(self, s):
         """Convert a time in seconds ``s`` into a sample index number."""
-        return int(s * self.sample_rate)
+        return int(s * self.rate)
 
     def save(self, out_file, fmt=None, start=None, end=None, *args, **kw):
         """Save the contents of the audio fragment into a file.

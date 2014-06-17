@@ -80,7 +80,7 @@ def linear_fade(frag, duration=0.01):
     end of the fragment.  This duration is adjusted evenly if the fragment is
     too short.
     """
-    fade = min((frag.sample_rate * duration), (len(frag) / 2))
+    fade = min((frag.rate * duration), (len(frag) / 2))
     for i in range(int(fade)):
         l = i / fade
         for j in (i, -i):

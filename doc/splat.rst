@@ -20,7 +20,7 @@ Fragment objects and sound data
    .. automethod:: splat.data.Fragment.amp
    .. automethod:: splat.data.Fragment.offset
    .. automethod:: splat.data.Fragment.resize
-   .. autoattribute:: splat.data.Fragment.sample_rate
+   .. autoattribute:: splat.data.Fragment.rate
    .. autoattribute:: splat.data.Fragment.duration
    .. autoattribute:: splat.data.Fragment.channels
 
