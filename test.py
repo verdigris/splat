@@ -133,16 +133,19 @@ class FragmentTest(SplatTest):
         length = len(frag)
         for i in range(length):
             frag[i] = (float(i) * 0.9 / length,)
-        f = StringIO()
-        frag.save(f, 'wav')
-        f.reset()
-        frag2 = splat.data.Fragment.open(f, 'wav')
-        for i in range(length):
-            a = frag[i][0]
-            b = frag2[i][0]
-            self.assertAlmostEqual(
-                a, b, 3,
-                "Fragment mismatch [{}] {} {}".format(i, a, b))
+        for fmt in ['wav', 'saf']:
+            f = StringIO()
+            frag.save(f, fmt)
+            f.reset()
+            frag2 = splat.data.Fragment.open(f, fmt)
+            if fmt == 'saf':
+                self.assertEqual(frag.md5(), frag2.md5())
+            for i in range(length):
+                a = frag[i][0]
+                b = frag2[i][0]
+                self.assertAlmostEqual(
+                    a, b, 3,
+                    "Fragment data mismatch [{}] {} {}".format(i, a, b))
 
 
 class InterpolTest(SplatTest):
