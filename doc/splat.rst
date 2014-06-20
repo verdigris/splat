@@ -15,7 +15,7 @@ Fragment objects and sound data
 
    .. automethod:: splat.data.Fragment.mix
    .. automethod:: splat.data.Fragment.import_bytes
-   .. automethod:: splat.data.Fragment.as_bytes
+   .. automethod:: splat.data.Fragment.export_bytes
    .. automethod:: splat.data.Fragment.normalize
    .. automethod:: splat.data.Fragment.amp
    .. automethod:: splat.data.Fragment.offset
@@ -24,6 +24,7 @@ Fragment objects and sound data
    .. autoattribute:: splat.data.Fragment.duration
    .. autoattribute:: splat.data.Fragment.channels
 
+.. include:: audio_formats.rst
 
 Generator objects
 -----------------
@@ -43,7 +44,7 @@ Source generators
 .. _sources:
 
 Sound sources
-_____________
+^^^^^^^^^^^^^
 
 .. automodule:: splat.sources
 .. autofunction:: splat.sources.sine
@@ -52,7 +53,7 @@ _____________
 .. autofunction:: splat.sources.overtones
 
 Source generator objects
-________________________
+^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autoclass:: splat.gen.SineGenerator
    :members:
