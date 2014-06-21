@@ -64,15 +64,28 @@
 	((_val) < (_min) ? (_min) : ((_val) > (_max) ? (_max) : (_val)))
 #endif
 
+#ifndef ARRAY_SIZE
+# define ARRAY_SIZE(_array) (sizeof(_array) / sizeof(_array[0]))
+#endif
+
+/* ToDo: remove */
 #define NO_DOUBLE ((double)0xFFFFFFFF)
 
-/* Type of each sample */
+enum splat_sample_type {
+	SPLAT_SAMPLE_INT = 1,    /* Integer sample */
+	SPLAT_SAMPLE_FLOAT = 2,  /* Floating point sample */
+};
+
+/* Internal sample type used in Fragment, sources, effects etc... */
 #if USE_V4SF /* for speed and smaller memory footprint */
 typedef float sample_t;
 typedef float v4sf __attribute__ ((vector_size(16)));
 #else /* for precision */
 typedef double sample_t;
 #endif
+
+#define SPLAT_SAMPLE_TYPE SPLAT_SAMPLE_FLOAT
+static const size_t SPLAT_SAMPLE_WIDTH = sizeof(sample_t) * 8;
 
 /* ----------------------------------------------------------------------------
  * Module constants
@@ -90,7 +103,7 @@ struct Fragment_object {
 	int init;
 	unsigned n_channels;
 	unsigned rate;
-	Py_ssize_t length;
+	size_t length;
 	sample_t *data[MAX_CHANNELS];
 };
 typedef struct Fragment_object Fragment;
@@ -526,6 +539,8 @@ static int frag_get_levels(Fragment *frag, struct splat_levels_helper *levels,
 static int frag_resize(Fragment *self, size_t length);
 #define frag_grow(_frag, _length)					\
 	(((_length) <= (_frag)->length) ? 0 : frag_resize((_frag), (_length)))
+static int frag_get_sample_number(size_t *val, long min_val, long max_val,
+				  PyObject *obj);
 
 /* -- Fragment functions -- */
 
@@ -732,6 +747,290 @@ static PyGetSetDef Fragment_getsetters[] = {
 
 /* Fragment methods */
 
+struct splat_raw_io {
+	enum splat_sample_type sample_type;
+	unsigned sample_width;
+	void (*import)(sample_t *out, const char *in, size_t n, size_t step);
+	void (*export)(char *out, const sample_t **it, unsigned channels,
+		       size_t n);
+};
+
+static void splat_import_float64(sample_t *out, const char *in, size_t n,
+				 size_t step)
+{
+	while (n--) {
+		*out++ = *(const double *)in;
+		in += step;
+	}
+}
+
+static void splat_export_float64(char *out, const sample_t **in,
+				 unsigned channels, size_t n)
+{
+	double *out64 = (double *)out;
+
+	while (n--) {
+		unsigned c;
+
+		for (c = 0; c < channels; ++c)
+			*out64++ = *(in[c]++);
+	}
+}
+
+static void splat_import_int16(sample_t *out, const char *in, size_t n,
+			       size_t step)
+{
+	static const double scale = 32767.0;
+
+	while (n--) {
+		*out++ = *(int16_t *)in / scale;
+		in += step;
+	}
+}
+
+static void splat_export_int16(char *out, const sample_t **in,
+			      unsigned channels, size_t n)
+{
+	static const long scale = 32767;
+
+	while (n--) {
+		unsigned c;
+
+		for (c = 0; c < channels; ++c) {
+			const sample_t z = *(in[c]++);
+			int16_t s;
+
+			if (z < -1.0)
+				s = -scale;
+			else if (z > 1.0)
+				s = scale;
+			else
+				s = z * scale;
+
+			*out++ = s & 0xFF;
+			*out++ = (s >> 8) & 0xFF;
+		}
+	}
+}
+
+static const struct splat_raw_io splat_raw_io_table[] = {
+	{ SPLAT_SAMPLE_FLOAT, 64, splat_import_float64, splat_export_float64 },
+	{ SPLAT_SAMPLE_INT, 16, splat_import_int16, splat_export_int16, },
+};
+
+static const struct splat_raw_io *splat_get_raw_io(
+	enum splat_sample_type sample_type, unsigned sample_width)
+{
+	const struct splat_raw_io *it;
+	const struct splat_raw_io * const end =
+		&splat_raw_io_table[ARRAY_SIZE(splat_raw_io_table)];
+
+	for (it = splat_raw_io_table; it != end; ++it) {
+		if ((it->sample_type == sample_type) &&
+		    (it->sample_width == sample_width))
+			return it;
+	}
+
+	return NULL;
+}
+
+PyDoc_STRVAR(Fragment_import_bytes_doc,
+"import_bytes(raw_bytes, rate, channels, sample_type=NATIVE_SAMPLE_TYPE, "
+"sample_width=NATIVE_SAMPLE_WIDTH, offset=None, start=None, end=None)\n"
+"\n"
+"Import data as raw bytes.\n"
+"\n"
+"The ``sample_type`` and ``sample_width`` specify the format, see "
+":ref:`sample_formats` for more details. "
+"The ``rate`` and ``channels`` need to match the Fragment instance values. "
+"The ``offset`` argument can be used as a sample number to specify the point "
+"where the data starts to be imported into the fragment. "
+"The ``start`` and ``end`` arguments can be defined as sample numbers to "
+"import only a subset of the data.\n");
+
+static PyObject *Fragment_import_bytes(Fragment *self, PyObject *args,
+				       PyObject *kw)
+{
+	static char *kwlist[] = {
+		"raw_bytes", "rate", "channels", "sample_type",
+		"sample_width", "offset", "start", "end", NULL };
+	PyObject *bytes_obj;
+	unsigned rate;
+	unsigned n_channels;
+	unsigned sample_type = SPLAT_SAMPLE_TYPE;
+	unsigned sample_width = SPLAT_SAMPLE_WIDTH;
+	PyObject *offset_obj = Py_None;
+	PyObject *start_obj = Py_None;
+	PyObject *end_obj = Py_None;
+
+	size_t bytes_size;
+	size_t sample_size;
+	size_t frame_size;
+	size_t bytes_length;
+	const struct splat_raw_io *raw_io;
+	size_t offset;
+	size_t start;
+	size_t end;
+	size_t length;
+	const char *bytes;
+	unsigned c;
+
+	if (!PyArg_ParseTupleAndKeywords(args, kw, "O!II|IIOO", kwlist,
+					 &PyByteArray_Type, &bytes_obj, &rate,
+					 &n_channels, &sample_type,
+					 &sample_width, &offset_obj,
+					 &start_obj, &end_obj))
+		return NULL;
+
+	if (rate != self->rate) {
+		PyErr_SetString(PyExc_ValueError, "wrong sample rate");
+		return NULL;
+	}
+
+	if (n_channels != self->n_channels) {
+		PyErr_SetString(PyExc_ValueError, "wrong number of channels");
+		return NULL;
+	}
+
+	if (!sample_width || (sample_width % 8)) {
+		PyErr_SetString(PyExc_ValueError,
+				"sample width must be a multiple of 8");
+		return NULL;
+	}
+
+	bytes_size = PyByteArray_Size(bytes_obj);
+	sample_size = sample_width / 8;
+	frame_size = sample_size * n_channels;
+	bytes_length = bytes_size / frame_size;
+
+	if (bytes_size % frame_size) {
+		PyErr_SetString(PyExc_ValueError,
+				"buffer length not multiple of frame size");
+		return NULL;
+	}
+
+	raw_io = splat_get_raw_io(sample_type, sample_width);
+
+	if (raw_io == NULL) {
+		PyErr_SetString(PyExc_ValueError, "unsupported sample format");
+		return NULL;
+	}
+
+	if (offset_obj == Py_None)
+		offset = 0;
+	else if (frag_get_sample_number(&offset, 0, LONG_MAX, offset_obj))
+		return NULL;
+
+	if (start_obj == Py_None)
+		start = 0;
+	else if (frag_get_sample_number(&start, 0, bytes_length, start_obj))
+		return NULL;
+
+	if (end_obj == Py_None)
+		end = bytes_length;
+	else if (frag_get_sample_number(&end, start, bytes_length, end_obj))
+		return NULL;
+
+	length = end - start;
+
+	if (frag_grow(self, (offset + length)))
+		return NULL;
+
+	bytes = PyByteArray_AsString(bytes_obj);
+
+	for (c = 0; c < self->n_channels; ++c) {
+		const char *in =
+			bytes + (start * frame_size) + (c * sample_size);
+		sample_t *out = &self->data[c][offset];
+
+		raw_io->import(out, in, length, frame_size);
+	}
+
+	Py_RETURN_NONE;
+}
+
+PyDoc_STRVAR(Fragment_export_bytes_doc,
+"export_bytes(sample_type=NATIVE_SAMPLE_TYPE, "
+"sample_width=NATIVE_SAMPLE_WIDTH, start=None, end=None)\n"
+"\n"
+"Export audio data as raw bytes.\n"
+"\n"
+"The ``sample_type`` and ``sample_width`` arguments can be used to specify "
+"the sample format, see :ref:`sample_formats` for more details.\n"
+"\n"
+"The ``start`` and ``end`` arguments can be specified in sample numbers to "
+"only get a subset of the data.\n");
+
+static PyObject *Fragment_export_bytes(Fragment *self, PyObject *args,
+				       PyObject *kw)
+{
+	static char *kwlist[] = {
+		"sample_type", "sample_width", "start", "end", NULL };
+	unsigned sample_type = SPLAT_SAMPLE_TYPE;
+	unsigned sample_width = SPLAT_SAMPLE_WIDTH;
+	PyObject *start_obj = Py_None;
+	PyObject *end_obj = Py_None;
+
+	const struct splat_raw_io *raw_io;
+	size_t sample_size;
+	size_t frame_size;
+	size_t start;
+	size_t end;
+	size_t length;
+	unsigned c;
+	PyObject *bytes_obj;
+	Py_ssize_t bytes_size;
+	char *out;
+	const sample_t *in[MAX_CHANNELS];
+
+	if (!PyArg_ParseTupleAndKeywords(args, kw, "|IIOO", kwlist,
+					 &sample_type, &sample_width,
+					 &start_obj, &end_obj))
+		return NULL;
+
+	if (sample_width % 8) {
+		PyErr_SetString(PyExc_ValueError,
+				"sample width must be a multiple of 8");
+		return NULL;
+	}
+
+	raw_io = splat_get_raw_io(sample_type, sample_width);
+
+	if (raw_io == NULL) {
+		PyErr_SetString(PyExc_ValueError, "unsupported sample format");
+		return NULL;
+	}
+
+	sample_size = sample_width / 8;
+	frame_size = sample_size * self->n_channels;
+
+	if (start_obj == Py_None)
+		start = 0;
+	else if (frag_get_sample_number(&start, 0, self->length, start_obj))
+		return NULL;
+
+	if (end_obj == Py_None)
+		end = self->length;
+	else if (frag_get_sample_number(&end, start, self->length, end_obj))
+		return NULL;
+
+	length = end - start;
+	bytes_size = length * frame_size;
+	bytes_obj = PyByteArray_FromStringAndSize(NULL, bytes_size);
+
+	if (bytes_obj == NULL)
+		return PyErr_NoMemory();
+
+	out = PyByteArray_AS_STRING(bytes_obj);
+
+	for (c = 0; c < self->n_channels; ++c)
+		in[c] = &self->data[c][start];
+
+	raw_io->export(out, in, self->n_channels, length);
+
+	return bytes_obj;
+}
+
 PyDoc_STRVAR(Fragment_mix_doc,
 "mix(fragment, offset=0.0, start=0.0, levels=None, length=None)\n"
 "\n"
@@ -823,232 +1122,6 @@ static PyObject *Fragment_mix(Fragment *self, PyObject *args, PyObject *kw)
 	}
 
 	Py_RETURN_NONE;
-}
-
-PyDoc_STRVAR(Fragment_import_bytes_doc,
-"import_bytes(raw_bytes, start, sample_width, rate, channels)\n"
-"\n"
-"Import data as raw bytes.\n"
-"\n"
-"The ``sample_width`` can be set to 1 or 2 for 8-bit or 16-bit integer "
-"samples.  The default is 0 for the native 64-bit floating-point samples.  "
-"The ``start`` argument can be used to specify the start sample number where "
-"the data should be imported, typically 0.  The ``rate`` and ``channels`` "
-"need to match the Fragment instance values.\n");
-
-static PyObject *Fragment_import_bytes(Fragment *self, PyObject *args)
-{
-	PyObject *bytes_obj;
-	int start;
-	unsigned sample_width;
-	unsigned rate;
-	unsigned n_channels;
-
-	const char *bytes;
-	Py_ssize_t n_bytes;
-	unsigned sample_bits;
-	unsigned bytes_per_sample;
-	unsigned n_samples;
-	unsigned end;
-	unsigned c;
-	int32_t neg;
-	int32_t neg_mask;
-	double scale;
-
-	if (!PyArg_ParseTuple(args, "O!iIII", &PyByteArray_Type, &bytes_obj,
-			      &start, &sample_width, &rate, &n_channels))
-		return NULL;
-
-	if (sample_width && (sample_width != 2) && (sample_width != 3)) {
-		PyErr_SetString(PyExc_ValueError, "unsupported sample width");
-		return NULL;
-	}
-
-	if (n_channels != self->n_channels) {
-		PyErr_SetString(PyExc_ValueError, "wrong number of channels");
-		return NULL;
-	}
-
-	if (rate != self->rate) {
-		PyErr_SetString(PyExc_ValueError, "wrong sample rate");
-		return NULL;
-	}
-
-	if (!sample_width)
-		sample_width = sizeof(sample_t);
-
-	n_bytes = PyByteArray_Size(bytes_obj);
-	bytes_per_sample = n_channels * sample_width;
-
-	if (n_bytes % bytes_per_sample) {
-		PyErr_SetString(PyExc_ValueError, "invalid buffer length");
-		return NULL;
-	}
-
-	bytes = PyByteArray_AsString(bytes_obj);
-	n_samples = n_bytes / bytes_per_sample;
-	end = start + n_samples;
-
-	if (frag_grow(self, end))
-		return NULL;
-
-	sample_bits = 8 * sample_width;
-	scale = pow(2, sample_bits) / 2;
-	neg = 1 << (sample_bits - 1);
-	neg_mask = 0xFFFFFFFF - (1 << sample_bits) + 1;
-
-	for (c = 0; c < self->n_channels; ++c) {
-		const char *in = bytes + (sample_width * c);
-		sample_t *out = &self->data[c][start];
-		unsigned s;
-
-		switch (sample_width) {
-		case sizeof(sample_t):
-			for (s = start; s < end; ++s) {
-				*out++ = *(sample_t *)in;
-				in += bytes_per_sample;
-			}
-			break;
-		case 2:
-			for (s = start; s < end; ++s) {
-				*out++ = *(int16_t *)in / scale;
-				in += bytes_per_sample;
-			}
-			break;
-		case 3:
-			for (s = start; s < end; ++s) {
-				const uint8_t *b = (const uint8_t *)in;
-				int32_t sample = 0;
-				int n;
-
-				for (n = 0; n < sample_width; ++n)
-					sample += (*b++) << (n * 8);
-
-				if (sample & neg)
-					sample |= neg_mask;
-
-				*out++ = sample / scale;
-				in += bytes_per_sample;
-			}
-			break;
-		}
-	}
-
-	Py_RETURN_NONE;
-}
-
-PyDoc_STRVAR(Fragment_as_bytes_doc,
-"as_bytes(sample_width=0, start=None, end=None)\n"
-"\n"
-"Get the fragment's data in a given raw byte format.\n"
-"\n"
-"The ``sample_width`` can be set to 1 or 2 to get 8-bit or 16-bit integer "
-"samples.  The default is 0 to get the native 64-bit floating-point samples.  "
-"The ``start`` and ``end`` arguments can be specified in seconds to only get "
-"a subset of the data.\n");
-
-static PyObject *Fragment_as_bytes(Fragment *self, PyObject *args)
-{
-	unsigned sample_width = 0;
-	double start = NO_DOUBLE;
-	double end = NO_DOUBLE;
-
-	PyObject *bytes_obj;
-	Py_ssize_t bytes_size;
-	const sample_t *it[MAX_CHANNELS];
-	Py_ssize_t start_n;
-	Py_ssize_t end_n;
-	Py_ssize_t length;
-	Py_ssize_t i;
-	Py_ssize_t c;
-	char *out;
-
-	if (!PyArg_ParseTuple(args, "|Idd", &sample_width, &start, &end))
-		return NULL;
-
-	if (sample_width == 0)
-		sample_width = sizeof(sample_t);
-
-	if ((sample_width != 1) && (sample_width != 2) &&
-	    (sample_width != sizeof(sample_t))) {
-		PyErr_SetString(PyExc_ValueError, "unsupported sample width");
-		return NULL;
-	}
-
-	if (start == NO_DOUBLE)
-		start_n = 0;
-	else
-		start_n = max(start, 0.0) * self->rate;
-
-	if (end == NO_DOUBLE)
-		end_n = self->length;
-	else
-		end_n = min((end * self->rate), self->length);
-
-	if (end_n < start_n) {
-		PyErr_SetString(PyExc_ValueError, "end before start time");
-		return NULL;
-	}
-
-	length = end_n - start_n;
-	bytes_size = length * self->n_channels * sample_width;
-	bytes_obj = PyByteArray_FromStringAndSize(NULL, bytes_size);
-
-	if (bytes_obj == NULL)
-		return PyErr_NoMemory();
-
-	for (c = 0; c < self->n_channels; ++c)
-		it[c] = &self->data[c][start_n];
-
-	out = PyByteArray_AS_STRING(bytes_obj);
-
-	switch (sample_width) {
-	case sizeof(sample_t): {
-		sample_t *sample_out = (sample_t *)out;
-
-		for (i = 0; i < length; ++i)
-			for (c = 0; c < self->n_channels; ++c)
-				*sample_out++ = *(it[c]++);
-		break;
-	}
-	case 2:
-		for (i = 0; i < length; ++i) {
-			for (c = 0; c < self->n_channels; ++c) {
-				const sample_t z = *(it[c]++);
-				int16_t s;
-
-				if (z < -1.0)
-					s = -32767;
-				else if (z > 1.0)
-					s = 32767;
-				else
-					s = z * 32767;
-
-				*out++ = s & 0xFF;
-				*out++ = (s >> 8) & 0xFF;
-			}
-		}
-		break;
-	case 1:
-		for (i = 0; i < length; ++i) {
-			for (c = 0; c < self->n_channels; ++c) {
-				const sample_t z = *(it[c]++);
-				int8_t s;
-
-				if (z < -1.0)
-					s = 0;
-				else if (z > 1.0)
-					s = 255;
-				else
-					s = (z * 127) + 128;
-
-				*out++ = s & 0xFF;
-			}
-		}
-		break;
-	}
-
-	return bytes_obj;
 }
 
 PyDoc_STRVAR(Fragment_normalize_doc,
@@ -1236,7 +1309,7 @@ static PyObject *Fragment_resize(Fragment *self, PyObject *args, PyObject *kw)
 	unsigned long length = 0;
 
 	if (!PyArg_ParseTupleAndKeywords(args, kw, "|dk", kwlist,
-					 &duration,&length))
+					 &duration, &length))
 		return NULL;
 
 	if (duration < 0.0) {
@@ -1259,12 +1332,12 @@ static PyObject *Fragment_resize(Fragment *self, PyObject *args, PyObject *kw)
 }
 
 static PyMethodDef Fragment_methods[] = {
+	{ "import_bytes", (PyCFunction)Fragment_import_bytes, METH_KEYWORDS,
+	  Fragment_import_bytes_doc },
+	{ "export_bytes", (PyCFunction)Fragment_export_bytes, METH_KEYWORDS,
+	  Fragment_export_bytes_doc },
 	{ "mix", (PyCFunction)Fragment_mix, METH_KEYWORDS,
 	  Fragment_mix_doc },
-	{ "import_bytes", (PyCFunction)Fragment_import_bytes, METH_VARARGS,
-	  Fragment_import_bytes_doc },
-	{ "as_bytes", (PyCFunction)Fragment_as_bytes, METH_VARARGS,
-	  Fragment_as_bytes_doc },
 	{ "normalize", (PyCFunction)Fragment_normalize, METH_VARARGS,
 	  Fragment_normalize_doc },
 	{ "amp", (PyCFunction)Fragment_amp, METH_VARARGS,
@@ -1396,6 +1469,23 @@ static int frag_resize(Fragment *frag, size_t length)
 	}
 
 	frag->length = length;
+
+	return 0;
+}
+
+static int frag_get_sample_number(size_t *val, long min_val, long max_val,
+				  PyObject *obj)
+{
+	long tmp_val;
+
+	if (!PyInt_Check(obj)) {
+		PyErr_SetString(PyExc_TypeError,
+				"sample number must be an integer");
+		return -1;
+	}
+
+	tmp_val = min(PyInt_AsLong(obj), max_val);
+	*val = max(tmp_val, min_val);
 
 	return 0;
 }
@@ -2396,18 +2486,6 @@ static PyObject *splat_reverb(PyObject *self, PyObject *args)
 	Py_RETURN_NONE;
 }
 
-PyDoc_STRVAR(splat_get_sample_precision_doc,
-"get_sample_precision()\n"
-"\n"
-"Get the sound sample precision as the number of bits in each floating point "
-"sample value.  This is typically 64 or 32 when built with fast mode turned "
-"on.\n");
-
-static PyObject *splat_get_sample_precision(PyObject *self, PyObject *_)
-{
-	return PyLong_FromLong(sizeof(sample_t) * 8);
-}
-
 static PyMethodDef splat_methods[] = {
 	{ "lin2dB", splat_lin2dB, METH_VARARGS,
 	  splat_lin2dB_doc },
@@ -2427,8 +2505,6 @@ static PyMethodDef splat_methods[] = {
 	  splat_reverse_doc },
 	{ "reverb", splat_reverb, METH_VARARGS,
 	  splat_reverb_doc },
-	{ "get_sample_precision", splat_get_sample_precision, METH_NOARGS,
-	  splat_get_sample_precision_doc },
 	{ NULL, NULL, 0, NULL }
 };
 
@@ -2463,4 +2539,9 @@ PyMODINIT_FUNC init_splat(void)
 
 	splat_init_source_ratio = PyFloat_FromDouble(0.5);
 	PyModule_AddObject(m, "_init_source_ratio", splat_init_source_ratio);
+
+	PyModule_AddIntConstant(m, "SAMPLE_INT", SPLAT_SAMPLE_INT);
+	PyModule_AddIntConstant(m, "SAMPLE_FLOAT", SPLAT_SAMPLE_FLOAT);
+	PyModule_AddIntConstant(m, "NATIVE_SAMPLE_TYPE", SPLAT_SAMPLE_TYPE);
+	PyModule_AddIntConstant(m, "NATIVE_SAMPLE_WIDTH", SPLAT_SAMPLE_WIDTH);
 }

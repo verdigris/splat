@@ -16,7 +16,9 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import _splat
-from _splat import lin2dB, dB2lin, get_sample_precision
+from _splat import lin2dB, dB2lin
+from _splat import SAMPLE_INT, SAMPLE_FLOAT
+from _splat import NATIVE_SAMPLE_TYPE, NATIVE_SAMPLE_WIDTH
 
 __all__ = ['gen', 'data', 'filters', 'sources', 'scales', 'interpol']
 
@@ -25,8 +27,6 @@ VERSION_STR = '.'.join([str(v) for v in VERSION])
 BUILD = 8
 
 __version__ = VERSION_STR
-
-sample_precision = _splat.get_sample_precision()
 
 def check_version(ver):
     if ver != VERSION:
