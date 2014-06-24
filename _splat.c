@@ -777,10 +777,32 @@ static void splat_export_float64(char *out, const sample_t **in,
 	}
 }
 
+static void splat_import_float32(sample_t *out, const char *in, size_t n,
+				 size_t step)
+{
+	while (n--) {
+		*out++ = *(const float *)in;
+		in += step;
+	}
+}
+
+static void splat_export_float32(char *out, const sample_t **in,
+				 unsigned channels, size_t n)
+{
+	float *out32 = (float *)out;
+
+	while (n--) {
+		unsigned c;
+
+		for (c = 0; c < channels; ++c)
+			*out32++ = *(in[c]++);
+	}
+}
+
 static void splat_import_int16(sample_t *out, const char *in, size_t n,
 			       size_t step)
 {
-	static const double scale = 32767.0;
+	static const sample_t scale = 32767.0;
 
 	while (n--) {
 		*out++ = *(int16_t *)in / scale;
@@ -813,9 +835,44 @@ static void splat_export_int16(char *out, const sample_t **in,
 	}
 }
 
+static void splat_import_int8(sample_t *out, const char *in, size_t n,
+			      size_t step)
+{
+	static const sample_t scale = 127.0;
+
+	while (n--) {
+		*out++ = *(int8_t *)in / scale;
+		in += step;
+	}
+}
+
+static void splat_export_int8(char *out, const sample_t **in,
+			      unsigned channels, size_t n)
+{
+	while (n--) {
+		unsigned c;
+
+		for (c = 0; c < channels; ++c) {
+			const sample_t z = (*in[c]++);
+			int8_t s;
+
+			if (z < 1.0)
+				s = 0;
+			else if (z > 1.0)
+				s = 255;
+			else
+				s = (z * 127) + 128;
+
+			*out++ = s;
+		}
+	}
+}
+
 static const struct splat_raw_io splat_raw_io_table[] = {
 	{ SPLAT_SAMPLE_FLOAT, 64, splat_import_float64, splat_export_float64 },
+	{ SPLAT_SAMPLE_FLOAT, 32, splat_import_float32, splat_export_float32 },
 	{ SPLAT_SAMPLE_INT, 16, splat_import_int16, splat_export_int16, },
+	{ SPLAT_SAMPLE_INT, 8, splat_import_int8, splat_export_int8 },
 };
 
 static const struct splat_raw_io *splat_get_raw_io(
