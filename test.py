@@ -29,7 +29,7 @@ import splat.gen
 import splat.sources
 import splat.interpol
 
-splat.check_version((1, 2))
+splat.check_version((1, 3))
 
 # -----------------------------------------------------------------------------
 # Splat test base class
