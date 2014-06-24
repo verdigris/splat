@@ -54,8 +54,7 @@ class FragmentTest(SplatTest):
         """Fragment.md5"""
         frag = splat.data.Fragment()
         splat.gen.SineGenerator(frag=frag).run(0.0, 0.345, 123.0)
-        formats = [(splat.SAMPLE_FLOAT, 64), (splat.SAMPLE_INT, 16)]
-        for st, sw in formats:
+        for st, sw in splat.audio_formats:
             md5sum = md5.new(frag.export_bytes(st, sw)).hexdigest()
             self.assertEqual(md5sum, frag.md5(st, sw))
 
@@ -80,6 +79,21 @@ class FragmentTest(SplatTest):
         self.assert_samples(frag_twice, {n: (offset_check, offset_check)})
         self.assert_md5([frag, frag_sig], '248070c79f99014cf800d05ea81e0679')
 
+    def test_frag_import_bytes(self):
+        """Fragment.import_bytes"""
+        frag = splat.data.Fragment()
+        splat.gen.SineGenerator(frag).run(0.1, 2.7, 3456.7)
+        for st, sw in splat.audio_formats:
+            ref_bytes = frag.export_bytes(st, sw)
+            ref_md5 = md5.new(ref_bytes).hexdigest()
+            imp = splat.data.Fragment()
+            imp.import_bytes(ref_bytes, frag.rate, frag.channels, st, sw)
+            exp_bytes = imp.export_bytes(st, sw)
+            exp_md5 = md5.new(exp_bytes).hexdigest()
+            self.assertEqual(ref_md5, exp_md5,
+                             "Import/export MD5 mismatch (type={}, width={})"
+                             .format(st, sw))
+
     def test_frag_export_bytes(self):
         """Fragment.export_bytes"""
         duration = 0.1
@@ -98,7 +112,7 @@ class FragmentTest(SplatTest):
             ref = int(j * max16)
             self.assertEqual(
                 val, ref,
-                "Incorrect 16 bits value: {} instead of {}".format(val, ref))
+                "Incorrect 16-bit value: {} instead of {}".format(val, ref))
         i0, i1 = (int(length * r) for r in (0.23, 0.83))
         frag_bytes = frag.export_bytes(sample_type, sample_width, i0, i1)
         self.assertEqual(len(frag_bytes), ((i1 - i0) * sample_width / 8),
