@@ -1,6 +1,6 @@
 # Splat - splat/filters.py
 #
-# Copyright (C) 2012, 2013 Guillaume Tucker <guillaume@mangoz.org>
+# Copyright (C) 2012, 2013, 2014 Guillaume Tucker <guillaume@mangoz.org>
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU Lesser General Public License as published by the Free
