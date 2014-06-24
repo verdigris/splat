@@ -856,12 +856,12 @@ static void splat_export_int8(char *out, const sample_t **in,
 			const sample_t z = (*in[c]++);
 			int8_t s;
 
-			if (z < 1.0)
+			if (z < -1.0)
 				s = 0;
 			else if (z > 1.0)
 				s = 255;
 			else
-				s = (z * 127) + 128;
+				s = z * 127.0;
 
 			*out++ = s;
 		}
