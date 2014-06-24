@@ -33,6 +33,9 @@ def check_version(ver):
         raise Exception("Version mismatch: {0}, required: {1}".format(
                 VERSION, ver))
 
+audio_formats = [(SAMPLE_FLOAT, 64), (SAMPLE_FLOAT, 32),
+                 (SAMPLE_INT, 16), (SAMPLE_INT, 8)]
+
 class Signal(_splat.Signal):
 
     """A general purpose signal.
