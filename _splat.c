@@ -68,9 +68,6 @@
 # define ARRAY_SIZE(_array) (sizeof(_array) / sizeof(_array[0]))
 #endif
 
-/* ToDo: remove */
-#define NO_DOUBLE ((double)0xFFFFFFFF)
-
 enum splat_sample_type {
 	SPLAT_SAMPLE_INT = 1,    /* Integer sample */
 	SPLAT_SAMPLE_FLOAT = 2,  /* Floating point sample */
@@ -93,6 +90,9 @@ static const size_t SPLAT_SAMPLE_WIDTH = sizeof(sample_t) * 8;
 
 /* Initial ratio for sound sources (square, triangle) */
 static PyObject *splat_init_source_ratio;
+
+/* Default 0.0 dB level */
+static PyObject *splat_zero;
 
 /* ----------------------------------------------------------------------------
  * Fragment class interface
@@ -1088,6 +1088,65 @@ static PyObject *Fragment_export_bytes(Fragment *self, PyObject *args,
 	return bytes_obj;
 }
 
+static void splat_mix_floats(Fragment *self, const Fragment *frag,
+			     size_t offset, size_t start, size_t length,
+			     const double *levels, int zero_dB)
+{
+	unsigned c;
+
+	for (c = 0; c < self->n_channels; ++c) {
+		const sample_t *src = &frag->data[c][start];
+		sample_t *dst =  &self->data[c][offset];
+		Py_ssize_t i = length;
+
+		if (zero_dB) {
+			while (i--)
+				*dst++ += *src++;
+		} else {
+			const double g = levels[c];
+
+			while (i--)
+				*dst++ += g * (*src++);
+		}
+	}
+}
+
+static int splat_mix_signals(Fragment *self, const Fragment *frag,
+			     size_t offset, size_t start, size_t length,
+			     const struct splat_levels_helper *levels)
+{
+	struct splat_signal sig;
+	PyObject *signals[MAX_CHANNELS];
+	unsigned c;
+	size_t in;
+
+	for (c = 0; c < frag->n_channels; ++c)
+		signals[c] = levels->obj[c];
+
+	if (splat_signal_init(&sig, offset + length, self->rate, signals,
+			      self->n_channels))
+		return -1;
+
+	sig.cur = offset;
+	in = start;
+
+	while (splat_signal_next(&sig) == SIGNAL_VECTOR_CONTINUE) {
+		size_t i, j;
+
+		for (i = sig.cur, j = 0; i < sig.end; ++i, ++j, ++in) {
+			for (c = 0; c < frag->n_channels; ++c) {
+				double a = dB2lin(sig.vectors[c].data[j]);
+
+				self->data[c][i] += frag->data[c][in] * a;
+			}
+		}
+	}
+
+	splat_signal_free(&sig);
+
+	return 0;
+}
+
 PyDoc_STRVAR(Fragment_mix_doc,
 "mix(fragment, offset=0.0, start=0.0, levels=None, length=None)\n"
 "\n"
@@ -1101,7 +1160,13 @@ PyDoc_STRVAR(Fragment_mix_doc,
 "the ``length`` to be mixed can be manually limited.  These values will be "
 "automatically adjusted to remain within the available incoming data.  The "
 "length of this fragment will be automatically increased if necessary to hold "
-"the mixed data.\n");
+"the mixed data.\n"
+"\n"
+"The ``levels`` argument can be used to alter the amplitude of the incoming "
+"fragment as gain signals while mixing - this does not affect it directly.\n"
+"\n"
+"Please note that the two fragments must use the same sample rate and have "
+"the same number of channels.\n");
 
 static PyObject *Fragment_mix(Fragment *self, PyObject *args, PyObject *kw)
 {
@@ -1111,14 +1176,13 @@ static PyObject *Fragment_mix(Fragment *self, PyObject *args, PyObject *kw)
 	double offset = 0.0;
 	double start = 0.0;
 	PyObject *length_obj = NULL;
-	PyObject *levels_obj = NULL;
+	PyObject *levels_obj = Py_None;
 
 	struct splat_levels_helper levels;
 	ssize_t length;
 	ssize_t offset_sample;
 	ssize_t start_sample;
 	size_t total_length;
-	unsigned c;
 
 	if (!PyArg_ParseTupleAndKeywords(args, kw, "O!|ddOd", kwlist,
 					 &splat_FragmentType, &frag, &offset,
@@ -1135,9 +1199,11 @@ static PyObject *Fragment_mix(Fragment *self, PyObject *args, PyObject *kw)
 		return NULL;
 	}
 
-	if (levels_obj != NULL)
-		if (frag_get_levels(self, &levels, levels_obj))
-			return NULL;
+	if (levels_obj == Py_None)
+		levels_obj = splat_zero;
+
+	if (frag_get_levels(self, &levels, levels_obj))
+		return NULL;
 
 	if (length_obj != NULL) {
 		if (!PyFloat_Check(length_obj)) {
@@ -1161,21 +1227,12 @@ static PyObject *Fragment_mix(Fragment *self, PyObject *args, PyObject *kw)
 	if (frag_grow(self, total_length))
 		return NULL;
 
-	for (c = 0; c < self->n_channels; ++c) {
-		const sample_t *src = &frag->data[c][start_sample];
-		sample_t *dst =  &self->data[c][offset_sample];
-		Py_ssize_t i = length;
-
-		if (levels_obj == NULL) {
-
-			while (i--)
-				*dst++ += *src++;
-		} else {
-			const double g = levels.fl[c];
-
-			while (i--)
-				*dst++ += g * (*src++);
-		}
+	if (levels.all_floats) {
+		splat_mix_floats(self, frag, offset_sample, start_sample,
+				 length, levels.fl, levels_obj == splat_zero);
+	} else if (splat_mix_signals(self, frag, offset_sample, start_sample,
+				     length, &levels)) {
+		return NULL;
 	}
 
 	Py_RETURN_NONE;
@@ -1653,7 +1710,7 @@ static int splat_sine_signals(Fragment *frag, PyObject **levels,
 	while (splat_signal_next(&sig) == SIGNAL_VECTOR_CONTINUE) {
 		size_t i, j;
 
-		for (i = sig.cur, j = 0; i < sig.end; ++i, j++) {
+		for (i = sig.cur, j = 0; i < sig.end; ++i, ++j) {
 			const double t = (double)i / frag->rate;
 			const double f = sig.vectors[SIG_FREQ].data[j];
 			const double ph = sig.vectors[SIG_PHASE].data[j];
@@ -2596,6 +2653,8 @@ PyMODINIT_FUNC init_splat(void)
 
 	splat_init_source_ratio = PyFloat_FromDouble(0.5);
 	PyModule_AddObject(m, "_init_source_ratio", splat_init_source_ratio);
+	splat_zero = PyFloat_FromDouble(0.0);
+	PyModule_AddObject(m, "_zero", splat_zero);
 
 	PyModule_AddIntConstant(m, "SAMPLE_INT", SPLAT_SAMPLE_INT);
 	PyModule_AddIntConstant(m, "SAMPLE_FLOAT", SPLAT_SAMPLE_FLOAT);
