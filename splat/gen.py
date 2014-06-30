@@ -119,12 +119,18 @@ class Generator(object):
         arguments.
 
         The ``start`` and ``end`` arguments are when the sound should start and
-        end in seconds.  The rest of the arguments are passed to the ``_run``
-        method, with the ``levels`` keywords always in second place after the
-        internal fragment.
+        end in seconds.  The ``levels`` keyword can be used to override the
+        default values stored in the Generator.levels and passed to the
+        ``_run`` method.
 
-        When ``_run`` has been run on the new fragment, filters are run on it
-        and it is then mixed with the main internal fragment.
+        When ``_run`` has been performed on the new fragment, filters are then
+        run on it and it is finally mixed with the main internal fragment.
+
+        It's also possible to pass a ``mix_levels`` keyword argument which is
+        used when mixing the newly generated fragment into the main generator
+        fragment, after the ``_run`` method has been called.  This is
+        especially useful when using gains as signals with time relative to the
+        beginning and length of the main fragment.
         """
         levels = kw.pop('levels', self._levels)
         start = float(start)
@@ -132,7 +138,7 @@ class Generator(object):
         frag = Fragment(self.channels, self.rate, (end - start))
         self._run(frag, levels, *args, **kw)
         self.filters.run(frag)
-        self.frag.mix(frag, start)
+        self.frag.mix(frag, start, levels=kw.pop('mix_levels', None))
 
 
 class SourceGenerator(Generator):
@@ -158,7 +164,7 @@ class SourceGenerator(Generator):
         return self._source
 
     def _run(self, frag, levels, freq, phase=0.0, *args, **kw):
-        self.source(frag, levels, freq, phase, *args, **kw)
+        self.source(frag, levels, freq, phase, *args)
 
 
 class SineGenerator(SourceGenerator):
