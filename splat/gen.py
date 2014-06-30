@@ -54,9 +54,7 @@ class Generator(object):
         :py:meth:`splat.filters.FilterChain` object.  This can be altered later
         via :py:attr:`splat.gen.Generator.filters`.
         """
-        if frag is None:
-            frag = Fragment()
-        self._frag = frag
+        self.frag = frag
         self._filter_chain = FilterChain(filters)
         self._levels = tuple([0.0 for x in range(self.frag.channels)])
         self._time_stretch = 1.0
@@ -75,18 +73,27 @@ class Generator(object):
     @property
     def frag(self):
         """:py:class:`splat.data.Fragment` instance with the generated
-        sounds."""
+        audio data."""
         return self._frag
+
+    @frag.setter
+    def frag(self, value):
+        if value is None:
+            self._frag = Fragment()
+        elif not isinstance(value, Fragment):
+            raise TypeError("Fragment must be a splat.data.Fragment")
+        else:
+            self._frag = value
 
     @property
     def channels(self):
         """Number of channels."""
-        return self._frag.channels
+        return self.frag.channels
 
     @property
     def rate(self):
         """Sample rate in Hz."""
-        return self._frag.rate
+        return self.frag.rate
 
     @property
     def filters(self):
