@@ -1515,11 +1515,12 @@ static int frag_get_levels(Fragment *frag, struct splat_levels_helper *levels,
 	if (PyFloat_Check(levels_obj)) {
 		const double gain_lin = dB2lin(PyFloat_AsDouble(levels_obj));
 
+		levels->all_floats = 1;
+		levels->n = frag->n_channels;
+
 		for (c = 0; c < frag->n_channels; ++c) {
 			levels->obj[c] = levels_obj;
 			levels->fl[c] = gain_lin;
-			levels->all_floats = 1;
-			levels->n = frag->n_channels;
 		}
 	} else if (PyTuple_Check(levels_obj)) {
 		const Py_ssize_t n_channels = PyTuple_GET_SIZE(levels_obj);
@@ -1552,9 +1553,11 @@ static int frag_get_levels(Fragment *frag, struct splat_levels_helper *levels,
 			}
 		}
 	} else {
-		PyErr_SetString(PyExc_TypeError,
-				"level values must be float or tuple");
-		return -1;
+		levels->all_floats = 0;
+		levels->n = frag->n_channels;
+
+		for (c = 0; c < frag->n_channels; ++c)
+			levels->obj[c] = levels_obj;
 	}
 
 	return 0;
