@@ -255,19 +255,21 @@ class SignalTest(SplatTest):
                 x, y, self._places,
                 "Incorrect function signal value[{}]: {} {}".format(i, x, y))
         frag2 = splat.data.Fragment(duration=duration, channels=1)
-        splat.sources.sine(frag2, 456.789, 0.0, 0.0)
-        for x, y in zip(frag2, splat.Signal(frag, frag2)):
+        splat.sources.sine(frag2, 0.0, 456.789)
+        for i, (x, y) in enumerate(zip(frag2, splat.Signal(frag, frag2))):
             self.assertEqual(
-                x, y, "Incorrect fragment signal value: {} {}".format(x, y))
+                x, y, "Incorrect fragment signal value[{}]: {} {}".format(
+                    i, x, y))
         for i, (y, z) in enumerate(splat.Signal(frag, (func, float_value))):
             x = func(frag.n2s(i))
             self.assertAlmostEqual(
                 x, y, self._places,
-                "Incorrect mixed signal value (func): {} {}".format(x, y))
+                "Incorrect mixed signal value (func)[{}]: {} {}".format(
+                    i, x, y))
             self.assertAlmostEqual(
                 z, float_value, self._places,
-                "Incorrect mixed signal value (float): {} {}".format(
-                    z, float_value))
+                "Incorrect mixed signal value (float)[{}]: {} {}".format(
+                    i, z, float_value))
 
 
 class GeneratorTest(SplatTest):
@@ -284,13 +286,13 @@ class GeneratorTest(SplatTest):
         """sources.sine"""
         freq = 1237.9
         frag_float = splat.data.Fragment(duration=1.0)
-        splat.sources.sine(frag_float, -0.5, freq, 0.0)
+        splat.sources.sine(frag_float, -0.5, freq)
         frag_signal = splat.data.Fragment(duration=1.0)
         splat.sources.sine(frag_signal, -0.5, freq, lambda x: 0.0)
         frag_freq = splat.data.Fragment(duration=1.0, channels=1)
         frag_freq.offset(freq)
         frag_frag = splat.data.Fragment(duration=1.0)
-        splat.sources.sine(frag_frag, -0.5, frag_freq, 0.0)
+        splat.sources.sine(frag_frag, -0.5, frag_freq)
         self.assert_md5([frag_float, frag_signal, frag_frag],
                         '46a8962a759033371f45c4ade9f2bfbd')
 
@@ -308,13 +310,13 @@ class GeneratorTest(SplatTest):
         """sources.square"""
         freq = 1237.9
         frag_float = splat.data.Fragment(duration=1.0)
-        splat.sources.square(frag_float, -0.5, freq, 0.0)
+        splat.sources.square(frag_float, -0.5, freq)
         frag_signal = splat.data.Fragment(duration=1.0)
         splat.sources.square(frag_signal, -0.5, freq, lambda x: 0.0)
         frag_freq = splat.data.Fragment(duration=1.0, channels=1)
         frag_freq.offset(freq)
         frag_frag = splat.data.Fragment(duration=1.0)
-        splat.sources.square(frag_frag, -0.5, frag_freq, 0.0)
+        splat.sources.square(frag_frag, -0.5, frag_freq)
         self.assert_md5([frag_float, frag_signal, frag_frag],
                         '6a6ab2e991baf48a6fe2c1d18700e40e')
 
@@ -332,13 +334,13 @@ class GeneratorTest(SplatTest):
         """sources.triangle"""
         freq = 1237.5
         frag_float = splat.data.Fragment(duration=1.0)
-        splat.sources.triangle(frag_float, -0.5, freq, 0.0)
+        splat.sources.triangle(frag_float, -0.5, freq)
         frag_signal = splat.data.Fragment(duration=1.0)
         splat.sources.triangle(frag_signal, -0.5, freq, lambda x: 0.0)
         frag_freq = splat.data.Fragment(duration=1.0, channels=1)
         frag_freq.offset(freq)
         frag_frag = splat.data.Fragment(duration=1.0)
-        splat.sources.triangle(frag_frag, -0.5, frag_freq, 0.0)
+        splat.sources.triangle(frag_frag, -0.5, frag_freq)
         self.assert_md5([frag_float, frag_signal, frag_frag],
                         '4bce3885732ba2f5450e79e42155adaa')
 
@@ -347,7 +349,7 @@ class GeneratorTest(SplatTest):
         gen = splat.gen.TriangleGenerator()
         f = 1000.0
         ratio = 0.567
-        gen.run(0.0, 1.0, f, 0.0, ratio, levels=(0.0, 0.0))
+        gen.run(0.0, 1.0, f, 0.0, ratio, levels=0.0)
         nf = gen.frag.rate / f
         x1 = 0.25
         t1 = int(nf * ratio * x1)
@@ -367,16 +369,16 @@ class GeneratorTest(SplatTest):
         freq = 1237.5
         ot = [(1.3, 0.0, -2.5), (5.7, 10.0, -12.9)]
         frag_float = splat.data.Fragment(duration=1.0)
-        splat.sources.overtones(frag_float, -0.5, freq, 0.0, ot)
+        splat.sources.overtones(frag_float, -0.5, freq, ot)
         frag_mixed = splat.data.Fragment(duration=1.0)
-        splat.sources.overtones(frag_mixed, -0.5, freq, lambda x: 0.0, ot)
+        splat.sources.overtones(frag_mixed, -0.5, freq, ot, lambda x: 0.0)
         frag_signal = splat.data.Fragment(duration=1.0)
         ot_sig = [(1.3, 0.0, -2.5), (5.7, lambda x: 10.0, -12.9)]
-        splat.sources.overtones(frag_signal, -0.5, freq, lambda x: 0.0, ot_sig)
+        splat.sources.overtones(frag_signal, -0.5, freq, ot_sig, lambda x: 0.0)
         frag_freq = splat.data.Fragment(duration=1.0, channels=1)
         frag_freq.offset(1237.5)
         frag_frag = splat.data.Fragment(duration=1.0)
-        splat.sources.overtones(frag_frag, -0.5, frag_freq, 0.0, ot)
+        splat.sources.overtones(frag_frag, -0.5, frag_freq, ot)
         self.assert_md5([frag_float, frag_mixed, frag_signal, frag_frag],
                         '8974a1eea0db97af1aa171f531685e9d')
 
@@ -384,8 +386,7 @@ class GeneratorTest(SplatTest):
         """gen.OvertonesGenerator"""
         gen = splat.gen.OvertonesGenerator()
         gen.ot_decexp(1.0)
-        f = 1000.0
-        gen.run(0.0, 1.0, f)
+        gen.run(0.0, 1.0, 1000.0)
         self.assert_md5(gen.frag, 'ee045e012673ff7ed4ab9bd590b57368')
 
 
