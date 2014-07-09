@@ -46,7 +46,7 @@ class Signal(_splat.Signal):
     in time and have a fixed duration.
     """
 
-    def __init__(self, frag, sig_obj, duration=None):
+    def __init__(self, frag, sig_obj, duration=None, origin=None):
         """The ``frag`` argument is a :py:class:`splat.data.Fragment` object
         with which the Signal will be compatible.  This is used to determine
         the sample rate and the duration of the signal.  Then ``sig_obj`` is
@@ -69,4 +69,6 @@ class Signal(_splat.Signal):
         args = (frag, sig_obj)
         if duration is not None:
             args += (duration,)
+        if origin is not None:
+            args += (origin,)
         super(Signal, self).__init__(*args)
