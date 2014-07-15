@@ -19,6 +19,16 @@ import os
 import struct
 import wave
 import md5
+try:
+    # For extra standard audio formats
+    import audiotools
+    has_audiotools = True
+    try:
+        from cStringIO import StringIO
+    except ImportError:
+        from StringIO import StringIO
+except ImportError:
+    has_audiotools = False
 import _splat
 import splat
 
@@ -40,10 +50,10 @@ def _get_fmt(f, fmt):
 def _read_chunks(frag, read_frames, frame_size, sample_type, sample_width):
     rem = len(frag)
     cur = 0
-    chunk_size = (64 * 1024) / frame_size
+    chunk_size = 65536 / frame_size
 
     while rem > 0:
-        n = chunk_size if (rem >= chunk_size) else rem
+        n = min(chunk_size, rem)
         raw_bytes = bytearray(read_frames(n))
         frag.import_bytes(raw_bytes, frag.rate, frag.channels, sample_type,
                           sample_width, cur)
@@ -95,10 +105,39 @@ def open_saf(saf_file, fmt=None):
 
 audio_file_openers = [open_wav, open_saf,]
 
+if has_audiotools is True:
+    def open_audiotools(f_name, fmt=None):
+        if not isinstance(f_name, str):
+            return None
+        try:
+            f = audiotools.open(f_name)
+        except audiotools.UnsupportedFile:
+            return None
+        precision = f.bits_per_sample()
+        pcm = f.to_pcm()
+        frag = Fragment(rate=f.sample_rate(), channels=f.channels(),
+                        length=f.total_frames())
+        frame_size = frag.channels * precision / 8
+        chunk_size = 65536 / frame_size
+        rem = f.total_frames()
+        cur = 0
+        while rem > 0:
+            frames = pcm.read(chunk_size)
+            if frames.frames == 0:
+                # Some lossy formats like MP3 have slightly varying data length
+                break
+            raw_bytes = bytearray(frames.to_bytes(False, True))
+            frag.import_bytes(raw_bytes, frag.rate, frag.channels,
+                              splat.SAMPLE_INT, precision, cur)
+            rem -= frames.frames
+            cur += frames.frames
+        return frag
+    audio_file_openers.append(open_audiotools)
+
 # -----------------------------------------------------------------------------
 # Audio file savers
 
-def save_wav(wav_file, frag, start=None, end=None, sample_width=16):
+def save_wav(wav_file, frag, start, end, sample_width=16):
     w = wave.open(wav_file, 'w')
     w.setnchannels(frag.channels)
     w.setsampwidth(sample_width / 8)
@@ -108,7 +147,7 @@ def save_wav(wav_file, frag, start=None, end=None, sample_width=16):
     w.writeframes(buffer(raw_bytes))
     w.close()
 
-def save_saf(saf_file, frag, start=None, end=None):
+def save_saf(saf_file, frag, start, end):
     is_str = isinstance(saf_file, str)
     f = open(saf_file, 'w') if is_str else saf_file
     attrs = {
@@ -129,6 +168,32 @@ def save_saf(saf_file, frag, start=None, end=None):
         f.close()
 
 audio_file_savers = { 'wav': save_wav, 'saf': save_saf, }
+
+if has_audiotools is True:
+    channel_masks = [0x4, 0x3, 0x7, 0x33, 0x37, 0x137, 0x637, 0x737, 0xF37,
+                     0x7F7, 0xFF7, 0x2FF7, 0x6FF7, 0x7FF7, 0x17FF7, 0x2FFF7]
+
+    def save_audiotools(cls, fname, frag, start, end, sample_width=16,
+                        channel_mask=None, compression=None):
+        if not isinstance(fname, str):
+            raise TypeError('File name needed when saving with audiotools')
+        if channel_mask is None:
+            channel_mask = channel_masks[frag.channels]
+        data = frag.export_bytes(splat.SAMPLE_INT, sample_width, start, end)
+        str_io = StringIO(str(data))
+        reader = audiotools.PCMReader(str_io, frag.rate, frag.channels,
+                                      channel_mask, sample_width)
+        cls.from_pcm(fname, reader, compression, len(frag))
+
+    fmt_cls = {
+               'ogg': audiotools.VorbisAudio,
+               'flac': audiotools.FlacAudio,
+               'mp3': audiotools.MP3Audio,
+               }
+    def fmt_lambda(cls):
+        return lambda *a, **k: save_audiotools(cls, *a, **k)
+    for fmt, cls in fmt_cls.iteritems():
+        audio_file_savers[fmt] = fmt_lambda(cls)
 
 # -----------------------------------------------------------------------------
 # Data classes

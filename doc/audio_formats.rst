@@ -63,3 +63,13 @@ The following names are used to choose the audio file format in
   or to share some data across other splats.  There is currently no known
   programme to play these files directly, although it's quite easy to import
   one into a Fragment and export it again as WAV.
+
+
+Additional audio file formats
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+When the `audiotools <http://audiotools.sourceforge.net/>`_ package is
+installed, additional formats such as ``flac``, ``ogg`` or ``mp3`` are also
+supported to import and export data.  With audiotools, only file names can be
+used and anonymous file-like objects are not supported unlike with ``wav`` and
+``saf`` formats.
