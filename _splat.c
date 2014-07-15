@@ -806,10 +806,59 @@ static void splat_export_float32(char *out, const sample_t **in,
 	}
 }
 
+static void splat_import_int24(sample_t *out, const char *in, size_t n,
+			       size_t step)
+{
+	static const int32_t neg24 = 1 << 23;
+	static const int32_t neg_mask32 = 0xFF000000;
+	static const sample_t scale = (1 << 23) - 1;
+
+	while (n--) {
+		const uint8_t *in8 = (const uint8_t *)in;
+		int32_t sample32;
+
+		sample32 = *in8++;
+		sample32 += (*in8++) << 8;
+		sample32 += (*in8++) << 16;
+
+		if (sample32 & neg24)
+			sample32 |= neg_mask32;
+
+		*out++ = sample32 / scale;
+		in += step;
+	}
+}
+
+static void splat_export_int24(char *out, const sample_t **in,
+			       unsigned channels, size_t n)
+{
+	static const int32_t scale = (1 << 23) - 1;
+
+	while (n--) {
+		unsigned c;
+
+		for (c = 0; c < channels; ++c) {
+			const sample_t z = *(in[c]++);
+			int32_t s;
+
+			if (z < -1.0)
+				s = -scale;
+			else if (z > 1.0)
+				s = scale;
+			else
+				s = z * scale;
+
+			*out++ = s & 0xFF;
+			*out++ = (s >> 8) & 0xFF;
+			*out++ = (s >> 16) & 0xFF;
+		}
+	}
+}
+
 static void splat_import_int16(sample_t *out, const char *in, size_t n,
 			       size_t step)
 {
-	static const sample_t scale = 32767.0;
+	static const sample_t scale = (1 << 15) - 1;
 
 	while (n--) {
 		*out++ = *(int16_t *)in / scale;
@@ -818,9 +867,9 @@ static void splat_import_int16(sample_t *out, const char *in, size_t n,
 }
 
 static void splat_export_int16(char *out, const sample_t **in,
-			      unsigned channels, size_t n)
+			       unsigned channels, size_t n)
 {
-	static const long scale = 32767;
+	static const long scale = (1 << 15) - 1;
 
 	while (n--) {
 		unsigned c;
@@ -878,6 +927,7 @@ static void splat_export_int8(char *out, const sample_t **in,
 static const struct splat_raw_io splat_raw_io_table[] = {
 	{ SPLAT_SAMPLE_FLOAT, 64, splat_import_float64, splat_export_float64 },
 	{ SPLAT_SAMPLE_FLOAT, 32, splat_import_float32, splat_export_float32 },
+	{ SPLAT_SAMPLE_INT, 24, splat_import_int24, splat_export_int24, },
 	{ SPLAT_SAMPLE_INT, 16, splat_import_int16, splat_export_int16, },
 	{ SPLAT_SAMPLE_INT, 8, splat_import_int8, splat_export_int8 },
 };

@@ -34,6 +34,7 @@ def check_version(ver):
                 VERSION, ver))
 
 audio_formats = [(SAMPLE_FLOAT, 64), (SAMPLE_FLOAT, 32),
+                 (SAMPLE_INT, 24), (SAMPLE_INT, 24),
                  (SAMPLE_INT, 16), (SAMPLE_INT, 8)]
 
 class Signal(_splat.Signal):
