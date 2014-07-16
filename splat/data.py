@@ -150,6 +150,10 @@ def save_wav(wav_file, frag, start, end, sample_width=16):
 def save_saf(saf_file, frag, start, end):
     is_str = isinstance(saf_file, str)
     f = open(saf_file, 'w') if is_str else saf_file
+    raw_bytes = frag.export_bytes(start=start, end=end)
+    frame_size = frag.channels * splat.NATIVE_SAMPLE_WIDTH / 8
+    length = len(raw_bytes) / frame_size
+    md5sum = md5.new(raw_bytes).hexdigest()
     attrs = {
         'version': splat.VERSION_STR,
         'build': splat.BUILD,
@@ -157,13 +161,13 @@ def save_saf(saf_file, frag, start, end):
         'channels': frag.channels,
         'rate': frag.rate,
         'precision': splat.NATIVE_SAMPLE_WIDTH,
-        'length': len(frag),
-        'md5': frag.md5(),
+        'length': length,
+        'md5': md5sum,
         }
     h = ' '.join('='.join(str(x) for x in kv) for kv in attrs.iteritems())
     f.write(SAF_MAGIC + '\n')
     f.write(h + '\n')
-    f.write(buffer(frag.export_bytes(start=start, end=end)))
+    f.write(buffer(raw_bytes))
     if is_str:
         f.close()
 
