@@ -1206,16 +1206,16 @@ static int frag_mix_signals(Fragment *self, const Fragment *frag,
 }
 
 PyDoc_STRVAR(Fragment_mix_doc,
-"mix(fragment, offset=0.0, start=0.0, levels=None, length=None)\n"
+"mix(fragment, offset=0.0, start=0.0, levels=None, duration=None)\n"
 "\n"
 "Mix the given other ``fragment`` data into this instance.\n"
 "\n"
 "This is achieved by simply adding the corresponding samples of an incoming "
 "fragment to this fragment' samples.  The ``offset``, ``start`` and "
-"``length`` values in seconds can be used to alter the mixing times.  The "
+"``duration`` values in seconds can be used to alter the mixing times.  The "
 "incoming fragment can start being mixed with an ``offset`` into this "
 "fragment, its beginning can be skipped until the given ``start`` time, and "
-"the ``length`` to be mixed can be manually limited.  These values will be "
+"the ``duration`` to be mixed can be manually limited.  These values will be "
 "automatically adjusted to remain within the available incoming data.  The "
 "length of this fragment will be automatically increased if necessary to hold "
 "the mixed data.\n"
@@ -1229,12 +1229,12 @@ PyDoc_STRVAR(Fragment_mix_doc,
 static PyObject *Fragment_mix(Fragment *self, PyObject *args, PyObject *kw)
 {
 	static char *kwlist[] = {
-		"frag", "offset", "start", "levels", "length", NULL };
+		"frag", "offset", "start", "levels", "duration", NULL };
 	Fragment *frag;
 	double offset = 0.0;
 	double start = 0.0;
-	PyObject *length_obj = Py_None;
 	PyObject *levels_obj = Py_None;
+	PyObject *duration_obj = Py_None;
 
 	struct splat_levels_helper levels;
 	ssize_t length;
@@ -1242,9 +1242,9 @@ static PyObject *Fragment_mix(Fragment *self, PyObject *args, PyObject *kw)
 	ssize_t start_sample;
 	size_t total_length;
 
-	if (!PyArg_ParseTupleAndKeywords(args, kw, "O!|ddOd", kwlist,
+	if (!PyArg_ParseTupleAndKeywords(args, kw, "O!|ddOO", kwlist,
 					 &splat_FragmentType, &frag, &offset,
-					 &start, &levels_obj, &length_obj))
+					 &start, &levels_obj, &duration_obj))
 		return NULL;
 
 	if (frag->n_channels != self->n_channels) {
@@ -1263,14 +1263,14 @@ static PyObject *Fragment_mix(Fragment *self, PyObject *args, PyObject *kw)
 	if (frag_get_levels(self, &levels, levels_obj))
 		return NULL;
 
-	if (length_obj != Py_None) {
-		if (!PyFloat_Check(length_obj)) {
+	if (duration_obj != Py_None) {
+		if (!PyFloat_Check(duration_obj)) {
 			PyErr_SetString(PyExc_ValueError,
-					"length must be float");
+					"duration must be float");
 			return NULL;
 		}
 
-		length = PyFloat_AS_DOUBLE(length_obj) * self->rate;
+		length = PyFloat_AS_DOUBLE(duration_obj) * self->rate;
 	} else {
 		length = frag->length;
 	}
