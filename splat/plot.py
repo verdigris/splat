@@ -46,4 +46,10 @@ def spline(spline, n=100, w=400, h=400):
         x = x * xratio
         c.create_line(x, (h - y0), x1, (h - y))
         y0 = y
+    dim = w / 100
+    xratio = w / (spline.end - spline.start)
+    for pt in spline._pts:
+        x = (pt[0] - spline.start) * xratio
+        y = h - ((pt[1] - ymin) * yratio)
+        c.create_oval((x - dim), (y - dim), (x + dim), (y + dim))
     mainloop()
