@@ -1285,13 +1285,12 @@ static PyObject *Fragment_mix(Fragment *self, PyObject *args, PyObject *kw)
 	if (frag_grow(self, total_length))
 		return NULL;
 
-	if (levels.all_floats) {
+	if (levels.all_floats)
 		frag_mix_floats(self, frag, offset_sample, start_sample,
 				length, levels.fl, levels_obj == splat_zero);
-	} else if (frag_mix_signals(self, frag, offset_sample, start_sample,
-				    length, &levels)) {
+	else if (frag_mix_signals(self, frag, offset_sample, start_sample,
+				  length, &levels))
 		return NULL;
-	}
 
 	Py_RETURN_NONE;
 }
@@ -1389,6 +1388,55 @@ static PyObject *Fragment_normalize(Fragment *self, PyObject *args)
 	Py_RETURN_NONE;
 }
 
+static void frag_amp_floats(Fragment *self, const double *gains)
+{
+	unsigned c;
+
+	for (c = 0; c < self->n_channels; ++c) {
+		const double g = gains[c];
+		size_t i;
+
+		for (i = 0; i < self->length; ++i)
+			self->data[c][i] *= g;
+	}
+}
+
+static int frag_amp_signals(Fragment *self,
+			    const struct splat_levels_helper *gains)
+{
+	struct splat_signal sig;
+	PyObject *signals[MAX_CHANNELS];
+	unsigned c;
+	size_t in;
+	size_t i;
+
+	for (c = 0; c < self->n_channels; ++c)
+		signals[c] = gains->obj[c];
+
+	if (splat_signal_init(&sig, self->length, 0.0, signals,
+			      self->n_channels, self->rate))
+		return -1;
+
+	in = sig.cur;
+	i = 0;
+
+	while (splat_signal_next(&sig) == SIGNAL_VECTOR_CONTINUE) {
+		size_t j;
+
+		for (j = 0; j < sig.len; ++i, ++j, ++in) {
+			for (c = 0; c < self->n_channels; ++c) {
+				double g = dB2lin(sig.vectors[c].data[j]);
+
+				self->data[c][i] *= g;
+			}
+		}
+	}
+
+	splat_signal_free(&sig);
+
+	return 0;
+}
+
 PyDoc_STRVAR(Fragment_amp_doc,
 "amp(gain)\n"
 "\n"
@@ -1401,7 +1449,6 @@ static PyObject *Fragment_amp(Fragment *self, PyObject *args)
 	PyObject *gain_obj;
 
 	struct splat_levels_helper gains;
-	unsigned c;
 
 	if (!PyArg_ParseTuple(args, "O", &gain_obj))
 		return NULL;
@@ -1409,13 +1456,10 @@ static PyObject *Fragment_amp(Fragment *self, PyObject *args)
 	if (frag_get_levels(self, &gains, gain_obj))
 		return NULL;
 
-	for (c = 0; c < self->n_channels; ++c) {
-		const double g = gains.fl[c];
-		size_t i;
-
-		for (i = 0; i < self->length; ++i)
-			self->data[c][i] *= g;
-	}
+	if (gains.all_floats)
+		frag_amp_floats(self, gains.fl);
+	else if (frag_amp_signals(self, &gains))
+		return NULL;
 
 	Py_RETURN_NONE;
 }
