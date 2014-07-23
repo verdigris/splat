@@ -34,7 +34,7 @@ class Polynomial(object):
         self._coefs = tuple(coefs)
 
     def __repr__(self):
-        return repr(self._coefs)
+        return repr(self.coefs)
 
     @property
     def coefs(self):
@@ -47,18 +47,18 @@ class Polynomial(object):
         coefs = tuple((k * (i + 1)) for i, k in enumerate(self.coefs[1:]))
         return Polynomial(coefs)
 
-    def integral(self, k0=0.0):
+    def integral(self, y0=0.0):
         """Create a :py:class:`splat.interpol.Polynomial` object with an
-        integral of this polynomial.  The ``k0`` value is the arbitrary
+        integral of this polynomial.  The ``y0`` value is the arbitrary
         constant coefficient."""
-        coefs = (k0,) + tuple((k / (i + 1)) for i, k in enumerate(self.coefs))
+        coefs = (y0,) + tuple((k / (i + 1)) for i, k in enumerate(self.coefs))
         return Polynomial(coefs)
 
     def value(self, x):
         """Return the value of the polynomial for the given ``x`` input
         value."""
         res = 0
-        for p, k in enumerate(self._coefs):
+        for p, k in enumerate(self.coefs):
             res += k * (x ** p)
         return res
 
@@ -139,61 +139,68 @@ class PolyMatrix(object):
                         self._r[j][k] -= (self._r[i][k] * r)
 
 
-class Spline(object):
+class PolyList(object):
 
-    """Spline built from a series of points and slope coordinates
+    """List of 3-tuples containing the ``x`` range and a
+    :py:class:`splat.interpol.Polynomial` object.  Each item in the list
+    corresponds to a segment between 2 input points."""
 
-    For a given list of ``(x, y)`` or ``(x, y, d)`` coordinates, where ``d`` is
-    a slope value, a Spline object will create a list of polynomials of degree
-    ``n`` or ``n + 1`` if the slope is specified.  This can then be used as a
-    continuous ``f(x) = y`` function.  Each polynomial is used to interpolate
-    between 2 input points, except at the end where 3 points may share a same
-    polynomial.  They are calculated so that they go through all of the given
-    ``(x, y)`` 2-tuple coordinates.  The slope (or derivative value) at each
-    point is either determined by the interpolation polynomial or constrained
-    in the last value in 3-tuple input points.
-    """
+    def __init__(self, pols, scale=1.0):
+        self._pols = pols
+        self._scale = scale
 
-    def __init__(self, pts, n=2):
-        """All the input points are provided as a list of 2- or 3-tuples in
-        ``pts``.  The polynomial order is given by ``n``, which is 2 by
-        default.  For points with a 3-tuple, the polynomial order will be ``n +
-        1`` in order to match the specified slope value, so 3 by default.
-        """
-        self._pts = list(tuple(float(x) for x in pt) for pt in sorted(pts))
-        self._n = n
-        self._pols = []
-        self._build()
+    def __getitem__(self, i):
+        return self._pols.__getitem__(i)
 
     @property
-    def polynomials(self):
-        """List of 3-tuples containing the ``x`` range and a
-        :py:class:`splat.interpol.Polynomial` object.  Each item in the list
-        corresponds to a segment of the spline, between 2 input points."""
-        return self._pols
+    def scale(self):
+        return self._scale
+
+    @scale.setter
+    def scale(self, value):
+        self._scale = value
 
     @property
     def start(self):
-        """First ``x`` value from the list of points.  The Spline is undefined
+        """First ``x`` value from the list of points.  The result is undefined
         for values smaller than this."""
-        return self._pts[0][0]
+        return self._pols[0][0]
 
     @property
     def end(self):
-        """Last ``x`` value from the list of points.  The Spline is undefined
+        """Last ``x`` value from the list of points.  The result is undefined
         for values greater than this."""
-        return self._pts[-1][0]
+        return self._pols[-1][1]
+
+    def points(self):
+        xlist = list(p[0] for p in self)
+        xlist.append(self[-1][1])
+        return list((x, self.value(x)) for x in xlist)
+
+    def integral(self, y0=0.0):
+        pols = []
+        for x0, x1, p in self:
+            p2 = p.integral(0.0)
+            y1 = p2.value(x0)
+            p2._coefs = (y0 - y1,) + p2._coefs[1:]
+            pols.append((x0, x1, p2))
+            y0 = p2.value(x1)
+        return PolyList(pols, self.scale)
+
+    def derivative(self):
+        return PolyList(list((x0, x1, p.derivative()) for x0, x1, p in self),
+                        self.scale)
 
     def value(self, x):
         """Return the spline value for a given ``x`` input value, or ``None``
         if undefined."""
         for x0, x1, pol in self._pols:
             if (x0 <= x) and (x <= x1):
-                return pol.value(x)
+                return pol.value(x) * self.scale
         return None
 
     def slices(self, y0, xmin=None, xmax=None, xstep=0.001):
-        """Get slices of the Spline function for a given ``y0`` value.
+        """Get slices of the a given ``y0`` value.
 
         Return a list of 2-tuples with ``x`` ranges for which the Spline is
         greater or equal to the given ``y0`` value.  Optional arguments
@@ -232,12 +239,39 @@ class Spline(object):
             s1 = s
         return slices
 
-    def _build(self):
-        m = PolyMatrix(self._pts[:(self._n + 1)])
-        dpol = m.poly.derivative()
 
-        for i in range(len(self._pts) - (self._n - 1)):
-            seg = self._pts[i:(i + self._n)]
+class Spline(PolyList):
+
+    """Spline built from a series of points and slope coordinates
+
+    For a given list of ``(x, y)`` or ``(x, y, d)`` coordinates, where ``d`` is
+    a slope value, a Spline object will create a list of polynomials of degree
+    ``n`` or ``n + 1`` if the slope is specified.  This can then be used as a
+    continuous ``f(x) = y`` function.  Each polynomial is used to interpolate
+    between 2 input points, except at the end where 3 points may share a same
+    polynomial.  They are calculated so that they go through all of the given
+    ``(x, y)`` 2-tuple coordinates.  The slope (or derivative value) at each
+    point is either determined by the interpolation polynomial or constrained
+    in the last value in 3-tuple input points.
+    """
+
+    def __init__(self, pts, scale=1.0, n=2):
+        """All the input points are provided as a list of 2- or 3-tuples in
+        ``pts``.  The polynomial order is given by ``n``, which is 2 by
+        default.  For points with a 3-tuple, the polynomial order will be ``n +
+        1`` in order to match the specified slope value, so 3 by default.
+        """
+        self._n = n
+        sorted_pts = list(tuple(float(x) for x in pt) for pt in sorted(pts))
+        super(Spline, self).__init__(self._build_pols(sorted_pts), scale)
+
+    def _build_pols(self, pts):
+        m = PolyMatrix(pts[:(self._n + 1)])
+        dpol = m.poly.derivative()
+        pols = []
+
+        for i in range(len(pts) - (self._n - 1)):
+            seg = pts[i:(i + self._n)]
             m = PolyMatrix([])
             m0 = None
             x0, x1 = seg[0][0], seg[1][0]
@@ -255,7 +289,9 @@ class Spline(object):
             if m0 is not None:
                 m.add_row(m0)
             dpol = m.poly.derivative()
-            self._pols.append((x0, x1, m.poly))
+            pols.append((x0, x1, m.poly))
 
         if self._n > 2:
-            self._pols.append((x1, self._pts[-1][0], m.poly))
+            pols.append((x1, pts[-1][0], m.poly))
+
+        return pols
