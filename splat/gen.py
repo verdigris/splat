@@ -57,7 +57,6 @@ class Generator(object):
         self.frag = frag
         self._filter_chain = FilterChain(filters)
         self._levels = tuple([0.0 for x in range(self.frag.channels)])
-        self._time_stretch = 1.0
 
     @property
     def levels(self):
@@ -104,19 +103,6 @@ class Generator(object):
     def filters(self, filters):
         self._filter_chain = FilterChain(filters)
 
-    @property
-    def time_stretch(self):
-        """Time stretch factor
-
-        All ``start`` and ``end`` times are multiplied by this value when
-        calling :py:meth:`splat.gen.Generator.run`.
-        """
-        return self._time_stretch
-
-    @time_stretch.setter
-    def time_stretch(self, value):
-        self._time_stretch = value
-
     def _run(self, frag, *args, **kw):
         """Main method, designed to be invoked by sub-classes via
         :py:meth:`splat.gen.Generator.run`
@@ -141,8 +127,8 @@ class Generator(object):
         and it is then mixed with the main internal fragment.
         """
         levels = kw.pop('levels', self._levels)
-        start *= self.time_stretch
-        end *= self.time_stretch
+        start = float(start)
+        end = float(end)
         frag = Fragment(self.channels, self.rate, (end - start))
         self._run(frag, levels, *args, **kw)
         self.filters.run(frag)
