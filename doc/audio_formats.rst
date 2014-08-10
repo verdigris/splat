@@ -10,15 +10,33 @@ extension is compiled.  Sample formats are defined in Splat with the following
 attributes (names used in functions arguments):
 
 ``sample_type``
-  Either ``splat.SAMPLE_INT`` or ``splat.SAMPLE_FLOAT``, respectively for
-  signed integer or floating point numbers.
+  Type of value used in samples, can be either:
+
+* ``splat.SAMPLE_INT`` for signed integers
+* ``splat.SAMPLE_FLOAT`` for floating point numbers
 
 ``sample_width``
-  Width as a number of bits in each sample.  Integer samples can be converted
-  from and to 8-bit or 16-bit samples.  Floating point samples can be either
-  32-bit or 64-bit wide.  The native Splat sample width is
-  ``splat.NATIVE_SAMPLE_WIDTH``.  The native Splat sample type is
-  ``splat.NATIVE_SAMPLE_TYPE`` (equals to ``splat.SAMPLE_FLOAT``).
+  Width as a number of bits in each sample.
+
+The following format combinations are currently supported:
+
++------------------------+--------------+
+| Sample type            | Sample width |
++------------------------+--------------+
+| ``splat.SAMPLE_INT``   |            8 |
++------------------------+--------------+
+| ``splat.SAMPLE_INT``   |           16 |
++------------------------+--------------+
+| ``splat.SAMPLE_INT``   |           24 |
++------------------------+--------------+
+| ``splat.SAMPLE_FLOAT`` |           32 |
++------------------------+--------------+
+| ``splat.SAMPLE_FLOAT`` |           64 |
++------------------------+--------------+
+
+The native sample format is 64-bit floating point; this is used as the default
+format when exporting raw data from a fragment.
+
 
 .. _audio_files:
 
