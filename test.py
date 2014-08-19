@@ -202,19 +202,20 @@ class InterpolTest(SplatTest):
             "Integral error: {} instead of {}".format(i.coefs, coefs))
 
     def test_spline(self):
-        """interpol.Spline"""
+        """interpol.spline"""
         pts = [(1.45, 6.78), (2.56, -3.56), (12.65, 9.6), (18.9, 5.0)]
-        n = len(pts) - 1
-        s0 = splat.interpol.Spline(pts)
-        s1 = splat.interpol.Spline(pts, n=n)
+        n0 = 2
+        n1 = len(pts) - 1
+        s0 = splat.interpol.spline(pts, n=n0)
+        s1 = splat.interpol.spline(pts, n=n1)
         for p in pts:
             x, y = p[0], p[1]
-            for s in (s0, s1):
+            for s, n in [(s0, n0), (s1, n1)]:
                 y0 = s.value(x)
                 self.assertAlmostEqual(
                     y, y0, 6,
-                    msg="Spline error, order: {}, s[{}] = {} != {}".format(
-                        s._n, x, y0, y))
+                    msg="spline error, order: {}, s[{}] = {} != {}".format(
+                        n, x, y0, y))
 
 
 class SignalTest(SplatTest):
@@ -413,7 +414,7 @@ class ParticleTest(SplatTest):
         max_f_log = splat.lin2dB(max_f)
         min_len = 0.1
         max_len = 0.3
-        envelope = splat.interpol.Spline([(0.5, 0.0), (1.3, 1.0), (2.1, 0.0)])
+        envelope = splat.interpol.spline([(0.5, 0.0), (1.3, 1.0), (2.1, 0.0)])
         n_slices = 20
         density = 200
         count = 196
