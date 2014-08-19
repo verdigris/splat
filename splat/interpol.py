@@ -202,10 +202,10 @@ class PolyList(object):
     def slices(self, y0, xmin=None, xmax=None, xstep=0.001):
         """Get slices of the a given ``y0`` value.
 
-        Return a list of 2-tuples with ``x`` ranges for which the Spline is
+        Return a list of 2-tuples with ``x`` ranges for which the spline is
         greater or equal to the given ``y0`` value.  Optional arguments
         ``xmin`` and ``xmax`` can be used to restrict the interval instead of
-        the whole Spline definition range.  The ``xstep`` argument defines the
+        the whole spline definition range.  The ``xstep`` argument defines the
         granularity used in generating the range coordinates.  Smaller values
         make more accurate results but also increase the processing time.
 
@@ -240,65 +240,62 @@ class PolyList(object):
         return slices
 
 
-class Spline(PolyList):
-
-    """Spline built from a series of points and slope coordinates
+def spline(pts, scale=1.0, n=2):
+    """Build a spline from a series of points and slope coordinates.
 
     For a given list of ``(x, y)`` or ``(x, y, d)`` coordinates, where ``d`` is
-    a slope value, a Spline object will create a list of polynomials of degree
-    ``n`` or ``n + 1`` if the slope is specified.  This can then be used as a
-    continuous ``f(x) = y`` function.  Each polynomial is used to interpolate
-    between 2 input points, except at the end where 3 points may share a same
-    polynomial.  They are calculated so that they go through all of the given
-    ``(x, y)`` 2-tuple coordinates.  The slope (or derivative value) at each
-    point is either determined by the interpolation polynomial or constrained
-    in the last value in 3-tuple input points.
+    a slope value, create and return a :py:class:`splat.interpol.PolyList` list
+    of polynomials of degree ``n`` or ``n + 1`` if the slope is specified.
+    This can then be used as a continuous ``f(x) = y`` function.  Each
+    polynomial is used to interpolate between 2 input points, except at the end
+    where 3 points may share a same polynomial.  They are calculated so that
+    they go through all of the given ``(x, y)`` 2-tuple coordinates.  The slope
+    (or derivative value) at each point is either determined by the previous
+    interpolation polynomial or constrained in the last value in 3-tuple input
+    points.  The calculation is done using a
+    :py:class:`splat.interpol.PolyMatrix` object.
     """
+    pts = list(tuple(float(x) for x in pt) for pt in sorted(pts))
+    m = PolyMatrix(pts[:(n + 1)])
+    dpol = m.poly.derivative()
+    pols = []
 
-    def __init__(self, pts, scale=1.0, n=2):
-        """All the input points are provided as a list of 2- or 3-tuples in
-        ``pts``.  The polynomial order is given by ``n``, which is 2 by
-        default.  For points with a 3-tuple, the polynomial order will be ``n +
-        1`` in order to match the specified slope value, so 3 by default.
-        """
-        self._n = n
-        sorted_pts = list(tuple(float(x) for x in pt) for pt in sorted(pts))
-        super(Spline, self).__init__(self._build_pols(sorted_pts), scale)
-
-    def _build_pols(self, pts):
-        m = PolyMatrix(pts[:(self._n + 1)])
+    for i in range(len(pts) - (n - 1)):
+        seg = pts[i:(i + n)]
+        m = PolyMatrix([])
+        m0 = None
+        x0, x1 = seg[0][0], seg[1][0]
+        if len(seg[1]) > 2:
+            d1 = seg[1][2]
+            q = n + 2
+            m0 = [0.0] + [i * (x1 ** (i - 1)) for i in range(1, (q))]+ [d1]
+        else:
+            q = n + 1
+        for pt in seg:
+            x, y = pt[0], pt[1]
+            m.add_row([(x ** p) for p in range(q)] + [y])
+        m.add_row([0.0] + [i * (x0 ** (i - 1)) for i in range(1, (q))]
+                  + [dpol.value(x0)])
+        if m0 is not None:
+            m.add_row(m0)
         dpol = m.poly.derivative()
-        pols = []
+        pols.append((x0, x1, m.poly))
 
-        for i in range(len(pts) - (self._n - 1)):
-            seg = pts[i:(i + self._n)]
-            m = PolyMatrix([])
-            m0 = None
-            x0, x1 = seg[0][0], seg[1][0]
-            if len(seg[1]) > 2:
-                d1 = seg[1][2]
-                q = self._n + 2
-                m0 = [0.0] + [i * (x1 ** (i - 1)) for i in range(1, (q))]+ [d1]
-            else:
-                q = self._n + 1
-            for pt in seg:
-                x, y = pt[0], pt[1]
-                m.add_row([(x ** p) for p in range(q)] + [y])
-            m.add_row([0.0] + [i * (x0 ** (i - 1)) for i in range(1, (q))]
-                      + [dpol.value(x0)])
-            if m0 is not None:
-                m.add_row(m0)
-            dpol = m.poly.derivative()
-            pols.append((x0, x1, m.poly))
+    if n > 2:
+        pols.append((x1, pts[-1][0], m.poly))
 
-        if self._n > 2:
-            pols.append((x1, pts[-1][0], m.poly))
+    return PolyList(pols, scale)
 
-        return pols
 
 def freqmod(pts):
+    """Create a spline for frequency modulation.
+
+    Return a :py:class:`splat.interpol.PolyList` object which can be used as a
+    phase modulation to create the desired frequency curve defined by the
+    ``pts`` when passed to a sound source or generator.  The returned object
+    also has an extra attribute ``f0`` with the initial frequency."""
     f0 = pts[0][1]
     norm_pts = list((pt[0], (pt[1] - f0)) + pt[2:] for pt in pts)
-    freqmod = Spline(norm_pts, (1 / f0)).integral()
+    freqmod = spline(norm_pts, (1 / f0)).integral()
     freqmod.f0 = f0
     return freqmod
