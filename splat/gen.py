@@ -304,11 +304,11 @@ class ParticlePool(object):
         for the particle frequencies using logarithmic scale.  The ``min_len``
         and ``max_len`` arguments are for the minimum and maximum length of the
         particle in seconds.  The ``envelope`` is a
-        :py:class:`splat.interpol.Spline` object which is then used in slices
-        to create more or less particles around each point in time.  The number
-        of slices given by ``n_slices`` affects the granularity of the
-        envelope.  The ``density`` affects the average number of particle per
-        unit of time."""
+        :py:class:`splat.interpol.spline` which is then used in slices to
+        create more or less particles around each point in time.  The number of
+        slices given by ``n_slices`` affects the granularity of the envelope.
+        The ``density`` affects the average number of particle per unit of
+        time."""
         self._pts = []
         for y0 in range(n_slices):
             y0 = float(1 + y0) / n_slices
@@ -420,41 +420,41 @@ class ParticleGenerator(Generator):
 
     # ToDo: use dB instead of linear (0..1) levels?
     def set_z(self, z_pts, *args, **kw):
-        """Create the :py:class:`splat.interpol.Spline` object used for the
+        """Create the :py:class:`splat.interpol.spline` used for the
         :py:class:`splat.gen.ParticlePool` amplitude envelope with the given
         ``z_pts`` points."""
-        self._z = interpol.Spline(z_pts, *args, **kw)
+        self._z = interpol.spline(z_pts, *args, **kw)
 
     @property
     def z(self):
-        """Get the amplitude envelope Spline object."""
+        """Get the amplitude envelope spline."""
         return self._z
 
     def set_eq(self, eq_pts, *args, **kw):
-        """Set the equalization :py:class:`splat.interpol.Spline` object used
-        to alter the amplitude of each particle in function of its frequency to
-        create an equalization.  The minimum and maximum frequencies used when
+        """Set the equalization :py:class:`splat.interpol.spline` used to alter
+        the amplitude of each particle in function of its frequency to create
+        an equalization.  The minimum and maximum frequencies used when
         creating the :py:class:`splat.gen.ParticlePool` is derived from the
-        boundaries of the equalization Spline."""
-        self._eq = interpol.Spline(eq_pts, *args, **kw)
+        boundaries of the equalization spline."""
+        self._eq = interpol.spline(eq_pts, *args, **kw)
         self._min_f_log = _splat.lin2dB(self._eq.start)
         self._max_f_log = _splat.lin2dB(self._eq.end)
 
     @property
     def eq(self):
-        """Get the equalization Spline object."""
+        """Get the equalization spline."""
         return self._eq
 
     def set_q(self, q_pts, *args, **kw):
-        """Set the distribution parameter :py:class:`splat.interpol.Spline`
+        """Set the distribution parameter :py:class:`splat.interpol.spline`
         object which is used to alter the random function used to pick the
         frequency of each :py:class:`splat.gen.Particle` using the given
         ``q_pts`` points."""
-        self._q = interpol.Spline(q_pts, *args, **kw)
+        self._q = interpol.spline(q_pts, *args, **kw)
 
     @property
     def q(self):
-        """Get the distribution parameter Spline object."""
+        """Get the distribution parameter spline."""
         return self._q
 
     @property
