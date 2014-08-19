@@ -67,7 +67,6 @@ Source generator objects
 .. autoclass:: splat.gen.OvertonesGenerator
    :members:
 
-
 Particle generators
 -------------------
 
@@ -126,8 +125,25 @@ low-degree polynomials than a single high degree polynomial.
 .. autoclass:: splat.interpol.PolyMatrix
    :members:
 
+.. autoclass:: splat.interpol.PolyList
+   :members:
+
 .. autoclass:: splat.interpol.Spline
    :members:
+
+.. autofunction:: splat.interpol.spline
+.. autofunction:: splat.interpol.freqmod
+
+Example using a spline to create a continuous frequency modulation::
+
+    import splat.interpol
+    import splat.gen
+
+    pts = [(0.0, 220.0), (1.0, 330.0), (2.0, 110.0)]
+    fmod = splat.interpol.freqmod(pts)
+    gen = splat.gen.SineGenerator()
+    gen.run(fmod.start, fmod.end, fmod.f0, fmod.value)
+    gen.frag.save("freqmod.wav")
 
 
 .. _general_purpose_functions:
