@@ -19,7 +19,6 @@ import collections
 from _splat import dec_envelope, reverse, reverb
 
 class FilterChain(collections.Sequence):
-
     """Chain of filters to process existing data
 
     This class is used by the :py:class:`splat.gen.Generator` classes to define

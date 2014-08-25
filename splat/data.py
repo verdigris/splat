@@ -203,7 +203,6 @@ if has_audiotools is True:
 # Data classes
 
 class Fragment(_splat.Fragment):
-
     """A fragment of sound data
 
     Create an empty sound fragment with the given number of ``channels``,

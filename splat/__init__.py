@@ -38,7 +38,6 @@ audio_formats = [(SAMPLE_FLOAT, 64), (SAMPLE_FLOAT, 32),
                  (SAMPLE_INT, 16), (SAMPLE_INT, 8)]
 
 class Signal(_splat.Signal):
-
     """A general purpose signal.
 
     This class provides a thin Python wrapper around the signal functionality

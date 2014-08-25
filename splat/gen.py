@@ -24,7 +24,6 @@ from filters import FilterChain
 import _splat
 
 class Generator(object):
-
     """Sound data generator
 
     This abstract class provides the basic interface to constitute a sound
@@ -140,7 +139,6 @@ class Generator(object):
 
 
 class SourceGenerator(Generator):
-
     """Generator using a sound source
 
     This is a basic class to implement generators using a sound source.  See
@@ -166,7 +164,6 @@ class SourceGenerator(Generator):
 
 
 class SineGenerator(SourceGenerator):
-
     """Sine wave generator
 
     This is the simplest generator, based on the :py:func:`splat.sources.sine`
@@ -178,7 +175,6 @@ class SineGenerator(SourceGenerator):
 
 
 class SquareGenerator(SourceGenerator):
-
     """Square wave generator
 
     This uses the :py:func:`splat.sources.square` source to generate square
@@ -189,7 +185,6 @@ class SquareGenerator(SourceGenerator):
 
 
 class TriangleGenerator(SourceGenerator):
-
     """Triangle wave generator
 
     This uses the :py:func:`splat.sources.triangle` source to generate triangle
@@ -200,7 +195,6 @@ class TriangleGenerator(SourceGenerator):
 
 
 class OvertonesGenerator(SourceGenerator):
-
     """Overtones generator
 
     Overtones are defined by an ``overtones`` list.  For a description of
@@ -244,7 +238,6 @@ class OvertonesGenerator(SourceGenerator):
 
 
 class Particle(object):
-
     """Sound particle
 
     A sound particle is a basic element to generate complex sounds via a
@@ -288,7 +281,6 @@ class Particle(object):
 
 
 class ParticlePool(object):
-
     """Pool of sound particles
 
     The idea behind sound particles is to use statistics over a large quantity
@@ -376,7 +368,6 @@ class ParticlePool(object):
 
 
 class ParticleGenerator(Generator):
-
     """Generator with particles
 
     This generator uses a :py:class:`splat.gen.ParticlePool` with an internal
