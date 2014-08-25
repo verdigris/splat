@@ -1,5 +1,8 @@
 *.pyc
 *.wav
+*.mp3
+*.flac
+*.ogg
 *.o
 *.so
 *.pdf
