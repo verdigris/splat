@@ -246,33 +246,7 @@ class Fragment(_splat.Fragment):
             frag = opener(in_file, fmt)
             if frag is not None:
                 return frag
-
         raise Exception("Unsupported file format")
-
-    def dup(self):
-        """Duplicate this fragment into a new one and return it."""
-        dup_frag = Fragment(channels=self.channels, rate=self.rate)
-        dup_frag.mix(self)
-        return dup_frag
-
-    def md5(self, sample_type=splat.NATIVE_SAMPLE_TYPE,
-            sample_width=splat.NATIVE_SAMPLE_WIDTH, as_md5_obj=False):
-        """Get the MD5 checksum of all this fragment's data.
-
-        The data is first converted to integer samples with ``sample_width`` in
-        bytes, which is 2 by default for 16-bit samples.  Then the MD5 checksum
-        is return as a string unless ``as_md5_obj`` is set to True in which
-        case an ``md5`` object is returned."""
-        md5sum = md5.new(self.export_bytes(sample_type, sample_width))
-        return md5sum if as_md5_obj is True else md5sum.hexdigest()
-
-    def n2s(self, n):
-        """Convert a sample index number ``n`` into a time in seconds."""
-        return float(n) / self.rate
-
-    def s2n(self, s):
-        """Convert a time in seconds ``s`` into a sample index number."""
-        return int(s * self.rate)
 
     def save(self, out_file, fmt=None, start=None, end=None, *args, **kw):
         """Save the contents of the audio fragment into a file.
@@ -297,3 +271,28 @@ class Fragment(_splat.Fragment):
         if saver is None:
             raise Exception("Unsupported file format: {0}".format(fmt))
         saver(out_file, self, start, end, *args, **kw)
+
+    def dup(self):
+        """Duplicate this fragment into a new one and return it."""
+        dup_frag = Fragment(channels=self.channels, rate=self.rate)
+        dup_frag.mix(self)
+        return dup_frag
+
+    def md5(self, sample_type=splat.NATIVE_SAMPLE_TYPE,
+            sample_width=splat.NATIVE_SAMPLE_WIDTH, as_md5_obj=False):
+        """Get the MD5 checksum of this fragment's data.
+
+        The data is first converted to samples as specified by ``sample_type``
+        and ``sample_width`` in bytes.  Then the MD5 checksum is return as a
+        string unless ``as_md5_obj`` is set to True in which case an ``md5``
+        object is returned instead."""
+        md5sum = md5.new(self.export_bytes(sample_type, sample_width))
+        return md5sum if as_md5_obj is True else md5sum.hexdigest()
+
+    def n2s(self, n):
+        """Convert a sample index number ``n`` into a time in seconds."""
+        return float(n) / self.rate
+
+    def s2n(self, s):
+        """Convert a time in seconds ``s`` into a sample index number."""
+        return int(s * self.rate)

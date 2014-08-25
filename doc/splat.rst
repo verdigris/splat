@@ -1,12 +1,5 @@
-Splat
-=====
-
-This section describes all the Splat programming interface.  There are some
-concrete examples as `Gists on Github <https://gist.github.com/gctucker>`_.
-
-
-Fragment objects and sound data
--------------------------------
+Fragment objects
+================
 
 .. automodule:: splat.data
 
@@ -24,10 +17,9 @@ Fragment objects and sound data
    .. autoattribute:: splat.data.Fragment.duration
    .. autoattribute:: splat.data.Fragment.channels
 
-.. include:: audio_formats.rst
 
 Generator objects
------------------
+=================
 
 .. automodule:: splat.gen
 
@@ -35,16 +27,18 @@ Generator objects
    :members:
    :private-members:
 
+
 Source generators
 -----------------
 
 .. autoclass:: splat.gen.SourceGenerator
    :members:
 
+
 .. _sources:
 
 Sound sources
-^^^^^^^^^^^^^
+-------------
 
 .. automodule:: splat.sources
 .. autofunction:: splat.sources.sine
@@ -52,8 +46,9 @@ Sound sources
 .. autofunction:: splat.sources.triangle
 .. autofunction:: splat.sources.overtones
 
+
 Source generator objects
-^^^^^^^^^^^^^^^^^^^^^^^^
+------------------------
 
 .. autoclass:: splat.gen.SineGenerator
    :members:
@@ -66,6 +61,7 @@ Source generator objects
 
 .. autoclass:: splat.gen.OvertonesGenerator
    :members:
+
 
 Particle generators
 -------------------
@@ -82,8 +78,8 @@ Particle generators
 
 .. _filters:
 
-Filter functions and FilterChain objects
-----------------------------------------
+Filters and FilterChain objects
+===============================
 
 .. automodule:: splat.filters
 
@@ -103,8 +99,8 @@ of the fragment.  Filter functions can be combined into a series via the
 
 .. _interpolation:
 
-Interpolation and Spline objects
---------------------------------
+Interpolation and splines
+=========================
 
 .. automodule:: splat.interpol
 
@@ -114,8 +110,8 @@ to build a continuous function for a given set of input discrete coordinates.
 A :py:class:`splat.interpol.Polynomial` object represents a polynomial function
 with a series of coefficients.  It can be calculated by reducing a matrix
 containing some coordinates using :py:class:`splat.interpol.PolyMatrix`.  It is
-usually preferred to use a :py:class:`splat.interpol.Spline` object to create a
-long function composed of a list of different polynomials between each pair of
+usually preferred to use :py:func:`splat.interpol.spline` to create a long
+function composed of a list of different polynomials between each pair of
 points.  It is easier to control the interpolation of a spline containing many
 low-degree polynomials than a single high degree polynomial.
 
@@ -126,9 +122,6 @@ low-degree polynomials than a single high degree polynomial.
    :members:
 
 .. autoclass:: splat.interpol.PolyList
-   :members:
-
-.. autoclass:: splat.interpol.Spline
    :members:
 
 .. autofunction:: splat.interpol.spline
@@ -146,13 +139,39 @@ Example using a spline to create a continuous frequency modulation::
     gen.frag.save("freqmod.wav")
 
 
-.. _general_purpose_functions:
+.. _utilities:
 
-General purpose functions and classes
--------------------------------------
+Utilities
+=========
+
+
+Conversion functions
+--------------------
 
 .. autofunction:: splat.lin2dB
 .. autofunction:: splat.dB2lin
 
+
+Signal objects
+--------------
+
 .. autoclass:: splat.Signal
    :members:
+
+
+.. _web:
+
+On the web
+==========
+
+There are some concrete examples as `Gists on Github
+<https://gist.github.com/gctucker>`_.
+
+Some experimental splats can also be heard on `SoundCloud
+<http://soundcloud.com/verdigris-mu>`_.
+
+You can find some splats as well as other music, software and electronics
+things on `verdigris.mu <http://verdigris.mu>`_.
+
+Please make your creations or reactions be heard by sending them to
+`info@verdigris.mu <mailto:info@verdigris.mu>`_.

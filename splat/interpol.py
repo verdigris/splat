@@ -50,7 +50,7 @@ class Polynomial(object):
     def integral(self, y0=0.0):
         """Create a :py:class:`splat.interpol.Polynomial` object with an
         integral of this polynomial.  The ``y0`` value is the arbitrary
-        constant coefficient."""
+        initial value."""
         coefs = (y0,) + tuple((k / (i + 1)) for i, k in enumerate(self.coefs))
         return Polynomial(coefs)
 

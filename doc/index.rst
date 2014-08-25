@@ -29,13 +29,6 @@
        gen.frag.save("A440.wav")
 
 
-   You can find some splats as well as other music, software and electronics
-   things on `verdigris.mu <http://verdigris.mu>`_.  Some experimental splats
-   can also be heard on `SoundCloud <http://soundcloud.com/verdigris-mu>`_.
-   You can send your creations or reactions to `info@verdigris.mu
-   <mailto:info@verdigris.mu>`_.
-
-
 Splat manual
 ============
 
@@ -43,4 +36,5 @@ Splat manual
    :maxdepth: 2
 
    intro
+   audio_formats
    splat
