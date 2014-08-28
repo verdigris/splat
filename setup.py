@@ -5,7 +5,7 @@ except ImportError:
     from distutils.core import setup, Extension
 
 setup(name='verdigris.mu-splat', version='1.3',
-      description="Splat - sound generator",
+      description="Sound generator, synthesizer and editor",
       author="Guillaume Tucker",
       author_email="guillaume@mangoz.org",
       url="https://github.com/verdigris/splat",
