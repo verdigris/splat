@@ -1,4 +1,8 @@
-from distutils.core import setup, Extension
+try:
+    import setuptools
+    from setuptool import setup, Extension
+except ImportError:
+    from distutils.core import setup, Extension
 
 setup(name='verdigris.mu-splat', version='1.3',
       description="Splat - sound generator",
