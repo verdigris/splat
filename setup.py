@@ -13,12 +13,7 @@ setup(name='verdigris.mu-splat', version='1.3',
       ext_modules=[Extension('_splat', ['_splat.c'])],
       packages=['splat'],
       data_files=[('.', ['Splat.pdf',]),],
-      long_description="""
-The basic idea is to apply mathematical concepts to
-musical composition as well as sound synthesis. In practice,
-Splat lets you create just about any sound you can imagine
-and code in software.
-""",
+      long_description=open('README.rst', 'rb').read(),
       classifiers=[
         'Development Status :: 3 - Alpha',
         'Environment :: Console',
