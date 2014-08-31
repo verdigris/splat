@@ -1747,6 +1747,44 @@ static PyObject *splat_dB2lin(PyObject *self, PyObject *args)
 	return PyFloat_FromDouble(dB2lin(dB));
 }
 
+PyDoc_STRVAR(splat_gen_ref_doc,
+"gen_ref(frag)\n"
+"\n"
+"Generate a reference signal into a single channel fragment."
+"\n"
+"This is useful mainly for benchmarks and test purposes.\n");
+
+static PyObject *splat_gen_ref(PyObject *self, PyObject *args)
+{
+	Fragment *frag;
+	sample_t *data;
+	size_t n;
+	size_t i;
+
+	if (!PyArg_ParseTuple(args, "O!", &splat_FragmentType, &frag))
+		return NULL;
+
+	if (frag->n_channels != 1) {
+		PyErr_SetString(PyExc_ValueError,
+				"fragment must have a single channel");
+		return NULL;
+	}
+
+	if (frag->length == 0) {
+		PyErr_SetString(PyExc_ValueError,
+				"fragment length must be greater than 0");
+		return NULL;
+	}
+
+	data = frag->data[0];
+	n = frag->length;
+
+	for (i = 0; i < n; ++i)
+		*data++ = i / n;
+
+	Py_RETURN_NONE;
+}
+
 /* ----------------------------------------------------------------------------
  * Sources
  */
@@ -2748,6 +2786,8 @@ static PyMethodDef splat_methods[] = {
 	  splat_lin2dB_doc },
 	{ "dB2lin", splat_dB2lin, METH_VARARGS,
 	  splat_dB2lin_doc },
+	{ "gen_ref", splat_gen_ref, METH_VARARGS,
+	  splat_gen_ref_doc },
 	{ "sine", splat_sine, METH_VARARGS,
 	  splat_sine_doc },
 	{ "square", splat_square, METH_VARARGS,
