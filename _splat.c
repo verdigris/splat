@@ -358,10 +358,13 @@ static int splat_signal_func(struct splat_signal *s, struct signal_vector *v)
 		PyFloat_AS_DOUBLE(s->py_float) = i++ / rate;
 		ret = PyObject_Call(v->obj, s->py_args, NULL);
 
-		if (!PyFloat_Check(ret))
+		if (!PyFloat_Check(ret)) {
+			Py_DECREF(ret);
 			return -1;
+		}
 
 		*out++ = PyFloat_AS_DOUBLE(ret);
+		Py_DECREF(ret);
 	}
 
 	return 0;
@@ -453,6 +456,7 @@ static int splat_signal_init(struct splat_signal *s, size_t length,
 
 static void splat_signal_free(struct splat_signal *s)
 {
+	Py_DECREF(s->py_float);
 	Py_DECREF(s->py_args);
 	PyMem_Free(s->vectors);
 }
