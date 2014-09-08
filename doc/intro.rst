@@ -34,6 +34,24 @@ Python Imaging Library to create both sound and images at the same time or with
 ``numpy`` for advanced calculations.  Splat does not depend on any third-party
 code, only on the standard Python library.
 
+.. _beep:
+
+Beep
+----
+
+As a first concrete exemple, here's a very small splat which creates a 440Hz
+sound for 1 second, with short fade-in and fade-out, and saves it in a file:
+
+.. code-block:: python
+
+    import splat.gen
+    import splat.filters
+
+    gen = splat.gen.SineGenerator()
+    gen.filters = [splat.filters.linear_fade]
+    gen.run(0.0, 1.0, 440.0)
+    gen.frag.save("A440.wav")
+
 
 Principles
 ----------
@@ -79,17 +97,18 @@ into the main fragment.  Generators are designed with an abstract ``run``
 method with the aim to make them interchangeable, as much as possible.  This is
 to enable a same piece of code to be run again with different generator
 implementations for different souding results.  They are a little bit like
-standard musical instruments which all have the same definition of notes but
+usual musical instruments which all have the same definition of notes but
 produce different sounds.
 
 .. rubric:: Scales
 
-In order to use musical notes, there are some **scales** which will calculate
-the frequency of a given note based on its name and scale implementation.
-Generators and sources typically work with frequencies in Hertz, so scale
-objects are very useful when generating some musical notes.  They can be used
-to create conventional scales (tempered, diatonic) but also to experiment with
-new ideas such as arbitrary ratios, microtones or dynamic scales.
+In order to use musical notes, there are some :ref:`scales` which will
+calculate the frequency of a given note based on its name and scale
+implementation.  Generators and sources typically work with frequencies in
+Hertz, so :ref:`scale_objects` are very useful when generating some musical
+notes.  They can be used to create conventional scales (tempered, diatonic) but
+also to experiment with new ideas such as arbitrary ratios, microtones or
+dynamic scales.
 
 .. rubric:: Interpolation
 
