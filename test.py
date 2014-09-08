@@ -28,6 +28,7 @@ import splat.data
 import splat.gen
 import splat.sources
 import splat.interpol
+import splat.scales
 
 splat.check_version((1, 3))
 
@@ -487,6 +488,31 @@ class ParticleTest(SplatTest):
         pgen.run(0.0, 5.0, 1234.56)
         self.assertEqual(pgen.pool.count(), 0,
                          "Not all particles were consumed in the run")
+
+
+class ScaleTest(SplatTest):
+
+    def _check_note_freqs(self, s, note_freqs):
+        for note, freq in note_freqs:
+            self.assertAlmostEqual(s[note], freq, 12)
+
+    def test_log_scale(self):
+        s = splat.scales.LogScale()
+        d2f = lambda d, o: s.f0 * math.pow(2, (d  + (o * 12)) / 12.0)
+        note_freqs = [
+            ('A', d2f(0, 0)), ('A1', d2f(0, 1)), ('A-1', d2f(0, -1)),
+            ('A2', d2f(0, 2)), ('E', d2f(7, 0)), ('E1', d2f(7, 1)),
+            ('B', d2f(2, 0)), ('B3', d2f(2, 3)),
+            ]
+        self._check_note_freqs(s, note_freqs)
+
+    def test_harmonic_scale(self):
+        s = splat.scales.HarmonicScale()
+        note_freqs = [
+            ('A', 440.0), ('A1', 880.0), ('A-1', 220.0), ('E', 660.0),
+            ('E-1', 330.0),
+            ]
+        self._check_note_freqs(s, note_freqs)
 
 # -----------------------------------------------------------------------------
 # main function
