@@ -18,89 +18,146 @@
 import math
 
 class Scale(object):
-    note_degree = { 'Ab': 11, 'A': 0,  'A#': 1,
-                    'Bb': 1,  'B': 2,
-                              'C': 3,  'C#': 4,
-                    'Db': 4,  'D': 5,  'D#': 6,
-                    'Eb': 6,  'E': 7,
-                              'F': 8,  'F#': 9,
-                    'Gb': 9,  'G': 10, 'G#': 11 }
+    """Musical scale note frequency calculator.
 
-    def __init__(self, base=2, fund=440.0, key='A', steps=12, *args, **kw):
-        self._base = base
-        self._fund = fund
+    For a given scale definition, a Scale object will make each note correspond
+    to a frequency value which can then be typically used with a sound
+    generator.  It can be used as a read-only dictionary producing a frequency
+    for a given note name.
+    """
+
+    _note_step = { 'Ab': 11, 'A': 0,  'A#': 1,
+                   'Bb': 1,  'B': 2,
+                             'C': 3,  'C#': 4,
+                   'Db': 4,  'D': 5,  'D#': 6,
+                   'Eb': 6,  'E': 7,
+                             'F': 8,  'F#': 9,
+                   'Gb': 9,  'G': 10, 'G#': 11 }
+
+    def __init__(self, key='A', pitch=440.0, steps=12, base=2, *args, **kw):
+        """Create a scale with a given ``key`` name which defaults to 'A', a
+        ``pitch`` frequency which defaults to 440Hz, a number of ``steps``
+        which defaults to 12 for the classic 12 semitones scale, and a ``base``
+        which defines the cycle coefficient of the scale, by default 2 for
+        classic octaves.
+        """
+        self._pitch = pitch
         self._key = key
         self._steps = steps
-        self._degrees = tuple(sorted(self._init_degrees(*args, **kw)))
-        for d in self._degrees:
-            assert((d >= 0) and (d <= self.base))
-
-    def _init_degrees(self):
-        raise NotImplementedError
-
-    @property
-    def base(self):
-        return self._base
-
-    @property
-    def length(self):
-        return len(self._degrees)
-
-    @property
-    def degrees(self):
-        return self._degrees
-
-    @property
-    def fundamental(self):
-        return self._fund
-
-    @fundamental.setter
-    def fundamental(self, value):
-        self._fund = float(value)
+        self._base = base
+        self._f0 = None
 
     @property
     def key(self):
+        """Key of the scale (first note name)."""
         return self._key
 
-    def get_freq(self, degree, cycle):
-        f0 = self.fundamental * self.degrees[degree]
-        return f0 * math.pow(self.base, cycle)
+    @property
+    def pitch(self):
+        """Pitch frequency."""
+        return self._pitch
 
-    def get_note(self, note):
+    @property
+    def steps(self):
+        """Number of steps in each cycle."""
+        return self._steps
+
+    @property
+    def base(self):
+        """Cycle base coefficient."""
+        return self._base
+
+    @property
+    def f0(self):
+        """Frequency of the first note of the scale (first cycle, first
+        step)."""
+        return self._f0
+
+    def get_note_step(self, note):
+        """Get the step number corresponding to a given note name."""
+        return self._note_step[note]
+
+    def get_freq(self, step, cycle):
+        """Get the frequency for a given step and cycle numbers.
+
+        This is an abstract function which needs to be implemented by each
+        concrete scale class."""
+        raise NotImplementedError
+
+    def get_note(self, note, key=None):
+        """Get the step and cycle values for a given note name."""
+        if key is None:
+            key = self.key
         if (len(note) > 1) and (note[1] in ['#', 'b']):
             n = 2
         else:
             n = 1
-        degree = Scale.note_degree[note[:n]] - Scale.note_degree[self.key]
+        step = self.get_note_step(note[:n]) - self.get_note_step(key)
         if len(note) > n:
             cycle = int(note[n:])
         else:
             cycle = 0
-        if degree < 0:
-            degree += 12
-        return degree, cycle
+        if step < 0:
+            step += 12
+        return step, cycle
 
     def get_note_freq(self, note):
-        degree, cycle = self.get_note(note)
-        return self.get_freq(degree, cycle)
+        """Get the frequency for a given note name."""
+        step, cycle = self.get_note(note)
+        return self.get_freq(step, cycle)
 
     def __getitem__(self, note):
+        """Directly get the frequency associated with a given note name."""
         return self.get_note_freq(note)
 
 
 class LogScale(Scale):
-    def _init_degrees(self):
-        degrees = list()
-        for n in range(self._steps):
-            degrees.append(math.pow(self.base, (float(n) / self._steps)))
-        return degrees
+    """Logarithmic scale, also known as equi-tempered scale.
+
+    All steps are equal in order to evenly distribute the dissonance throughout
+    the scale.  This is what is typically used on all modern instruments,
+    keyboards in particular.
+    """
+    def __init__(self, *args, **kw):
+        super(LogScale, self).__init__(*args, **kw)
+        step, cycle = self.get_note(self.key, 'A')
+        self._f0 = self.pitch * math.pow(self.base, float(step) / self.steps)
+
+    def get_freq(self, step, cycle):
+        step += (cycle * 12)
+        return self.f0 * math.pow(self.base, float(step) / self.steps)
 
 
 class HarmonicScale(Scale):
-    def _init_degrees(self, k=3):
-        degrees = list()
-        for n in range(self._steps):
-            f = math.pow(k, n)
-            f = math.pow(self.base, math.log(f, self.base) % 1)
-            degrees.append(f)
-        return degrees
+    """Harmonic scale, also known as diatonic scale.
+
+    This is based on natural harmonics of the fundamental frequency, which
+    results in some consonent intervals while others will sound more dissonent.
+    It can be found with diatonic instruments, which are usually designed to
+    work in only one key and are typically used in folk music.
+    """
+    def __init__(self, k=3, *args, **kw):
+        super(HarmonicScale, self).__init__(*args, **kw)
+        # Alternative shorter implementation which creates rounding errors:
+        # f = math.pow(k, n)
+        # f = math.pow(self.base, math.log(f, self.base) % 1)
+        coefs = list()
+        m = self._steps / 2
+        n = self._steps - m
+        for i in range(m):
+            r = math.pow(k, i)
+            while r > self.base:
+                r /= self.base
+            coefs.append(r)
+        for i in range(1, n + 1):
+            r = math.pow(k, -i)
+            while r < 1.0:
+                r *= self.base
+            coefs.append(r)
+        self._coefs = tuple(sorted(coefs))
+        step, cycle = self.get_note(self.key, 'A')
+        self._f0 = self.pitch * self._coefs[step]
+
+    def get_freq(self, step, cycle):
+        f1 = self.f0 * self._coefs[step]
+        return f1 * math.pow(self.base, cycle)
