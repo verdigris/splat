@@ -502,15 +502,22 @@ class ScaleTest(SplatTest):
         note_freqs = [
             ('A', d2f(0, 0)), ('A1', d2f(0, 1)), ('A-1', d2f(0, -1)),
             ('A2', d2f(0, 2)), ('E', d2f(7, 0)), ('E1', d2f(7, 1)),
-            ('B', d2f(2, 0)), ('B3', d2f(2, 3)),
+            ('B', d2f(2, 0)), ('B3', d2f(2, 3)), ('F', d2f(8, 0)),
+            ('G#', d2f(11, 0)),
             ]
         self._check_note_freqs(s, note_freqs)
 
     def test_harmonic_scale(self):
         s = splat.scales.HarmonicScale()
+        f0 = 440.0
         note_freqs = [
-            ('A', 440.0), ('A1', 880.0), ('A-1', 220.0), ('E', 660.0),
-            ('E-1', 330.0),
+            ('A', f0), ('E', f0 * 3 / 2), ('B', f0 * 9 / 8),
+            ('F#', f0 * 27 / 16), ('C#', (f0 * 81 / 64)),
+            ('D', f0 * 4 / 3), ('G', f0 * 16 / 9),
+            ('A1', f0 * 2), ('E1', f0 * 6 / 2), ('B1', f0 * 18 / 8),
+            ('D1', f0 * 8 / 3), ('G1', f0 * 32 / 9),
+            ('A-1', f0 / 2), ('E-1', f0 * 3 / 4), ('B-1', f0 * 9 / 16),
+            ('D-1', f0 * 4 / 6), ('G-1', f0 * 16 / 18),
             ]
         self._check_note_freqs(s, note_freqs)
 
