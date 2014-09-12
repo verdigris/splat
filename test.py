@@ -492,20 +492,48 @@ class ParticleTest(SplatTest):
 
 class ScaleTest(SplatTest):
 
+    def _d2f(self, s):
+        return lambda d, o: s.f0 * math.pow(2, (d  + (o * 12)) / 12.0)
+
     def _check_note_freqs(self, s, note_freqs):
         for note, freq in note_freqs:
-            self.assertAlmostEqual(s[note], freq, 12)
+            self.assertAlmostEqual(s[note], freq, 12,
+                                   "Mismatch note '{}', {} != {}".format(
+                    note, s[note], freq))
 
-    def test_log_scale(self):
+    def test_log_scale_default(self):
         s = splat.scales.LogScale()
-        d2f = lambda d, o: s.f0 * math.pow(2, (d  + (o * 12)) / 12.0)
-        note_freqs = [
+        d2f = self._d2f(s)
+        note_freqs_default = [
             ('A', d2f(0, 0)), ('A1', d2f(0, 1)), ('A-1', d2f(0, -1)),
-            ('A2', d2f(0, 2)), ('E', d2f(7, 0)), ('E1', d2f(7, 1)),
-            ('B', d2f(2, 0)), ('B3', d2f(2, 3)), ('F', d2f(8, 0)),
-            ('G#', d2f(11, 0)),
+            ('A2', d2f(0, 2)), ('D', d2f(5, 0)), ('E', d2f(7, 0)),
+            ('E1', d2f(7, 1)), ('B', d2f(2, 0)), ('B3', d2f(2, 3)),
+            ('F', d2f(8, 0)), ('G#', d2f(11, 0)), ('G#0', d2f(11, 0)),
             ]
-        self._check_note_freqs(s, note_freqs)
+        self._check_note_freqs(s, note_freqs_default)
+
+    def test_log_scale_rel(self):
+        s = splat.scales.LogScale(key='E')
+        d2f = self._d2f(s)
+        note_freqs_rel = [
+            ('A', d2f(5, 0)), ('A1', d2f(5, 1)), ('A-1', d2f(5, -1)),
+            ('A2', d2f(5, 2)), ('D', d2f(10, 0)), ('E', d2f(0, 0)),
+            ('E1', d2f(0, 1)), ('B', d2f(7, 0)), ('B3', d2f(7, 3)),
+            ('F', d2f(1, 0)), ('G#', d2f(4, 0)), ('G#0', d2f(4, 0)),
+            ]
+        self._check_note_freqs(s, note_freqs_rel)
+
+    def test_log_scale_abs(self):
+        s = splat.scales.LogScale(key='E')
+        s.abs_cycles = True
+        d2f = self._d2f(s)
+        note_freqs_abs = [
+            ('A', d2f(5, -1)), ('A4', d2f(5, -1)), ('A3', d2f(5, -2)),
+            ('A5', d2f(5, 0)), ('D', d2f(10, -1)), ('E', d2f(0, 0)),
+            ('E5', d2f(0, 1)), ('B', d2f(7, -1)), ('B7', d2f(7, 2)),
+            ('F', d2f(1, 0)), ('G#', d2f(4, 0)), ('G#4', d2f(4, 0)),
+            ]
+        self._check_note_freqs(s, note_freqs_abs)
 
     def test_harmonic_scale(self):
         s = splat.scales.HarmonicScale()
