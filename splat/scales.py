@@ -45,6 +45,7 @@ class Scale(object):
         self._key = key
         self._steps = steps
         self._base = base
+        self._abs_cycles = False
         self._f0 = None
 
     @property
@@ -69,9 +70,21 @@ class Scale(object):
 
     @property
     def f0(self):
-        """Frequency of the first note of the scale (first cycle, first
-        step)."""
+        """Frequency of the first note of the scale.
+
+        This corresponds to the frequency of the first step in the first cycle
+        of the scale, for example 'A0' with classic scales in 'A' using
+        relative notation or 'A4' using absolute notation."""
         return self._f0
+
+    @property
+    def abs_cycles(self):
+        """Get or set absolute (True) or relative (False) cycle notation."""
+        return self._abs_cycles
+
+    @abs_cycles.setter
+    def abs_cycles(self, value):
+        self._abs_cycles = value
 
     def get_note_step(self, note):
         """Get the step number corresponding to a given note name."""
@@ -95,9 +108,13 @@ class Scale(object):
         step = self.get_note_step(note[:n]) - self.get_note_step(key)
         if len(note) > n:
             cycle = int(note[n:])
+        elif self.abs_cycles:
+            cycle = 4
         else:
             cycle = 0
-        if step < 0:
+        if self.abs_cycles:
+            cycle -= 4
+        elif step < 0:
             step += 12
         return step, cycle
 
