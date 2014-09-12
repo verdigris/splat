@@ -94,6 +94,9 @@ static PyObject *splat_init_source_ratio;
 /* A Python float with the value of 0.0 */
 static PyObject *splat_zero;
 
+/* A list of 2-tuples (type, width) with the supported sample formats */
+static PyObject *splat_audio_formats;
+
 /* ----------------------------------------------------------------------------
  * Fragment class interface
  */
@@ -2809,6 +2812,25 @@ static PyMethodDef splat_methods[] = {
 	{ NULL, NULL, 0, NULL }
 };
 
+static void splat_init_audio_formats(PyObject *m, const char *name,
+				     PyObject *obj)
+{
+	size_t i;
+
+	obj = PyList_New(ARRAY_SIZE(splat_raw_io_table));
+
+	for (i = 0; i < ARRAY_SIZE(splat_raw_io_table); ++i) {
+		const struct splat_raw_io *io = &splat_raw_io_table[i];
+		PyObject *format = PyTuple_New(2);
+
+		PyTuple_SetItem(format, 0, PyLong_FromLong(io->sample_type));
+		PyTuple_SetItem(format, 1, PyLong_FromLong(io->sample_width));
+		PyList_SetItem(obj, i, format);
+	}
+
+	PyModule_AddObject(m, name, obj);
+}
+
 PyMODINIT_FUNC init_splat(void)
 {
 	struct splat_type {
@@ -2842,6 +2864,7 @@ PyMODINIT_FUNC init_splat(void)
 	PyModule_AddObject(m, "_init_source_ratio", splat_init_source_ratio);
 	splat_zero = PyFloat_FromDouble(0.0);
 	PyModule_AddObject(m, "_zero", splat_zero);
+	splat_init_audio_formats(m, "audio_formats", splat_audio_formats);
 
 	PyModule_AddIntConstant(m, "SAMPLE_INT", SPLAT_SAMPLE_INT);
 	PyModule_AddIntConstant(m, "SAMPLE_FLOAT", SPLAT_SAMPLE_FLOAT);

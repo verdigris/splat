@@ -19,6 +19,7 @@ import _splat
 from _splat import lin2dB, dB2lin
 from _splat import SAMPLE_INT, SAMPLE_FLOAT
 from _splat import NATIVE_SAMPLE_TYPE, NATIVE_SAMPLE_WIDTH
+from _splat import audio_formats
 
 __all__ = ['gen', 'data', 'filters', 'sources', 'scales', 'interpol']
 
@@ -32,10 +33,6 @@ def check_version(ver):
     if ver != VERSION:
         raise Exception("Version mismatch: {0}, required: {1}".format(
                 VERSION, ver))
-
-audio_formats = [(SAMPLE_FLOAT, 64), (SAMPLE_FLOAT, 32),
-                 (SAMPLE_INT, 24), (SAMPLE_INT, 24),
-                 (SAMPLE_INT, 16), (SAMPLE_INT, 8)]
 
 class Signal(_splat.Signal):
     """A general purpose signal.
