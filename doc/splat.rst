@@ -146,7 +146,33 @@ Scales
 
 .. automodule:: splat.scales
 
-A :py:class:`splat.scales.Scale` object has the following characteristics:
+The main purpose of a :py:class:`splat.scales.Scale` object is to calculate a
+frequency for a given note name.  This creates a bridge between musical
+composition and sound generators.  The classic equi-tempered scale is
+implemented with the :py:class:`splat.scales.LogScale` but endless other
+implementations can be made to freely define any scale behaviour via the
+:py:meth:`splat.scales.Scale.get_freq` method.  This can even be made dynamic,
+for example by associating a varying frequency to each note based on the
+sequence of previous notes or the current point in time within a composition.
+
+A scale can then be used like a dictionary, mapping note names with
+frequencies.  For example:
+
+.. code-block:: python
+
+    import splat.scales
+
+    s = splat.scales.LogScale()
+    a_freq = s['A']
+
+should result in 440.0 Hz for the value of ``a_freq`` with the default scale
+parameters.  This standard interface should make it possible to use any scale
+implementation without rewriting any of an existing musical composition as long
+as the scales use the same :ref:`note_names` (i.e. 'A', 'Bb', 'B', 'C', 'C#'
+etc...).  It's also possible to define a different naming convention for the
+notes when implementing a new scale.
+
+A Scale object has the following characteristics:
 
 pitch
   Reference frequency of the first note, usually called A, for all scales.
@@ -161,41 +187,20 @@ cycle
   General term for what an octave is to a classic scale, all the steps of a
   scale repeat themselves in each cycle.
 
-The main purpose of a Scale object is to calculate a frequency for a given note
-name.  This creates a bridge between musical composition and sound generators.
-The classic equi-tempered scale is implemented with the
-:py:class:`splat.scales.LogScale` but endless other implementations can be made
-to freely define any scale behaviour via the
-:py:meth:`splat.scales.Scale.get_freq` method.  This can even be made dynamic,
-for example by associating a varying frequency to each note based on the
-sequence of previous notes or the current point in time within a composition.
-
-A scale can then be used like a dictionary, mapping note names with
-frequencies.  For example:
-
-.. code-block:: python
-
-    import splat.scales
-
-    s = splat.scales.Scale()
-    a_freq = s['A']
-
-should result in 440.0 Hz for the value of ``a_freq`` with the default scale
-parameters.  This standard interface should make it possible to use any scale
-implementation without changing the musical composition as long as the scales
-use the same :ref:`note_names` (i.e. A, Bb, B, C, C# etc...).  It's also
-possible to define a different naming convention for the notes when
-implementing a new scale.
-
 
 .. _note_names:
 
 Note names
 ----------
 
-Classic note names use the letters 'A' to 'G', with '#' and 'b' alterations.
-Then a number can be appended to use a different octave, or cycle.  One
-important thing to note is that the octave number is relative to the key.
+Classic note names use the letters 'A' to 'G', with '#' and 'b' alterations for
+'sharp' and 'flat' respectively.  Then a number can be appended to use a
+different octave, or generally speaking a different *cycle*, like 'C4'.  This
+notation is used by classic scales like the :py:class:`splat.scales.LogScale`
+and :py:class:`splat.scales.HarmonicScale` (via the
+:py:meth:`splat.scales.Scale.get_note` method), but can be freely overridden in
+other scale implementations.  One important thing to be aware of is the
+**relative mode** which makes the octave number relative to the key:
 
 A
   Note A, which frequency is equal to the pitch (i.e. 440Hz by default).
@@ -215,17 +220,21 @@ F-1
 Ab3
   'A-flat' three octaves higher.
 
-This naming convention is used by classic scales like the
-:py:class:`splat.scales.LogScale` and :py:class:`splat.scales.HarmonicScale`
-via the :py:meth:`splat.scales.Scale.get_note` method, but can be freely
-overridden in other scale implementations.
-
-This table shows some examples of the resulting frequencies when using a
-LogScale, the values in bold show the first note of the scale:
+It's also possible to use **absolute notation** to make the octave number
+independent of the key being used, using the
+:py:attr:`splat.scales.Scale.abs_cycles` attribute.  In absolute mode, the A
+pitch frequency corresponds to octave number 4, so 'A' is the same as 'A4' and
+is an octave lower than 'A5'.  This does not only change the resulting octave
+(or cycle) number but also determines which octave a given note belongs to.
+The tables below show concrete examples in both modes, using a LogScale and
+showing in bold the first note for each key:
 
 .. include:: notes_table.rst
 
-And this is a small improvement on the :ref:`beep` example using a scale:
+Improved Beep
+-------------
+
+And now, here's a small improvement on the :ref:`beep` example using a scale:
 
 .. code-block:: python
 
