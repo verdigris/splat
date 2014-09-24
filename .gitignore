@@ -1,4 +1,7 @@
 *.pyc
+*.pyo
+*.pye
+*.saf
 *.wav
 *.mp3
 *.flac
@@ -7,5 +10,7 @@
 *.so
 *.pdf
 build
+dist
+verdigris.mu_splat.egg-info
 doc/_build
 MANIFEST
