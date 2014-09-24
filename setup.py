@@ -4,7 +4,7 @@ try:
 except ImportError:
     from distutils.core import setup, Extension
 
-setup(name='verdigris.mu-splat', version='1.3',
+setup(name='verdigris.mu-splat', version='1.4',
       description="Sound generator, synthesizer and editor",
       author="Guillaume Tucker",
       author_email="guillaume@mangoz.org",

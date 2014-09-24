@@ -30,7 +30,7 @@ import splat.sources
 import splat.interpol
 import splat.scales
 
-splat.check_version((1, 3))
+splat.check_version((1, 4))
 
 # -----------------------------------------------------------------------------
 # Splat test base class

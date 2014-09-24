@@ -23,7 +23,7 @@ from _splat import audio_formats
 
 __all__ = ['gen', 'data', 'filters', 'sources', 'scales', 'interpol']
 
-VERSION = (1, 3)
+VERSION = (1, 4)
 VERSION_STR = '.'.join([str(v) for v in VERSION])
 BUILD = 14
 
