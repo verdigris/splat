@@ -113,6 +113,150 @@ typedef struct Fragment_object Fragment;
 
 static PyTypeObject splat_FragmentType;
 
+/* ----------------------------------------------------------------------------
+ * Spline class
+ */
+
+struct Spline_object {
+	PyObject_HEAD;
+	int init;
+	PyObject *pols; /* List of tuples with (x0, x1, coeffs) */
+	double k0;
+	double start;
+	double end;
+};
+typedef struct Spline_object Spline;
+
+static PyTypeObject splat_SplineType;
+
+static double splat_spline_tuple_value(PyObject *poly, double x);
+static PyObject *splat_find_spline_poly(PyObject *spline, double x);
+
+static void Spline_dealloc(Spline *self)
+{
+	if (self->init) {
+		Py_DECREF(self->pols);
+		self->init = 0;
+	}
+}
+
+static int Spline_init(Spline *self, PyObject *args)
+{
+	PyObject *poly;
+
+	if (!PyArg_ParseTuple(args, "O!d", &PyList_Type, &self->pols,
+			      &self->k0))
+		return -1;
+
+	Py_INCREF(self->pols);
+
+	poly = PyList_GET_ITEM(self->pols, 0);
+	self->start = PyFloat_AS_DOUBLE(PyTuple_GET_ITEM(poly, 0));
+
+	poly = PyList_GET_ITEM(self->pols, PyList_GET_SIZE(self->pols) - 1);
+	self->end = PyFloat_AS_DOUBLE(PyTuple_GET_ITEM(poly, 1));
+
+	self->init = 1;
+
+	return 0;
+}
+
+static PyObject *Spline_new(PyTypeObject *type, PyObject *args, PyObject *kw)
+{
+	Spline *self;
+
+	self = (Spline *)type->tp_alloc(type, 0);
+
+	if (self == NULL)
+		return PyErr_NoMemory();
+
+	self->init = 0;
+
+	return (PyObject *)self;
+}
+
+static PyTypeObject splat_SplineType = {
+	PyObject_HEAD_INIT(NULL)
+	0,                                 /* ob_size */
+	"_splat.Spline",                   /* tp_name */
+	sizeof(Spline),                    /* tp_basicsize */
+	0,                                 /* tp_itemsize */
+	(destructor)Spline_dealloc,        /* tp_dealloc */
+	0,                                 /* tp_print */
+	0,                                 /* tp_getattr */
+	0,                                 /* tp_setattr */
+	0,                                 /* tp_compare */
+	0,                                 /* tp_repr */
+	0,                                 /* tp_as_number */
+	0,                                 /* tp_as_sequence */
+	0,                                 /* tp_as_mapping */
+	0,                                 /* tp_hash  */
+	0,                                 /* tp_call */
+	0,                                 /* tp_str */
+	0,                                 /* tp_getattro */
+	0,                                 /* tp_setattro */
+	0,                                 /* tp_as_buffer */
+	BASE_TYPE_FLAGS,                   /* tp_flags */
+	0,                                 /* tp_doc */
+	0,                                 /* tp_traverse */
+	0,                                 /* tp_clear */
+	0,                                 /* tp_richcompare */
+	0,                                 /* tp_weaklistoffset */
+	0,                                 /* tp_iter */
+	0,                                 /* tp_iternext */
+	0,                                 /* tp_methods */
+	0,                                 /* tp_members */
+	0,                                 /* tp_getset */
+	0,                                 /* tp_base */
+	0,                                 /* tp_dict */
+	0,                                 /* tp_descr_get */
+	0,                                 /* tp_descr_set */
+	0,                                 /* tp_dictoffset */
+	(initproc)Spline_init,             /* tp_init */
+	0,                                 /* tp_alloc */
+	Spline_new,                        /* tp_new */
+};
+
+static double splat_spline_tuple_value(PyObject *poly, double x)
+{
+	Py_ssize_t i;
+	double value = 0.0;
+	double x_pow = 1.0;
+
+	for (i = 0; i < PyTuple_GET_SIZE(poly); ++i) {
+		PyObject *py_k = PyTuple_GET_ITEM(poly, i);
+		const double k = PyFloat_AS_DOUBLE(py_k);
+
+		value += k * x_pow;
+		x_pow *= x;
+	}
+
+	return value;
+}
+
+static PyObject *splat_find_spline_poly(PyObject *spline, double x)
+{
+	Py_ssize_t i;
+
+	for (i = 0; i < PyList_GET_SIZE(spline); ++i) {
+		PyObject *poly_params = PyList_GET_ITEM(spline, i);
+		PyObject *param;
+
+		param = PyTuple_GET_ITEM(poly_params, 1);
+
+		if (PyFloat_AS_DOUBLE(param) < x)
+			continue;
+
+		param = PyTuple_GET_ITEM(poly_params, 0);
+
+		if (PyFloat_AS_DOUBLE(param) > x)
+			continue;
+
+		return PyTuple_GET_ITEM(poly_params, 2);
+	}
+
+	return NULL;
+}
 
 /* ----------------------------------------------------------------------------
  * Signal vector interface
@@ -382,6 +526,25 @@ static int splat_signal_frag(struct splat_signal *s, struct signal_vector *v)
 	return 0;
 }
 
+static int splat_signal_spline(struct splat_signal *s, struct signal_vector *v)
+{
+	Spline *spline = (Spline *)v->obj;
+	const double rate = s->rate;
+	const double k0 = spline->k0;
+	sample_t *out = v->data;
+	size_t i = s->cur;
+	size_t j = s->len;
+
+	while (j--) {
+		const double x = i++ / rate;
+		PyObject *poly = splat_find_spline_poly(spline->pols, x);
+
+		*out++ = splat_spline_tuple_value(poly, x) * k0;
+	}
+
+	return 0;
+}
+
 static int splat_signal_init(struct splat_signal *s, size_t length,
 			     size_t origin, PyObject **signals,
 			     size_t n_signals, unsigned rate)
@@ -441,6 +604,17 @@ static int splat_signal_init(struct splat_signal *s, size_t length,
 			}
 
 			v->signal = splat_signal_frag;
+		} else if (PyObject_TypeCheck(signal, &splat_SplineType)) {
+			Spline *spline = (Spline *)signal;
+			size_t spline_length = spline->end * rate;
+
+			if (s->length > spline_length) {
+				PyErr_SetString(PyExc_ValueError,
+				"Spline signal length too short");
+				return -1;
+			}
+
+			v->signal = splat_signal_spline;
 		} else {
 			PyErr_SetString(PyExc_TypeError,
 					"unsupported signal type");
@@ -533,7 +707,6 @@ static PyObject *splat_signal_tuple(struct splat_signal *s, size_t offset)
 
 	return sig_tuple;
 }
-
 
 /* ----------------------------------------------------------------------------
  * Fragment class
@@ -2793,70 +2966,28 @@ static PyObject *splat_poly_value(PyObject *self, PyObject *args)
 	PyObject *coefs;
 	double x;
 
-	Py_ssize_t i;
-	double value;
-	double x_pow;
-
 	if (!PyArg_ParseTuple(args, "O!d", &PyTuple_Type, &coefs, &x))
 		return NULL;
 
-	value = 0.0;
-	x_pow = 1.0;
-
-	for (i = 0; i < PyTuple_GET_SIZE(coefs); ++i) {
-		PyObject *py_k = PyTuple_GET_ITEM(coefs, i);
-		const double k = PyFloat_AS_DOUBLE(py_k);
-
-		value += k * x_pow;
-		x_pow *= x;
-	}
-
-	return PyFloat_FromDouble(value);
+	return PyFloat_FromDouble(splat_spline_tuple_value(coefs, x));
 }
 
 static PyObject *splat_spline_value(PyObject *self, PyObject *args)
 {
-	PyObject *poly_list;
+	PyObject *spline;
 	double x;
 
-	PyObject *poly = NULL;
-	double value = 0.0;
-	double x_pow = 1.0;
-	Py_ssize_t i;
+	PyObject *poly;
 
-	if (!PyArg_ParseTuple(args, "O!d", &PyList_Type, &poly_list, &x))
+	if (!PyArg_ParseTuple(args, "O!d", &PyList_Type, &spline, &x))
 		return NULL;
 
-	for (i = 0; i < PyList_GET_SIZE(poly_list); ++i) {
-		PyObject *param;
-		PyObject *poly_params = PyList_GET_ITEM(poly_list, i);
-
-		param = PyTuple_GET_ITEM(poly_params, 1);
-
-		if (PyFloat_AS_DOUBLE(param) < x)
-			continue;
-
-		param = PyTuple_GET_ITEM(poly_params, 0);
-
-		if (PyFloat_AS_DOUBLE(param) > x)
-			continue;
-
-		poly = PyTuple_GET_ITEM(poly_params, 2);
-		break;
-	}
+	poly = splat_find_spline_poly(spline, x);
 
 	if (poly == NULL)
-		Py_RETURN_NONE;
+		return NULL;
 
-	for (i = 0; i < PyTuple_GET_SIZE(poly); ++i) {
-		PyObject *py_k = PyTuple_GET_ITEM(poly, i);
-		const double k = PyFloat_AS_DOUBLE(py_k);
-
-		value += k * x_pow;
-		x_pow *= x;
-	}
-
-	return PyFloat_FromDouble(value);
+	return PyFloat_FromDouble(splat_spline_tuple_value(poly, x));
 }
 
 static PyMethodDef splat_methods[] = {
@@ -2911,6 +3042,7 @@ PyMODINIT_FUNC init_splat(void)
 		const char *name;
 	};
 	static const struct splat_type splat_types[] = {
+		{ &splat_SplineType, "Spline" },
 		{ &splat_SignalType, "Signal" },
 		{ &splat_FragmentType, "Fragment" },
 		{ NULL, NULL }
