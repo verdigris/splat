@@ -16,6 +16,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import copy
+import _splat
 
 class Polynomial(object):
 
@@ -57,10 +58,7 @@ class Polynomial(object):
     def value(self, x):
         """Return the value of the polynomial for the given ``x`` input
         value."""
-        res = 0
-        for p, k in enumerate(self.coefs):
-            res += k * (x ** p)
-        return res
+        return _splat.poly_value(self.coefs, x)
 
 
 class PolyMatrix(object):
