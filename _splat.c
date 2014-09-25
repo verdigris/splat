@@ -2788,6 +2788,32 @@ static PyObject *splat_reverb(PyObject *self, PyObject *args)
 	Py_RETURN_NONE;
 }
 
+static PyObject *splat_poly_value(PyObject *self, PyObject *args)
+{
+	PyObject *coefs;
+	double x;
+
+	Py_ssize_t i;
+	double value;
+	double x_pow;
+
+	if (!PyArg_ParseTuple(args, "O!d", &PyTuple_Type, &coefs, &x))
+		return NULL;
+
+	value = 0.0;
+	x_pow = 1.0;
+
+	for (i = 0; i < PyTuple_GET_SIZE(coefs); ++i) {
+		PyObject *py_k = PyTuple_GET_ITEM(coefs, i);
+		const double k = PyFloat_AS_DOUBLE(py_k);
+
+		value += k * x_pow;
+		x_pow *= x;
+	}
+
+	return PyFloat_FromDouble(value);
+}
+
 static PyMethodDef splat_methods[] = {
 	{ "lin2dB", splat_lin2dB, METH_VARARGS,
 	  splat_lin2dB_doc },
@@ -2809,6 +2835,7 @@ static PyMethodDef splat_methods[] = {
 	  splat_reverse_doc },
 	{ "reverb", splat_reverb, METH_VARARGS,
 	  splat_reverb_doc },
+	{ "poly_value", splat_poly_value, METH_VARARGS, NULL },
 	{ NULL, NULL, 0, NULL }
 };
 
