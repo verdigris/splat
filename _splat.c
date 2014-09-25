@@ -2814,6 +2814,51 @@ static PyObject *splat_poly_value(PyObject *self, PyObject *args)
 	return PyFloat_FromDouble(value);
 }
 
+static PyObject *splat_spline_value(PyObject *self, PyObject *args)
+{
+	PyObject *poly_list;
+	double x;
+
+	PyObject *poly = NULL;
+	double value = 0.0;
+	double x_pow = 1.0;
+	Py_ssize_t i;
+
+	if (!PyArg_ParseTuple(args, "O!d", &PyList_Type, &poly_list, &x))
+		return NULL;
+
+	for (i = 0; i < PyList_GET_SIZE(poly_list); ++i) {
+		PyObject *param;
+		PyObject *poly_params = PyList_GET_ITEM(poly_list, i);
+
+		param = PyTuple_GET_ITEM(poly_params, 1);
+
+		if (PyFloat_AS_DOUBLE(param) < x)
+			continue;
+
+		param = PyTuple_GET_ITEM(poly_params, 0);
+
+		if (PyFloat_AS_DOUBLE(param) > x)
+			continue;
+
+		poly = PyTuple_GET_ITEM(poly_params, 2);
+		break;
+	}
+
+	if (poly == NULL)
+		Py_RETURN_NONE;
+
+	for (i = 0; i < PyTuple_GET_SIZE(poly); ++i) {
+		PyObject *py_k = PyTuple_GET_ITEM(poly, i);
+		const double k = PyFloat_AS_DOUBLE(py_k);
+
+		value += k * x_pow;
+		x_pow *= x;
+	}
+
+	return PyFloat_FromDouble(value);
+}
+
 static PyMethodDef splat_methods[] = {
 	{ "lin2dB", splat_lin2dB, METH_VARARGS,
 	  splat_lin2dB_doc },
@@ -2836,6 +2881,7 @@ static PyMethodDef splat_methods[] = {
 	{ "reverb", splat_reverb, METH_VARARGS,
 	  splat_reverb_doc },
 	{ "poly_value", splat_poly_value, METH_VARARGS, NULL },
+	{ "spline_value", splat_spline_value, METH_VARARGS, NULL },
 	{ NULL, NULL, 0, NULL }
 };
 
