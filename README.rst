@@ -13,7 +13,8 @@ it.
 **Splat is not a programme** to generate **live** audio in real time, at least
 not at the moment.  So it's better suited to the studio than to the stage.
 
-To install it, clone the repository and run::
+To install it, clone the repository or download and extract a source archive,
+then run::
 
     python setup.py install
 
