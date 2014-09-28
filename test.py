@@ -221,6 +221,41 @@ class InterpolTest(SplatTest):
 
 class SignalTest(SplatTest):
 
+    def test_signal_callable(self):
+        """Callable signals"""
+        offset_value = 0.85
+        frag = splat.data.Fragment(channels=1, duration=1.0)
+        frag.offset(lambda x: offset_value)
+        pts = [0.0, 0.1, 0.4, 0.6, 0.9, 0.99]
+        for pt in pts:
+            self.assertEqual(frag[frag.s2n(pt)], (offset_value,))
+
+    def test_signal_frag(self):
+        """Fragment signals"""
+        offset_value = 1.5
+        sig_frag = splat.data.Fragment(channels=1, duration=1.0)
+        sig_frag.offset(offset_value)
+        frag = splat.data.Fragment(channels=1, duration=1.0)
+        frag.offset(sig_frag)
+        pts = [0.0, 0.1, 0.4, 0.6, 0.9, 0.99]
+        for pt in pts:
+            self.assertEqual(frag[frag.s2n(pt)], (offset_value,))
+
+    def test_signal_spline(self):
+        """Spline signals"""
+        spline_pts = [(0.0, 0.0), (0.1, 0.5), (0.5, 0.2), (1.0, 1.0)]
+        spline = splat.interpol.spline(spline_pts, 1.23)
+        frag1 = splat.data.Fragment(channels=1, duration=1.0)
+        frag1.offset(spline.value)
+        frag2 = splat.data.Fragment(channels=1, duration=1.0)
+        frag2.offset(spline.signal)
+        frags = [frag1, frag2]
+        pts = [0.0, 0.1, 0.4, 0.6, 0.9, 0.99]
+        for pt in pts:
+            offset_value = spline.value(pt)
+            for frag in frags:
+                self.assertEqual(frag[frag.s2n(pt)], (offset_value,))
+
     def test_signal(self):
         """Signal"""
         duration = 0.0123
