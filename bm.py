@@ -132,7 +132,7 @@ class Spline(benchmark.Benchmark, RefMixin):
         self.frag.offset(1.5)
 
     def test_offset_frag(self):
-        amp = self.frag.dup()
+        amp = splat.data.Fragment(channels=1, length=len(self.frag))
         amp.offset(1.5)
         self.frag.offset(amp)
 
