@@ -146,6 +146,7 @@ class PolyList(object):
     def __init__(self, pols, scale=1.0):
         self._pols = pols
         self._pols_coefs = list((x0, x1, pol.coefs) for x0, x1, pol in pols)
+        self._signal = _splat.Spline(self._pols_coefs, scale)
         self._scale = scale
 
     def __getitem__(self, i):
@@ -170,6 +171,10 @@ class PolyList(object):
         """Last ``x`` value from the list of points.  The result is undefined
         for values greater than this."""
         return self._pols[-1][1]
+
+    @property
+    def signal(self):
+        return self._signal
 
     def points(self):
         xlist = list(p[0] for p in self)
