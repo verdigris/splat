@@ -130,7 +130,8 @@ typedef struct Spline_object Spline;
 static PyTypeObject splat_SplineType;
 
 static double splat_spline_tuple_value(PyObject *poly, double x);
-static PyObject *splat_find_spline_poly(PyObject *spline, double x);
+static PyObject *splat_find_spline_poly(PyObject *spline, double x,
+					double *end);
 
 static void Spline_dealloc(Spline *self)
 {
@@ -234,23 +235,31 @@ static double splat_spline_tuple_value(PyObject *poly, double x)
 	return value;
 }
 
-static PyObject *splat_find_spline_poly(PyObject *spline, double x)
+static PyObject *splat_find_spline_poly(PyObject *spline, double x,
+					double *end)
 {
 	Py_ssize_t i;
 
 	for (i = 0; i < PyList_GET_SIZE(spline); ++i) {
 		PyObject *poly_params = PyList_GET_ITEM(spline, i);
 		PyObject *param;
+		double poly_start;
+		double poly_end;
 
 		param = PyTuple_GET_ITEM(poly_params, 1);
+		poly_end = PyFloat_AS_DOUBLE(param);
 
-		if (PyFloat_AS_DOUBLE(param) < x)
+		if (x > poly_end)
 			continue;
 
 		param = PyTuple_GET_ITEM(poly_params, 0);
+		poly_start = PyFloat_AS_DOUBLE(param);
 
-		if (PyFloat_AS_DOUBLE(param) > x)
+		if (x < poly_start)
 			continue;
+
+		if (end != NULL)
+			*end = poly_end;
 
 		return PyTuple_GET_ITEM(poly_params, 2);
 	}
@@ -534,10 +543,14 @@ static int splat_signal_spline(struct splat_signal *s, struct signal_vector *v)
 	sample_t *out = v->data;
 	size_t i = s->cur;
 	size_t j = s->len;
+	PyObject *poly = NULL;
+	double end = 0.0;
 
 	while (j--) {
 		const double x = i++ / rate;
-		PyObject *poly = splat_find_spline_poly(spline->pols, x);
+
+		if ((x > end) || (poly == NULL))
+			poly = splat_find_spline_poly(spline->pols, x, &end);
 
 		*out++ = splat_spline_tuple_value(poly, x) * k0;
 	}
@@ -2982,7 +2995,7 @@ static PyObject *splat_spline_value(PyObject *self, PyObject *args)
 	if (!PyArg_ParseTuple(args, "O!d", &PyList_Type, &spline, &x))
 		return NULL;
 
-	poly = splat_find_spline_poly(spline, x);
+	poly = splat_find_spline_poly(spline, x, NULL);
 
 	if (poly == NULL)
 		return NULL;
