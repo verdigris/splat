@@ -240,28 +240,62 @@ static PyObject *splat_find_spline_poly(PyObject *spline, double x,
 {
 	Py_ssize_t i;
 
+	if (!PyList_CheckExact(spline)) {
+		PyErr_SetString(PyExc_TypeError, "spline must be a list");
+		return NULL;
+	}
+
 	for (i = 0; i < PyList_GET_SIZE(spline); ++i) {
 		PyObject *poly_params = PyList_GET_ITEM(spline, i);
 		PyObject *param;
 		double poly_start;
 		double poly_end;
 
+		if (!PyTuple_CheckExact(poly_params) ||
+		    (PyTuple_GET_SIZE(poly_params) != 3)) {
+			PyErr_SetString(PyExc_TypeError,
+					"spline list item must be a 3-tuple");
+			return NULL;
+		}
+
 		param = PyTuple_GET_ITEM(poly_params, 1);
+
+		if (!PyFloat_CheckExact(param)) {
+			PyErr_SetString(PyExc_TypeError,
+				"spline list item start time must be a float");
+			return NULL;
+		}
+
 		poly_end = PyFloat_AS_DOUBLE(param);
 
 		if (x > poly_end)
 			continue;
 
 		param = PyTuple_GET_ITEM(poly_params, 0);
+
+		if (!PyFloat_CheckExact(param)) {
+			PyErr_SetString(PyExc_TypeError,
+				"spline list item end time must be a float");
+			return NULL;
+		}
+
 		poly_start = PyFloat_AS_DOUBLE(param);
 
 		if (x < poly_start)
 			continue;
 
+		param = PyTuple_GET_ITEM(poly_params, 2);
+
+		if (!PyTuple_CheckExact(param)) {
+			PyErr_SetString(PyExc_TypeError,
+				"spline list item coefs must be a tuple");
+			return NULL;
+		}
+
 		if (end != NULL)
 			*end = poly_end;
 
-		return PyTuple_GET_ITEM(poly_params, 2);
+		return param;
 	}
 
 	return NULL;
