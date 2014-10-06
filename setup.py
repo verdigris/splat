@@ -1,8 +1,19 @@
+import sys
+import os.path
 try:
     import setuptools
     from setuptool import setup, Extension
 except ImportError:
     from distutils.core import setup, Extension
+
+# The manual needs to be generated with Sphinx but is only required when
+# running the sdist command.
+if os.path.exists('Splat.pdf'):
+    data_files = [('.', ['Splat.pdf',]),]
+elif len(sys.argv) > 1 and sys.argv[1] == 'sdist':
+    raise Exception('Splat.pdf is missing')
+else:
+    data_files = []
 
 setup(name='verdigris.mu-splat', version='1.4',
       description="Sound generator, synthesizer and editor",
@@ -12,7 +23,7 @@ setup(name='verdigris.mu-splat', version='1.4',
       py_modules=['test', 'example', 'dew_drop'],
       ext_modules=[Extension('_splat', ['_splat.c'])],
       packages=['splat'],
-      data_files=[('.', ['Splat.pdf',]),],
+      data_files=data_files,
       long_description=open('README.rst', 'rb').read(),
       classifiers=[
         'Development Status :: 3 - Alpha',
