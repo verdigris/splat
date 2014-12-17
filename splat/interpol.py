@@ -16,6 +16,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import copy
+import _splat
 
 class Polynomial(object):
 
@@ -57,10 +58,7 @@ class Polynomial(object):
     def value(self, x):
         """Return the value of the polynomial for the given ``x`` input
         value."""
-        res = 0
-        for p, k in enumerate(self.coefs):
-            res += k * (x ** p)
-        return res
+        return _splat.poly_value(self.coefs, x)
 
 
 class PolyMatrix(object):
@@ -147,6 +145,8 @@ class PolyList(object):
 
     def __init__(self, pols, scale=1.0):
         self._pols = pols
+        self._pols_coefs = list((x0, x1, pol.coefs) for x0, x1, pol in pols)
+        self._signal = _splat.Spline(self._pols_coefs, scale)
         self._scale = scale
 
     def __getitem__(self, i):
@@ -172,6 +172,10 @@ class PolyList(object):
         for values greater than this."""
         return self._pols[-1][1]
 
+    @property
+    def signal(self):
+        return self._signal
+
     def points(self):
         xlist = list(p[0] for p in self)
         xlist.append(self[-1][1])
@@ -194,10 +198,7 @@ class PolyList(object):
     def value(self, x):
         """Return the spline value for a given ``x`` input value, or ``None``
         if undefined."""
-        for x0, x1, pol in self._pols:
-            if (x0 <= x) and (x <= x1):
-                return pol.value(x) * self.scale
-        return None
+        return _splat.spline_value(self._pols_coefs, x) * self.scale
 
     def slices(self, y0, xmin=None, xmax=None, xstep=0.001):
         """Get slices of the a given ``y0`` value.

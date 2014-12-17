@@ -124,7 +124,7 @@ class Spline(benchmark.Benchmark, RefMixin):
         step = self.frag.duration / 10
         t = 0.0
         self.pts = list()
-        while t < self.frag.duration:
+        while t <= self.frag.duration:
             self.pts.append((t, t / self.frag.duration))
             t += step
 
@@ -132,11 +132,14 @@ class Spline(benchmark.Benchmark, RefMixin):
         self.frag.offset(1.5)
 
     def test_offset_frag(self):
-        amp = self.frag.dup()
+        amp = splat.data.Fragment(channels=1, length=len(self.frag))
         amp.offset(1.5)
         self.frag.offset(amp)
 
     def test_offset_spline(self):
+        self.frag.offset(splat.interpol.spline(self.pts).signal)
+
+    def test_offset_spline_value(self):
         self.frag.offset(splat.interpol.spline(self.pts).value)
 
 
