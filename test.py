@@ -254,7 +254,8 @@ class SignalTest(SplatTest):
         for pt in pts:
             offset_value = spline.value(pt)
             for frag in frags:
-                self.assertEqual(frag[frag.s2n(pt)], (offset_value,))
+                self.assertAlmostEqual(frag[frag.s2n(pt)][0], offset_value,
+                                       self._places)
 
     def test_signal(self):
         """Signal"""
