@@ -115,10 +115,13 @@ class Generator(object):
         :py:meth:`splat.gen.Generator._run` with a sound source and specific
         arguments.
 
-        The ``start`` and ``end`` arguments are when the sound should start and
-        end in seconds.  The ``levels`` keyword can be used to override the
-        default values stored in the Generator.levels and passed to the
-        ``_run`` method.
+        The ``start`` and ``end`` arguments are times when the sound should
+        start and end in seconds.  Alternatively, ``end`` can be ``None`` in
+        which case the ``length`` keyword needs to be present with the length
+        in samples for the Generator to run.
+
+        The ``levels`` keyword can be used to override the default values
+        stored in the Generator.levels and passed to the ``_run`` method.
 
         When ``_run`` has been performed on the new fragment, filters are then
         run on it and it is finally mixed with the main internal fragment.
@@ -131,8 +134,12 @@ class Generator(object):
         """
         levels = kw.pop('levels', self._levels)
         start = float(start)
-        end = float(end)
-        frag = Fragment(self.channels, self.rate, (end - start))
+        frag_kw = { 'channels': self.channels, 'rate': self.rate }
+        if end is None:
+            frag_kw['length'] = kw.pop('length')
+        else:
+            frag_kw['duration'] = float(end) - start
+        frag = Fragment(**frag_kw)
         self._run(frag, levels, start, *args, **kw)
         self.filters.run(frag)
         self.frag.mix(frag, start, levels=kw.pop('mix_levels', None))
