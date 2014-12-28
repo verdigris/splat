@@ -1623,6 +1623,9 @@ static void frag_amp_floats(Fragment *self, const double *gains)
 		const double g = gains[c];
 		size_t i;
 
+		if (g == 1.0)
+			continue;
+
 		for (i = 0; i < self->length; ++i)
 			self->data[c][i] *= g;
 	}
