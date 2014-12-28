@@ -97,6 +97,22 @@ class FragmentTest(SplatTest):
         self.assert_samples(frag_twice, {n: (offset_check, offset_check)})
         self.assert_md5([frag, frag_sig], '248070c79f99014cf800d05ea81e0679')
 
+    def test_frag_resize(self):
+        """Fragment.resize"""
+        duration = 1.3
+        rate = 24000
+        length = int(rate * duration)
+        frag = splat.data.Fragment(rate=rate)
+        self.assertEqual(len(frag), 0)
+        frag.resize(duration=duration)
+        self.assertEqual(len(frag), length)
+        frag.grow(length=(length / 2))
+        self.assertEqual(len(frag), length)
+        frag.resize(length=(length / 2))
+        self.assertEqual(len(frag), length / 2)
+        frag.grow(duration=(duration * 1.5))
+        self.assertEqual(len(frag), (length * 1.5))
+
     def test_frag_import_bytes(self):
         """Fragment.import_bytes"""
         frag = splat.data.Fragment()

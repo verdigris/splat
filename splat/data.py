@@ -277,6 +277,17 @@ class Fragment(_splat.Fragment):
         dup_frag.mix(self)
         return dup_frag
 
+    def grow(self, duration=None, length=None):
+        """Resize if ``duration`` or ``length`` is greater than current."""
+        if duration is not None:
+            if duration > self.duration:
+                self.resize(duration=duration)
+        elif length is not None:
+            if length > len(self):
+                self.resize(length=length)
+        else:
+            raise ValueError("neither new duration nor length supplied")
+
     def md5(self, sample_type=splat.NATIVE_SAMPLE_TYPE,
             sample_width=splat.NATIVE_SAMPLE_WIDTH, as_md5_obj=False):
         """Get the MD5 checksum of this fragment's data.
