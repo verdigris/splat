@@ -113,6 +113,45 @@ class FragmentTest(SplatTest):
         frag.grow(duration=(duration * 1.5))
         self.assertEqual(len(frag), (length * 1.5))
 
+    def test_frag_mix(self):
+        """Fragment.mix"""
+        duration = 1.0
+        frag1, frag2 = (splat.data.Fragment(channels=1) for i in range(2))
+        splat.gen.SineGenerator(frag=frag1).run(0.0, duration, 1234.0, -3.0)
+        splat.gen.SineGenerator(frag=frag2).run(0.0, duration, 5678.0, -3.0)
+        offset = 0.234
+        offset_n = frag1.s2n(offset)
+        ref1_n = int(offset_n / 2)
+        ref2_n = int(len(frag2) / 2)
+        sample = 0.123
+
+        sample_n = frag1.s2n(sample)
+        frag1x, frag2x = (frag.dup() for frag in (frag1, frag2))
+        x1 = frag1x[ref1_n][0]
+        x2 = frag2x[ref2_n][0]
+        a = frag1x[offset_n + sample_n][0]
+        b = frag2x[sample_n][0]
+        frag1x.mix(frag2, offset=offset)
+        c = frag1x[offset_n + sample_n][0]
+        y1 = frag1x[ref1_n][0]
+        y2 = frag2x[ref2_n][0]
+        self.assertEqual(x1, y1)
+        self.assertEqual(x2, y2)
+        self.assertAlmostEqual((a + b), c, self._places)
+
+        frag1x, frag2x = (frag.dup() for frag in (frag1, frag2))
+        skip = 0.087
+        skip_n = frag1.s2n(skip)
+        a = frag1x[offset_n + sample_n][0]
+        b = frag2x[skip_n + sample_n][0]
+        x1 = frag1x[ref1_n][0]
+        x2 = frag2x[ref2_n][0]
+        frag1x.mix(frag2x, offset, skip)
+        c = frag1x[offset_n + sample_n][0]
+        self.assertEqual(x1, y1)
+        self.assertEqual(x2, y2)
+        self.assertAlmostEqual((a + b), c, self._places)
+
     def test_frag_import_bytes(self):
         """Fragment.import_bytes"""
         frag = splat.data.Fragment()
