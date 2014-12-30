@@ -104,7 +104,7 @@ class Generator(object):
         """Main method, designed to be invoked by sub-classes via
         :py:meth:`splat.gen.Generator.run`
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def run(self, start, end, *args, **kw):
         """Main public method to run the generator
