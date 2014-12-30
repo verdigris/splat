@@ -1433,15 +1433,15 @@ static int frag_mix_signals(Fragment *self, const Fragment *frag,
 }
 
 PyDoc_STRVAR(Fragment_mix_doc,
-"mix(fragment, offset=0.0, start=0.0, levels=None, duration=None)\n"
+"mix(fragment, offset=0.0, skip=0.0, levels=None, duration=None)\n"
 "\n"
 "Mix the given other ``fragment`` data into this instance.\n"
 "\n"
 "This is achieved by simply adding the corresponding samples of an incoming "
-"fragment to this fragment' samples.  The ``offset``, ``start`` and "
+"fragment to this fragment' samples.  The ``offset``, ``skip`` and "
 "``duration`` values in seconds can be used to alter the mixing times.  The "
 "incoming fragment can start being mixed with an ``offset`` into this "
-"fragment, its beginning can be skipped until the given ``start`` time, and "
+"fragment, its beginning can be skipped until the given ``skip`` time, and "
 "the ``duration`` to be mixed can be manually limited.  These values will be "
 "automatically adjusted to remain within the available incoming data.  The "
 "length of this fragment will be automatically increased if necessary to hold "
@@ -1456,22 +1456,22 @@ PyDoc_STRVAR(Fragment_mix_doc,
 static PyObject *Fragment_mix(Fragment *self, PyObject *args, PyObject *kw)
 {
 	static char *kwlist[] = {
-		"frag", "offset", "start", "levels", "duration", NULL };
+		"frag", "offset", "skip", "levels", "duration", NULL };
 	Fragment *frag;
 	double offset = 0.0;
-	double start = 0.0;
+	double skip = 0.0;
 	PyObject *levels_obj = Py_None;
 	PyObject *duration_obj = Py_None;
 
 	struct splat_levels_helper levels;
 	ssize_t length;
 	ssize_t offset_sample;
-	ssize_t start_sample;
+	ssize_t skip_sample;
 	size_t total_length;
 
 	if (!PyArg_ParseTupleAndKeywords(args, kw, "O!|ddOO", kwlist,
 					 &splat_FragmentType, &frag, &offset,
-					 &start, &levels_obj, &duration_obj))
+					 &skip, &levels_obj, &duration_obj))
 		return NULL;
 
 	if (frag->n_channels != self->n_channels) {
@@ -1504,18 +1504,18 @@ static PyObject *Fragment_mix(Fragment *self, PyObject *args, PyObject *kw)
 
 	offset_sample = offset * self->rate;
 	offset_sample = max(offset_sample, 0);
-	start_sample = start * self->rate;
-	start_sample = minmax(start_sample, 0, frag->length);
-	length = minmax(length, 0, (frag->length - start_sample));
+	skip_sample = skip * self->rate;
+	skip_sample = minmax(skip_sample, 0, frag->length);
+	length = minmax(length, 0, (frag->length - skip_sample));
 	total_length = offset_sample + length;
 
 	if (frag_grow(self, total_length))
 		return NULL;
 
 	if (levels.all_floats)
-		frag_mix_floats(self, frag, offset_sample, start_sample,
+		frag_mix_floats(self, frag, offset_sample, skip_sample,
 				length, levels.fl, levels_obj == splat_zero);
-	else if (frag_mix_signals(self, frag, offset_sample, start_sample,
+	else if (frag_mix_signals(self, frag, offset_sample, skip_sample,
 				  length, &levels))
 		return NULL;
 
@@ -1697,8 +1697,9 @@ static PyObject *Fragment_amp(Fragment *self, PyObject *args)
 PyDoc_STRVAR(Fragment_offset_doc,
 "offset(value, start=0.0)\n"
 "\n"
-"Add an offset to the data already in the fragment.  This is especially "
-"useful when generating a modulation fragment.\n");
+"Add an offset to the data already in the fragment starting at the ``start`` "
+"time in seconds.  This is especially useful when generating a modulation "
+"fragment.\n");
 
 static PyObject *Fragment_offset(Fragment *self, PyObject *args)
 {
