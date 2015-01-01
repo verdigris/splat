@@ -906,7 +906,7 @@ static PyObject *Fragment_sq_item(Fragment *self, Py_ssize_t i)
 
 	for (c = 0; c < self->n_channels; ++c) {
 		const sample_t s = self->data[c][i];
-		PyTuple_SetItem(sample, c, PyFloat_FromDouble(s));
+		PyTuple_SET_ITEM(sample, c, PyFloat_FromDouble(s));
 	}
 
 	return sample;
@@ -3188,9 +3188,9 @@ static void splat_init_audio_formats(PyObject *m, const char *name,
 		const struct splat_raw_io *io = &splat_raw_io_table[i];
 		PyObject *format = PyTuple_New(2);
 
-		PyTuple_SetItem(format, 0, PyLong_FromLong(io->sample_type));
-		PyTuple_SetItem(format, 1, PyLong_FromLong(io->sample_width));
-		PyList_SetItem(obj, i, format);
+		PyTuple_SET_ITEM(format, 0, PyLong_FromLong(io->sample_type));
+		PyTuple_SET_ITEM(format, 1, PyLong_FromLong(io->sample_width));
+		PyList_SET_ITEM(obj, i, format);
 	}
 
 	PyModule_AddObject(m, name, obj);
