@@ -9,6 +9,7 @@ Fragment objects
    .. automethod:: splat.data.Fragment.mix
    .. automethod:: splat.data.Fragment.import_bytes
    .. automethod:: splat.data.Fragment.export_bytes
+   .. automethod:: splat.data.Fragment.get_peak
    .. automethod:: splat.data.Fragment.normalize
    .. automethod:: splat.data.Fragment.amp
    .. automethod:: splat.data.Fragment.offset

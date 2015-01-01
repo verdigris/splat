@@ -768,6 +768,13 @@ struct splat_levels_helper {
 	int all_floats;
 };
 
+struct splat_peak {
+	double avg;
+	double pos;
+	double neg;
+	double peak;
+};
+
 static int frag_get_levels(Fragment *frag, struct splat_levels_helper *levels,
 			   PyObject *levels_obj);
 static int frag_resize(Fragment *self, size_t length);
@@ -775,6 +782,9 @@ static int frag_resize(Fragment *self, size_t length);
 	(((_length) <= (_frag)->length) ? 0 : frag_resize((_frag), (_length)))
 static int frag_get_sample_number(size_t *val, long min_val, long max_val,
 				  PyObject *obj);
+static void frag_get_peak(Fragment *frag, struct splat_peak *chan_peak,
+			  struct splat_peak *frag_peak, int do_avg);
+static PyObject *splat_peak_dict(const struct splat_peak *peak);
 
 /* -- Fragment functions -- */
 
@@ -1522,6 +1532,56 @@ static PyObject *Fragment_mix(Fragment *self, PyObject *args, PyObject *kw)
 	Py_RETURN_NONE;
 }
 
+PyDoc_STRVAR(Fragment_get_peak_doc,
+"get_peak()\n"
+"\n"
+"Get peak and average values for the whole fragment and for each channel.\n"
+"\n"
+"Scan all the data and look for the peak maximum, minimum and absolute values "
+"as well as the average values for each channel and for the whole fragment. "
+"The results are returned as a 2-tuple, the first item being for the whole "
+"fragment and the second one a list with each channel.  Both results are "
+"contained in a dictionary with ``pos``, ``neg``, ``peak`` and ``avg`` values "
+"respectively for positive, negative, absolute peak and average values.\n");
+
+static PyObject *Fragment_get_peak(Fragment *self, PyObject *_)
+{
+	struct splat_peak chan_peak[MAX_CHANNELS];
+	struct splat_peak frag_peak;
+	unsigned c;
+
+	PyObject *ret;
+	PyObject *frag_peak_obj;
+	PyObject *chan_peak_obj;
+
+	frag_get_peak(self, chan_peak, &frag_peak, 1);
+
+	frag_peak_obj = splat_peak_dict(&frag_peak);
+
+	if (frag_peak_obj == NULL)
+		return PyErr_NoMemory();
+
+	chan_peak_obj = PyList_New(self->n_channels);
+
+	if (chan_peak_obj == NULL)
+		return PyErr_NoMemory();
+
+	for (c = 0; c < self->n_channels; ++c) {
+		PyObject *peak_dict = splat_peak_dict(&chan_peak[c]);
+
+		if (peak_dict == NULL)
+			return PyErr_NoMemory();
+
+		PyList_SET_ITEM(chan_peak_obj, c, peak_dict);
+	}
+
+	ret = Py_BuildValue("(OO)", frag_peak_obj, chan_peak_obj);
+	Py_DECREF(frag_peak_obj);
+	Py_DECREF(chan_peak_obj);
+
+	return ret;
+}
+
 PyDoc_STRVAR(Fragment_normalize_doc,
 "normalize(level=-0.05, zero=True)\n"
 "\n"
@@ -1546,9 +1606,9 @@ static PyObject *Fragment_normalize(Fragment *self, PyObject *args)
 	PyObject *zero = NULL;
 
 	int do_zero;
-	double average[MAX_CHANNELS];
+	struct splat_peak chan_peak[MAX_CHANNELS];
+	struct splat_peak frag_peak;
 	unsigned c;
-	double peak;
 	double gain;
 
 	if (!PyArg_ParseTuple(args, "|dO!", &level, &PyBool_Type, &zero))
@@ -1560,48 +1620,27 @@ static PyObject *Fragment_normalize(Fragment *self, PyObject *args)
 	}
 
 	level = dB2lin(level);
-	peak = 0.0;
 	do_zero = ((zero == NULL) || (zero == Py_True)) ? 1 : 0;
 
-	for (c = 0; c < self->n_channels; ++c) {
-		sample_t * const chan_data = self->data[c];
-		const sample_t * const end = &chan_data[self->length];
-		const sample_t *it;
-		double avg = 0.0;
-		double neg = 1.0;
-		double pos = -1.0;
-		double chan_peak;
+	frag_get_peak(self, chan_peak, &frag_peak, do_zero);
 
-		for (it = self->data[c]; it != end; ++it) {
-			if (do_zero)
-				avg += *it / self->length;
+	if (do_zero) {
+		double offset = 0.0;
 
-			if (*it > pos)
-				pos = *it;
+		for (c = 0; c < self->n_channels; ++c) {
+			const double avg = chan_peak[c].avg;
 
-			if (*it < neg)
-				neg = *it;
+			if (fabs(offset) < fabs(avg))
+				offset = avg;
 		}
 
-		average[c] = avg;
-
-		if (do_zero) {
-			neg -= avg;
-			pos -= avg;
-		}
-
-		neg = fabsf(neg);
-		pos = fabsf(pos);
-		chan_peak = (neg > pos) ? neg : pos;
-
-		if (chan_peak > peak)
-			peak = chan_peak;
+		gain = level / (frag_peak.peak + fabs(offset));
+	} else {
+		gain = level / frag_peak.peak;
 	}
 
-	gain = level / peak;
-
 	for (c = 0; c < self->n_channels; ++c) {
-		const double chan_avg = average[c];
+		const double chan_avg = chan_peak[c].avg;
 		sample_t * const chan_data = self->data[c];
 		const sample_t * const end = &chan_data[self->length];
 		sample_t *it;
@@ -1788,6 +1827,8 @@ static PyMethodDef Fragment_methods[] = {
 	  Fragment_export_bytes_doc },
 	{ "mix", (PyCFunction)Fragment_mix, METH_KEYWORDS,
 	  Fragment_mix_doc },
+	{ "get_peak", (PyCFunction)Fragment_get_peak, METH_NOARGS,
+	  Fragment_get_peak_doc },
 	{ "normalize", (PyCFunction)Fragment_normalize, METH_VARARGS,
 	  Fragment_normalize_doc },
 	{ "amp", (PyCFunction)Fragment_amp, METH_VARARGS,
@@ -1941,6 +1982,62 @@ static int frag_get_sample_number(size_t *val, long min_val, long max_val,
 	*val = max(tmp_val, min_val);
 
 	return 0;
+}
+
+static void frag_get_peak(Fragment *frag, struct splat_peak *chan_peak,
+			  struct splat_peak *frag_peak, int do_avg)
+{
+	unsigned c;
+
+	frag_peak->avg = 0.0;
+	frag_peak->pos = -1.0;
+	frag_peak->neg = 1.0;
+	frag_peak->peak = 0.0;
+
+	for (c = 0; c < frag->n_channels; ++c) {
+		sample_t * const chan_data = frag->data[c];
+		const sample_t * const end = &chan_data[frag->length];
+		const sample_t *it;
+		double avg = 0.0;
+		double pos = -1.0;
+		double neg = 1.0;
+
+		for (it = chan_data; it != end; ++it) {
+			if (do_avg)
+				avg += *it / frag->length;
+
+			if (*it > pos)
+				pos = *it;
+			else if (*it < neg)
+				neg = *it;
+		}
+
+		chan_peak[c].avg = avg;
+		chan_peak[c].pos = pos;
+		chan_peak[c].neg = neg;
+
+		if (do_avg)
+			frag_peak->avg += avg / frag->n_channels;
+
+		if (pos > frag_peak->pos)
+			frag_peak->pos = pos;
+
+		if (neg < frag_peak->neg)
+			frag_peak->neg = neg;
+
+		neg = fabsf(neg);
+		pos = fabsf(pos);
+		chan_peak[c].peak = (neg > pos) ? neg : pos;
+
+		if (frag_peak->peak < chan_peak[c].peak)
+			frag_peak->peak = chan_peak[c].peak;
+	}
+}
+
+static PyObject *splat_peak_dict(const struct splat_peak *peak)
+{
+	return Py_BuildValue("{sdsdsdsd}", "avg", peak->avg, "pos", peak->pos,
+			     "neg", peak->neg, "peak", peak->peak);
 }
 
 

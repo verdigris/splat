@@ -113,6 +113,30 @@ class FragmentTest(SplatTest):
         frag.grow(duration=(duration * 1.5))
         self.assertEqual(len(frag), (length * 1.5))
 
+    def test_frag_normalize(self):
+        """Fragment.normalize"""
+        levels = -3.0
+        levels_lin = splat.dB2lin(levels)
+        places = int(self._places / 2)
+        small_places = 2
+        frag = splat.data.Fragment(channels=1)
+        splat.gen.SineGenerator(frag=frag).run(0.0, 1.0, 123.4, levels=levels)
+        sample_n = (len(frag) / 2)
+        x = frag[sample_n][0]
+        frag_peak = frag.get_peak()[0]
+        peak, avg = (frag_peak[item] for item in ['peak', 'avg'])
+        self.assertAlmostEqual(avg, 0.0, small_places)
+        self.assertAlmostEqual(levels_lin, peak, places)
+        frag.normalize()
+        frag_peak = frag.get_peak()[0]
+        norm_peak, norm_avg = (frag_peak[item] for item in ['peak', 'avg'])
+        ref_peak = splat.dB2lin(-0.05)
+        self.assertAlmostEqual(norm_peak, ref_peak, places)
+        self.assertAlmostEqual(norm_avg, 0.0, places)
+        y = frag[sample_n][0]
+        ref = x * ref_peak / levels_lin
+        self.assertAlmostEqual(y, ref, small_places)
+
     def test_frag_mix(self):
         """Fragment.mix"""
         duration = 1.0
