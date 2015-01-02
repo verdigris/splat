@@ -245,14 +245,16 @@ class Fragment(_splat.Fragment):
                 return frag
         raise Exception("Unsupported file format")
 
-    def save(self, out_file, fmt=None, start=None, end=None, *args, **kw):
+    def save(self, out_file, fmt=None, start=None, end=None, normalize=True,
+             *args, **kw):
         """Save the contents of the audio fragment into a file.
 
         If ``out_file`` is a string, a file is created with this name;
         otherwise, it must be a file-like object.  The contents of the audio
         fragment are written to this file.  It is possible to save only a part
         of the fragment using the ``start`` and ``end`` arguments with times in
-        seconds.
+        seconds.  The contents of the fragment will be automatically normalized
+        unless ``normalized`` is set to ``False``.
 
         The ``fmt`` argument is a string to identify the output file format to
         use.  If ``None``, the file name extension is used.  It may otherwise
@@ -267,6 +269,8 @@ class Fragment(_splat.Fragment):
         saver = audio_file_savers.get(fmt, None)
         if saver is None:
             raise Exception("Unsupported file format: {0}".format(fmt))
+        if normalize is True:
+            self.normalize()
         saver(out_file, self, start, end, *args, **kw)
 
     def dup(self):
