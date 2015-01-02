@@ -1621,7 +1621,6 @@ static PyObject *Fragment_normalize(Fragment *self, PyObject *args)
 
 	level = dB2lin(level);
 	do_zero = ((zero == NULL) || (zero == Py_True)) ? 1 : 0;
-
 	frag_get_peak(self, chan_peak, &frag_peak, do_zero);
 
 	if (do_zero) {
@@ -1637,6 +1636,20 @@ static PyObject *Fragment_normalize(Fragment *self, PyObject *args)
 		gain = level / (frag_peak.peak + fabs(offset));
 	} else {
 		gain = level / frag_peak.peak;
+	}
+
+	if ((1.0 < gain) && (gain < 1.001)) {
+		int zero;
+
+		if (!do_zero)
+			Py_RETURN_NONE;
+
+		for (c = 0, zero = 1; c < self->n_channels && zero; ++c)
+			if (fabs(chan_peak[c].avg) > 0.001)
+				zero = 0;
+
+		if (zero)
+			Py_RETURN_NONE;
 	}
 
 	for (c = 0; c < self->n_channels; ++c) {
