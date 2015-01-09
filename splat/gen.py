@@ -1,6 +1,6 @@
 # Splat - splat/generator.py
 #
-# Copyright (C) 2012, 2013, 2014 Guillaume Tucker <guillaume@mangoz.org>
+# Copyright (C) 2012, 2013, 2014, 2015 Guillaume Tucker <guillaume@mangoz.org>
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU Lesser General Public License as published by the Free
@@ -55,7 +55,7 @@ class Generator(object):
         """
         self.frag = frag
         self._filter_chain = FilterChain(filters)
-        self._levels = tuple([0.0 for x in range(self.frag.channels)])
+        self._levels = 0.0
 
     @property
     def levels(self):
