@@ -17,6 +17,7 @@ Fragment objects
    .. autoattribute:: splat.data.Fragment.rate
    .. autoattribute:: splat.data.Fragment.duration
    .. autoattribute:: splat.data.Fragment.channels
+   .. autoattribute:: splat.data.Fragment.name
 
 
 Generator objects

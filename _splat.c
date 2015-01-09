@@ -1,7 +1,8 @@
 /*
     Splat - _splat.c
 
-    Copyright (C) 2012, 2013, 2014 Guillaume Tucker <guillaume@mangoz.org>
+    Copyright (C) 2012, 2013, 2014, 2015
+    Guillaume Tucker <guillaume@mangoz.org>
 
     This program is free software; you can redistribute it and/or modify it
     under the terms of the GNU Lesser General Public License as published by
@@ -108,6 +109,7 @@ struct Fragment_object {
 	unsigned rate;
 	size_t length;
 	sample_t *data[MAX_CHANNELS];
+	const char *name;
 };
 typedef struct Fragment_object Fragment;
 
@@ -796,6 +798,9 @@ static void Fragment_dealloc(Fragment *self)
 		for (i = 0; i < self->n_channels; ++i)
 			PyMem_Free(self->data[i]);
 
+		if (self->name != NULL)
+			free((void *)self->name);
+
 		self->init = 0;
 	}
 
@@ -805,18 +810,19 @@ static void Fragment_dealloc(Fragment *self)
 static int Fragment_init(Fragment *self, PyObject *args, PyObject *kw)
 {
 	static char *kwlist[] = {
-		"channels", "rate", "duration", "length", NULL };
+		"channels", "rate", "duration", "length", "name", NULL };
 	unsigned n_channels = 2;
 	unsigned rate = 48000;
 	double duration = 0.0;
 	unsigned long length = 0;
+	const char *name = NULL;
 
 	unsigned i;
 	size_t data_size;
 
-	if (!PyArg_ParseTupleAndKeywords(args, kw, "|IIdk", kwlist,
+	if (!PyArg_ParseTupleAndKeywords(args, kw, "|IIdkz", kwlist,
 					 &n_channels, &rate, &duration,
-					 &length))
+					 &length, &name))
 		return -1;
 
 	if (n_channels > MAX_CHANNELS) {
@@ -859,6 +865,12 @@ static int Fragment_init(Fragment *self, PyObject *args, PyObject *kw)
 			memset(self->data[i], 0, data_size);
 		}
 	}
+
+	if (name == NULL)
+		self->name = NULL;
+	else
+		self->name = strdup(name);
+
 
 	self->n_channels = n_channels;
 	self->rate = rate;
@@ -982,10 +994,38 @@ static PyObject *Fragment_get_channels(Fragment *self, void *_)
 	return Py_BuildValue("I", self->n_channels);
 }
 
+PyDoc_STRVAR(name_doc, "Get and set the fragment name.");
+
+static PyObject *Fragment_get_name(Fragment *self, void *_)
+{
+	if (self->name == NULL)
+		Py_RETURN_NONE;
+
+	return PyString_FromString(self->name);
+}
+
+static int Fragment_set_name(Fragment *self, PyObject *value, void *_)
+{
+	if (self->name != NULL)
+		free((void *)self->name);
+
+	if (!PyString_Check(value)) {
+		PyErr_SetString(PyExc_TypeError,
+				"Fragment name must be a string");
+		return -1;
+	}
+
+	self->name = strdup(PyString_AS_STRING(value));
+
+	return 0;
+}
+
 static PyGetSetDef Fragment_getsetters[] = {
 	{ "rate", (getter)Fragment_get_rate, NULL, rate_doc },
 	{ "duration", (getter)Fragment_get_duration, NULL, duration_doc },
 	{ "channels", (getter)Fragment_get_channels, NULL, channels_doc },
+	{ "name", (getter)Fragment_get_name, (setter)Fragment_set_name,
+	  name_doc },
 	{ NULL }
 };
 

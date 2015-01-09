@@ -64,7 +64,9 @@ class FragmentTest(SplatTest):
 
     def test_frag(self):
         """Fragment"""
-        frag = splat.data.Fragment(duration=1.0)
+        frag_name = "Test Fragment"
+        frag = splat.data.Fragment(duration=1.0, name=frag_name)
+        self.assertEqual(frag_name, frag.name)
         self.assert_samples(frag, {int(len(frag) / 2): (0.0, 0.0)})
         self.assert_md5(frag, 'fe384f668da282694c29a84ebd33481d')
 
