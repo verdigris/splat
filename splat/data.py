@@ -225,7 +225,7 @@ class Fragment(_splat.Fragment):
     """
 
     @classmethod
-    def open(cls, in_file, fmt=None):
+    def open(cls, in_file, fmt=None, name=None):
         """Open a file to create a sound fragment by importing audio data.
 
         Open a sound file specified by ``in_file``, which can be either a file
@@ -241,8 +241,13 @@ class Fragment(_splat.Fragment):
         fmt = _get_fmt(in_file, fmt)
         for opener in audio_file_openers:
             frag = opener(in_file, fmt)
-            if frag is not None:
-                return frag
+            if frag is None:
+                continue
+            if name is not None:
+                frag.name = name
+            elif isinstance(in_file, str):
+                frag.name = os.path.splitext(os.path.basename(in_file))[0]
+            return frag
         raise Exception("Unsupported file format")
 
     def save(self, out_file, fmt=None, start=None, end=None, normalize=True,
