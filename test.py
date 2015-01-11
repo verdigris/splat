@@ -402,6 +402,20 @@ class GeneratorTest(SplatTest):
         self.assertEqual(gen.frag.duration, 0.0,
                          "Incorrect initial Fragment length")
 
+    def test_gen_levels(self):
+        """Generator and source levels"""
+        freq = 123.45
+        duration = 1.0
+        for levels in [-3.0, -3, int(-3),
+                        long(-3), (-3.0, -3.0),
+                        (int(-3), int(-3)), (long(-3), long(-3))]:
+            frag = splat.data.Fragment(duration=duration)
+            splat.sources.sine(frag, levels, freq)
+            gen = splat.gen.SineGenerator()
+            gen.run(0.0, duration, freq, levels=levels)
+            self.assert_md5([frag, gen.frag],
+                            '7df0f551461f50296a1dddead24b82f6')        
+
     def test_sine(self):
         """sources.sine"""
         freq = 1237.9
