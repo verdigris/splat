@@ -1,6 +1,6 @@
 # Splat - splat/generator.py
 #
-# Copyright (C) 2012, 2013, 2014 Guillaume Tucker <guillaume@mangoz.org>
+# Copyright (C) 2012, 2013, 2014, 2015 Guillaume Tucker <guillaume@mangoz.org>
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU Lesser General Public License as published by the Free
@@ -55,7 +55,7 @@ class Generator(object):
         """
         self.frag = frag
         self._filter_chain = FilterChain(filters)
-        self._levels = tuple([0.0 for x in range(self.frag.channels)])
+        self._levels = 0.0
 
     @property
     def levels(self):
@@ -104,7 +104,7 @@ class Generator(object):
         """Main method, designed to be invoked by sub-classes via
         :py:meth:`splat.gen.Generator.run`
         """
-        raise NotImplemented
+        raise NotImplementedError
 
     def run(self, start, end, *args, **kw):
         """Main public method to run the generator
@@ -115,10 +115,13 @@ class Generator(object):
         :py:meth:`splat.gen.Generator._run` with a sound source and specific
         arguments.
 
-        The ``start`` and ``end`` arguments are when the sound should start and
-        end in seconds.  The ``levels`` keyword can be used to override the
-        default values stored in the Generator.levels and passed to the
-        ``_run`` method.
+        The ``start`` and ``end`` arguments are times when the sound should
+        start and end in seconds.  Alternatively, ``end`` can be ``None`` in
+        which case the ``length`` keyword needs to be present with the length
+        in samples for the Generator to run.
+
+        The ``levels`` keyword can be used to override the default values
+        stored in the Generator.levels and passed to the ``_run`` method.
 
         When ``_run`` has been performed on the new fragment, filters are then
         run on it and it is finally mixed with the main internal fragment.
@@ -131,8 +134,12 @@ class Generator(object):
         """
         levels = kw.pop('levels', self._levels)
         start = float(start)
-        end = float(end)
-        frag = Fragment(self.channels, self.rate, (end - start))
+        frag_kw = { 'channels': self.channels, 'rate': self.rate }
+        if end is None:
+            frag_kw['length'] = kw.pop('length')
+        else:
+            frag_kw['duration'] = float(end) - start
+        frag = Fragment(**frag_kw)
         self._run(frag, levels, start, *args, **kw)
         self.filters.run(frag)
         self.frag.mix(frag, start, levels=kw.pop('mix_levels', None))

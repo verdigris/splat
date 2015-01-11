@@ -1,6 +1,6 @@
 # Splat - test.py
 #
-# Copyright (C) 2012, 2013, 2014 Guillaume Tucker <guillaume@mangoz.org>
+# Copyright (C) 2012, 2013, 2014, 2015 Guillaume Tucker <guillaume@mangoz.org>
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU Lesser General Public License as published by the Free
@@ -29,6 +29,7 @@ import splat.gen
 import splat.sources
 import splat.interpol
 import splat.scales
+import splat.seq
 
 splat.check_version((1, 4))
 
@@ -64,7 +65,9 @@ class FragmentTest(SplatTest):
 
     def test_frag(self):
         """Fragment"""
-        frag = splat.data.Fragment(duration=1.0)
+        frag_name = "Test Fragment"
+        frag = splat.data.Fragment(duration=1.0, name=frag_name)
+        self.assertEqual(frag_name, frag.name)
         self.assert_samples(frag, {int(len(frag) / 2): (0.0, 0.0)})
         self.assert_md5(frag, 'fe384f668da282694c29a84ebd33481d')
 
@@ -96,6 +99,85 @@ class FragmentTest(SplatTest):
         self.assert_samples(frag_sig, {n: (offset, offset)})
         self.assert_samples(frag_twice, {n: (offset_check, offset_check)})
         self.assert_md5([frag, frag_sig], '248070c79f99014cf800d05ea81e0679')
+
+    def test_frag_resize(self):
+        """Fragment.resize"""
+        duration = 1.3
+        rate = 24000
+        length = int(rate * duration)
+        frag = splat.data.Fragment(rate=rate)
+        self.assertEqual(len(frag), 0)
+        frag.resize(duration=duration)
+        self.assertEqual(len(frag), length)
+        frag.grow(length=(length / 2))
+        self.assertEqual(len(frag), length)
+        frag.resize(length=(length / 2))
+        self.assertEqual(len(frag), length / 2)
+        frag.grow(duration=(duration * 1.5))
+        self.assertEqual(len(frag), (length * 1.5))
+
+    def test_frag_normalize(self):
+        """Fragment.normalize"""
+        levels = -3.0
+        levels_lin = splat.dB2lin(levels)
+        places = int(self._places / 2)
+        small_places = 2
+        frag = splat.data.Fragment(channels=1)
+        splat.gen.SineGenerator(frag=frag).run(0.0, 1.0, 123.4, levels=levels)
+        sample_n = (len(frag) / 2)
+        x = frag[sample_n][0]
+        frag_peak = frag.get_peak()[0]
+        peak, avg = (frag_peak[item] for item in ['peak', 'avg'])
+        self.assertAlmostEqual(avg, 0.0, small_places)
+        self.assertAlmostEqual(levels_lin, peak, places)
+        frag.normalize()
+        frag_peak = frag.get_peak()[0]
+        norm_peak, norm_avg = (frag_peak[item] for item in ['peak', 'avg'])
+        ref_peak = splat.dB2lin(-0.05)
+        self.assertAlmostEqual(norm_peak, ref_peak, places)
+        self.assertAlmostEqual(norm_avg, 0.0, places)
+        y = frag[sample_n][0]
+        ref = x * ref_peak / levels_lin
+        self.assertAlmostEqual(y, ref, small_places)
+
+    def test_frag_mix(self):
+        """Fragment.mix"""
+        duration = 1.0
+        frag1, frag2 = (splat.data.Fragment(channels=1) for i in range(2))
+        splat.gen.SineGenerator(frag=frag1).run(0.0, duration, 1234.0, -3.0)
+        splat.gen.SineGenerator(frag=frag2).run(0.0, duration, 5678.0, -3.0)
+        offset = 0.234
+        offset_n = frag1.s2n(offset)
+        ref1_n = int(offset_n / 2)
+        ref2_n = int(len(frag2) / 2)
+        sample = 0.123
+
+        sample_n = frag1.s2n(sample)
+        frag1x, frag2x = (frag.dup() for frag in (frag1, frag2))
+        x1 = frag1x[ref1_n][0]
+        x2 = frag2x[ref2_n][0]
+        a = frag1x[offset_n + sample_n][0]
+        b = frag2x[sample_n][0]
+        frag1x.mix(frag2, offset=offset)
+        c = frag1x[offset_n + sample_n][0]
+        y1 = frag1x[ref1_n][0]
+        y2 = frag2x[ref2_n][0]
+        self.assertEqual(x1, y1)
+        self.assertEqual(x2, y2)
+        self.assertAlmostEqual((a + b), c, self._places)
+
+        frag1x, frag2x = (frag.dup() for frag in (frag1, frag2))
+        skip = 0.087
+        skip_n = frag1.s2n(skip)
+        a = frag1x[offset_n + sample_n][0]
+        b = frag2x[skip_n + sample_n][0]
+        x1 = frag1x[ref1_n][0]
+        x2 = frag2x[ref2_n][0]
+        frag1x.mix(frag2x, offset, skip)
+        c = frag1x[offset_n + sample_n][0]
+        self.assertEqual(x1, y1)
+        self.assertEqual(x2, y2)
+        self.assertAlmostEqual((a + b), c, self._places)
 
     def test_frag_import_bytes(self):
         """Fragment.import_bytes"""
@@ -254,7 +336,8 @@ class SignalTest(SplatTest):
         for pt in pts:
             offset_value = spline.value(pt)
             for frag in frags:
-                self.assertEqual(frag[frag.s2n(pt)], (offset_value,))
+                self.assertAlmostEqual(frag[frag.s2n(pt)][0], offset_value,
+                                       self._places)
 
     def test_signal(self):
         """Signal"""
@@ -583,6 +666,27 @@ class ScaleTest(SplatTest):
             ('D-1', f0 * 4 / 6), ('G-1', f0 * 16 / 18),
             ]
         self._check_note_freqs(s, note_freqs)
+
+
+class SequencerTest(SplatTest):
+
+    class TestPattern(splat.seq.Pattern):
+
+        def __init__(self, gen, *args, **kw):
+            super(SequencerTest.TestPattern, self).__init__(*args, **kw)
+            self.gen = gen
+
+        def play(self, frag, bar, beat, t, T):
+            freq = 220.0 * (beat + 1)
+            self.gen.frag = frag
+            self.gen.run(t, t + (T * 0.8), freq)
+
+
+    def test_pattern_sequencer(self):
+        p = SequencerTest.TestPattern(splat.gen.SineGenerator())
+        frag = splat.data.Fragment(channels=1)
+        splat.seq.PatternSequencer(120).run(frag, [(p,), (p,)])
+        self.assert_md5(frag, '3b9dbf48691e185339a461a493fc5e7e')
 
 # -----------------------------------------------------------------------------
 # main function

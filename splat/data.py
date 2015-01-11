@@ -1,6 +1,6 @@
 # Splat - splat/data.py
 #
-# Copyright (C) 2012, 2013, 2014 Guillaume Tucker <guillaume@mangoz.org>
+# Copyright (C) 2012, 2013, 2014, 2015 Guillaume Tucker <guillaume@mangoz.org>
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU Lesser General Public License as published by the Free
@@ -84,7 +84,7 @@ def open_saf(saf_file, fmt=None):
         return None
 
     is_str = isinstance(saf_file, str)
-    f = open(saf_file, 'r') if is_str else saf_file
+    f = open(saf_file, 'rb') if is_str else saf_file
     if f.readline().strip('\n') != SAF_MAGIC:
         return None
     attr_str = f.readline().strip('\n')
@@ -190,14 +190,12 @@ if has_audiotools is True:
         cls.from_pcm(fname, reader, compression, len(frag))
 
     fmt_cls = {
-               'ogg': audiotools.VorbisAudio,
-               'flac': audiotools.FlacAudio,
-               'mp3': audiotools.MP3Audio,
-               }
-    def fmt_lambda(cls):
-        return lambda *a, **k: save_audiotools(cls, *a, **k)
+        'ogg': audiotools.VorbisAudio,
+        'flac': audiotools.FlacAudio,
+        'mp3': audiotools.MP3Audio,
+        }
     for fmt, cls in fmt_cls.iteritems():
-        audio_file_savers[fmt] = fmt_lambda(cls)
+        audio_file_savers[fmt] = lambda *a, **k: save_audiotools(cls, *a, **k)
 
 # -----------------------------------------------------------------------------
 # Data classes
@@ -227,7 +225,7 @@ class Fragment(_splat.Fragment):
     """
 
     @classmethod
-    def open(cls, in_file, fmt=None):
+    def open(cls, in_file, fmt=None, name=None):
         """Open a file to create a sound fragment by importing audio data.
 
         Open a sound file specified by ``in_file``, which can be either a file
@@ -243,18 +241,25 @@ class Fragment(_splat.Fragment):
         fmt = _get_fmt(in_file, fmt)
         for opener in audio_file_openers:
             frag = opener(in_file, fmt)
-            if frag is not None:
-                return frag
+            if frag is None:
+                continue
+            if name is not None:
+                frag.name = name
+            elif isinstance(in_file, str):
+                frag.name = os.path.splitext(os.path.basename(in_file))[0]
+            return frag
         raise Exception("Unsupported file format")
 
-    def save(self, out_file, fmt=None, start=None, end=None, *args, **kw):
+    def save(self, out_file, fmt=None, start=None, end=None, normalize=True,
+             *args, **kw):
         """Save the contents of the audio fragment into a file.
 
         If ``out_file`` is a string, a file is created with this name;
         otherwise, it must be a file-like object.  The contents of the audio
         fragment are written to this file.  It is possible to save only a part
         of the fragment using the ``start`` and ``end`` arguments with times in
-        seconds.
+        seconds.  The contents of the fragment will be automatically normalized
+        unless ``normalized`` is set to ``False``.
 
         The ``fmt`` argument is a string to identify the output file format to
         use.  If ``None``, the file name extension is used.  It may otherwise
@@ -269,6 +274,8 @@ class Fragment(_splat.Fragment):
         saver = audio_file_savers.get(fmt, None)
         if saver is None:
             raise Exception("Unsupported file format: {0}".format(fmt))
+        if normalize is True:
+            self.normalize()
         saver(out_file, self, start, end, *args, **kw)
 
     def dup(self):
@@ -277,12 +284,23 @@ class Fragment(_splat.Fragment):
         dup_frag.mix(self)
         return dup_frag
 
+    def grow(self, duration=None, length=None):
+        """Resize if ``duration`` or ``length`` is greater than current."""
+        if duration is not None:
+            if duration > self.duration:
+                self.resize(duration=duration)
+        elif length is not None:
+            if length > len(self):
+                self.resize(length=length)
+        else:
+            raise ValueError("neither new duration nor length was supplied")
+
     def md5(self, sample_type=splat.NATIVE_SAMPLE_TYPE,
             sample_width=splat.NATIVE_SAMPLE_WIDTH, as_md5_obj=False):
         """Get the MD5 checksum of this fragment's data.
 
         The data is first converted to samples as specified by ``sample_type``
-        and ``sample_width`` in bytes.  Then the MD5 checksum is return as a
+        and ``sample_width`` in bytes.  Then the MD5 checksum is returned as a
         string unless ``as_md5_obj`` is set to True in which case an ``md5``
         object is returned instead."""
         md5sum = md5.new(self.export_bytes(sample_type, sample_width))

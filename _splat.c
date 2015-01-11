@@ -1,7 +1,8 @@
 /*
     Splat - _splat.c
 
-    Copyright (C) 2012, 2013, 2014 Guillaume Tucker <guillaume@mangoz.org>
+    Copyright (C) 2012, 2013, 2014, 2015
+    Guillaume Tucker <guillaume@mangoz.org>
 
     This program is free software; you can redistribute it and/or modify it
     under the terms of the GNU Lesser General Public License as published by
@@ -108,6 +109,7 @@ struct Fragment_object {
 	unsigned rate;
 	size_t length;
 	sample_t *data[MAX_CHANNELS];
+	const char *name;
 };
 typedef struct Fragment_object Fragment;
 
@@ -768,6 +770,13 @@ struct splat_levels_helper {
 	int all_floats;
 };
 
+struct splat_peak {
+	double avg;
+	double pos;
+	double neg;
+	double peak;
+};
+
 static int frag_get_levels(Fragment *frag, struct splat_levels_helper *levels,
 			   PyObject *levels_obj);
 static int frag_resize(Fragment *self, size_t length);
@@ -775,6 +784,9 @@ static int frag_resize(Fragment *self, size_t length);
 	(((_length) <= (_frag)->length) ? 0 : frag_resize((_frag), (_length)))
 static int frag_get_sample_number(size_t *val, long min_val, long max_val,
 				  PyObject *obj);
+static void frag_get_peak(Fragment *frag, struct splat_peak *chan_peak,
+			  struct splat_peak *frag_peak, int do_avg);
+static PyObject *splat_peak_dict(const struct splat_peak *peak);
 
 /* -- Fragment functions -- */
 
@@ -786,6 +798,9 @@ static void Fragment_dealloc(Fragment *self)
 		for (i = 0; i < self->n_channels; ++i)
 			PyMem_Free(self->data[i]);
 
+		if (self->name != NULL)
+			free((void *)self->name);
+
 		self->init = 0;
 	}
 
@@ -795,18 +810,19 @@ static void Fragment_dealloc(Fragment *self)
 static int Fragment_init(Fragment *self, PyObject *args, PyObject *kw)
 {
 	static char *kwlist[] = {
-		"channels", "rate", "duration", "length", NULL };
+		"channels", "rate", "duration", "length", "name", NULL };
 	unsigned n_channels = 2;
 	unsigned rate = 48000;
 	double duration = 0.0;
 	unsigned long length = 0;
+	const char *name = NULL;
 
 	unsigned i;
 	size_t data_size;
 
-	if (!PyArg_ParseTupleAndKeywords(args, kw, "|IIdk", kwlist,
+	if (!PyArg_ParseTupleAndKeywords(args, kw, "|IIdkz", kwlist,
 					 &n_channels, &rate, &duration,
-					 &length))
+					 &length, &name))
 		return -1;
 
 	if (n_channels > MAX_CHANNELS) {
@@ -849,6 +865,12 @@ static int Fragment_init(Fragment *self, PyObject *args, PyObject *kw)
 			memset(self->data[i], 0, data_size);
 		}
 	}
+
+	if (name == NULL)
+		self->name = NULL;
+	else
+		self->name = strdup(name);
+
 
 	self->n_channels = n_channels;
 	self->rate = rate;
@@ -896,7 +918,7 @@ static PyObject *Fragment_sq_item(Fragment *self, Py_ssize_t i)
 
 	for (c = 0; c < self->n_channels; ++c) {
 		const sample_t s = self->data[c][i];
-		PyTuple_SetItem(sample, c, PyFloat_FromDouble(s));
+		PyTuple_SET_ITEM(sample, c, PyFloat_FromDouble(s));
 	}
 
 	return sample;
@@ -972,10 +994,38 @@ static PyObject *Fragment_get_channels(Fragment *self, void *_)
 	return Py_BuildValue("I", self->n_channels);
 }
 
+PyDoc_STRVAR(name_doc, "Get and set the fragment name.");
+
+static PyObject *Fragment_get_name(Fragment *self, void *_)
+{
+	if (self->name == NULL)
+		Py_RETURN_NONE;
+
+	return PyString_FromString(self->name);
+}
+
+static int Fragment_set_name(Fragment *self, PyObject *value, void *_)
+{
+	if (self->name != NULL)
+		free((void *)self->name);
+
+	if (!PyString_Check(value)) {
+		PyErr_SetString(PyExc_TypeError,
+				"Fragment name must be a string");
+		return -1;
+	}
+
+	self->name = strdup(PyString_AS_STRING(value));
+
+	return 0;
+}
+
 static PyGetSetDef Fragment_getsetters[] = {
 	{ "rate", (getter)Fragment_get_rate, NULL, rate_doc },
 	{ "duration", (getter)Fragment_get_duration, NULL, duration_doc },
 	{ "channels", (getter)Fragment_get_channels, NULL, channels_doc },
+	{ "name", (getter)Fragment_get_name, (setter)Fragment_set_name,
+	  name_doc },
 	{ NULL }
 };
 
@@ -1433,15 +1483,15 @@ static int frag_mix_signals(Fragment *self, const Fragment *frag,
 }
 
 PyDoc_STRVAR(Fragment_mix_doc,
-"mix(fragment, offset=0.0, start=0.0, levels=None, duration=None)\n"
+"mix(fragment, offset=0.0, skip=0.0, levels=None, duration=None)\n"
 "\n"
 "Mix the given other ``fragment`` data into this instance.\n"
 "\n"
 "This is achieved by simply adding the corresponding samples of an incoming "
-"fragment to this fragment' samples.  The ``offset``, ``start`` and "
+"fragment to this fragment' samples.  The ``offset``, ``skip`` and "
 "``duration`` values in seconds can be used to alter the mixing times.  The "
 "incoming fragment can start being mixed with an ``offset`` into this "
-"fragment, its beginning can be skipped until the given ``start`` time, and "
+"fragment, its beginning can be skipped until the given ``skip`` time, and "
 "the ``duration`` to be mixed can be manually limited.  These values will be "
 "automatically adjusted to remain within the available incoming data.  The "
 "length of this fragment will be automatically increased if necessary to hold "
@@ -1456,22 +1506,22 @@ PyDoc_STRVAR(Fragment_mix_doc,
 static PyObject *Fragment_mix(Fragment *self, PyObject *args, PyObject *kw)
 {
 	static char *kwlist[] = {
-		"frag", "offset", "start", "levels", "duration", NULL };
+		"frag", "offset", "skip", "levels", "duration", NULL };
 	Fragment *frag;
 	double offset = 0.0;
-	double start = 0.0;
+	double skip = 0.0;
 	PyObject *levels_obj = Py_None;
 	PyObject *duration_obj = Py_None;
 
 	struct splat_levels_helper levels;
 	ssize_t length;
 	ssize_t offset_sample;
-	ssize_t start_sample;
+	ssize_t skip_sample;
 	size_t total_length;
 
 	if (!PyArg_ParseTupleAndKeywords(args, kw, "O!|ddOO", kwlist,
 					 &splat_FragmentType, &frag, &offset,
-					 &start, &levels_obj, &duration_obj))
+					 &skip, &levels_obj, &duration_obj))
 		return NULL;
 
 	if (frag->n_channels != self->n_channels) {
@@ -1504,22 +1554,72 @@ static PyObject *Fragment_mix(Fragment *self, PyObject *args, PyObject *kw)
 
 	offset_sample = offset * self->rate;
 	offset_sample = max(offset_sample, 0);
-	start_sample = start * self->rate;
-	start_sample = minmax(start_sample, 0, frag->length);
-	length = minmax(length, 0, (frag->length - start_sample));
+	skip_sample = skip * self->rate;
+	skip_sample = minmax(skip_sample, 0, frag->length);
+	length = minmax(length, 0, (frag->length - skip_sample));
 	total_length = offset_sample + length;
 
 	if (frag_grow(self, total_length))
 		return NULL;
 
 	if (levels.all_floats)
-		frag_mix_floats(self, frag, offset_sample, start_sample,
+		frag_mix_floats(self, frag, offset_sample, skip_sample,
 				length, levels.fl, levels_obj == splat_zero);
-	else if (frag_mix_signals(self, frag, offset_sample, start_sample,
+	else if (frag_mix_signals(self, frag, offset_sample, skip_sample,
 				  length, &levels))
 		return NULL;
 
 	Py_RETURN_NONE;
+}
+
+PyDoc_STRVAR(Fragment_get_peak_doc,
+"get_peak()\n"
+"\n"
+"Get peak and average values for the whole fragment and for each channel.\n"
+"\n"
+"Scan all the data and look for the peak maximum, minimum and absolute values "
+"as well as the average values for each channel and for the whole fragment. "
+"The results are returned as a 2-tuple, the first item being for the whole "
+"fragment and the second one a list with each channel.  Both results are "
+"contained in a dictionary with ``pos``, ``neg``, ``peak`` and ``avg`` values "
+"respectively for positive, negative, absolute peak and average values.\n");
+
+static PyObject *Fragment_get_peak(Fragment *self, PyObject *_)
+{
+	struct splat_peak chan_peak[MAX_CHANNELS];
+	struct splat_peak frag_peak;
+	unsigned c;
+
+	PyObject *ret;
+	PyObject *frag_peak_obj;
+	PyObject *chan_peak_obj;
+
+	frag_get_peak(self, chan_peak, &frag_peak, 1);
+
+	frag_peak_obj = splat_peak_dict(&frag_peak);
+
+	if (frag_peak_obj == NULL)
+		return PyErr_NoMemory();
+
+	chan_peak_obj = PyList_New(self->n_channels);
+
+	if (chan_peak_obj == NULL)
+		return PyErr_NoMemory();
+
+	for (c = 0; c < self->n_channels; ++c) {
+		PyObject *peak_dict = splat_peak_dict(&chan_peak[c]);
+
+		if (peak_dict == NULL)
+			return PyErr_NoMemory();
+
+		PyList_SET_ITEM(chan_peak_obj, c, peak_dict);
+	}
+
+	ret = Py_BuildValue("(OO)", frag_peak_obj, chan_peak_obj);
+	Py_DECREF(frag_peak_obj);
+	Py_DECREF(chan_peak_obj);
+
+	return ret;
 }
 
 PyDoc_STRVAR(Fragment_normalize_doc,
@@ -1546,9 +1646,9 @@ static PyObject *Fragment_normalize(Fragment *self, PyObject *args)
 	PyObject *zero = NULL;
 
 	int do_zero;
-	double average[MAX_CHANNELS];
+	struct splat_peak chan_peak[MAX_CHANNELS];
+	struct splat_peak frag_peak;
 	unsigned c;
-	double peak;
 	double gain;
 
 	if (!PyArg_ParseTuple(args, "|dO!", &level, &PyBool_Type, &zero))
@@ -1560,48 +1660,40 @@ static PyObject *Fragment_normalize(Fragment *self, PyObject *args)
 	}
 
 	level = dB2lin(level);
-	peak = 0.0;
 	do_zero = ((zero == NULL) || (zero == Py_True)) ? 1 : 0;
+	frag_get_peak(self, chan_peak, &frag_peak, do_zero);
 
-	for (c = 0; c < self->n_channels; ++c) {
-		sample_t * const chan_data = self->data[c];
-		const sample_t * const end = &chan_data[self->length];
-		const sample_t *it;
-		double avg = 0.0;
-		double neg = 1.0;
-		double pos = -1.0;
-		double chan_peak;
+	if (do_zero) {
+		double offset = 0.0;
 
-		for (it = self->data[c]; it != end; ++it) {
-			if (do_zero)
-				avg += *it / self->length;
+		for (c = 0; c < self->n_channels; ++c) {
+			const double avg = chan_peak[c].avg;
 
-			if (*it > pos)
-				pos = *it;
-
-			if (*it < neg)
-				neg = *it;
+			if (fabs(offset) < fabs(avg))
+				offset = avg;
 		}
 
-		average[c] = avg;
-
-		if (do_zero) {
-			neg -= avg;
-			pos -= avg;
-		}
-
-		neg = fabsf(neg);
-		pos = fabsf(pos);
-		chan_peak = (neg > pos) ? neg : pos;
-
-		if (chan_peak > peak)
-			peak = chan_peak;
+		gain = level / (frag_peak.peak + fabs(offset));
+	} else {
+		gain = level / frag_peak.peak;
 	}
 
-	gain = level / peak;
+	if ((1.0 < gain) && (gain < 1.001)) {
+		int zero;
+
+		if (!do_zero)
+			Py_RETURN_NONE;
+
+		for (c = 0, zero = 1; c < self->n_channels && zero; ++c)
+			if (fabs(chan_peak[c].avg) > 0.001)
+				zero = 0;
+
+		if (zero)
+			Py_RETURN_NONE;
+	}
 
 	for (c = 0; c < self->n_channels; ++c) {
-		const double chan_avg = average[c];
+		const double chan_avg = chan_peak[c].avg;
 		sample_t * const chan_data = self->data[c];
 		const sample_t * const end = &chan_data[self->length];
 		sample_t *it;
@@ -1622,6 +1714,9 @@ static void frag_amp_floats(Fragment *self, const double *gains)
 	for (c = 0; c < self->n_channels; ++c) {
 		const double g = gains[c];
 		size_t i;
+
+		if (g == 1.0)
+			continue;
 
 		for (i = 0; i < self->length; ++i)
 			self->data[c][i] *= g;
@@ -1694,8 +1789,9 @@ static PyObject *Fragment_amp(Fragment *self, PyObject *args)
 PyDoc_STRVAR(Fragment_offset_doc,
 "offset(value, start=0.0)\n"
 "\n"
-"Add an offset to the data already in the fragment.  This is especially "
-"useful when generating a modulation fragment.\n");
+"Add an offset to the data already in the fragment starting at the ``start`` "
+"time in seconds.  This is especially useful when generating a modulation "
+"fragment.\n");
 
 static PyObject *Fragment_offset(Fragment *self, PyObject *args)
 {
@@ -1784,6 +1880,8 @@ static PyMethodDef Fragment_methods[] = {
 	  Fragment_export_bytes_doc },
 	{ "mix", (PyCFunction)Fragment_mix, METH_KEYWORDS,
 	  Fragment_mix_doc },
+	{ "get_peak", (PyCFunction)Fragment_get_peak, METH_NOARGS,
+	  Fragment_get_peak_doc },
 	{ "normalize", (PyCFunction)Fragment_normalize, METH_VARARGS,
 	  Fragment_normalize_doc },
 	{ "amp", (PyCFunction)Fragment_amp, METH_VARARGS,
@@ -1937,6 +2035,62 @@ static int frag_get_sample_number(size_t *val, long min_val, long max_val,
 	*val = max(tmp_val, min_val);
 
 	return 0;
+}
+
+static void frag_get_peak(Fragment *frag, struct splat_peak *chan_peak,
+			  struct splat_peak *frag_peak, int do_avg)
+{
+	unsigned c;
+
+	frag_peak->avg = 0.0;
+	frag_peak->pos = -1.0;
+	frag_peak->neg = 1.0;
+	frag_peak->peak = 0.0;
+
+	for (c = 0; c < frag->n_channels; ++c) {
+		sample_t * const chan_data = frag->data[c];
+		const sample_t * const end = &chan_data[frag->length];
+		const sample_t *it;
+		double avg = 0.0;
+		double pos = -1.0;
+		double neg = 1.0;
+
+		for (it = chan_data; it != end; ++it) {
+			if (do_avg)
+				avg += *it / frag->length;
+
+			if (*it > pos)
+				pos = *it;
+			else if (*it < neg)
+				neg = *it;
+		}
+
+		chan_peak[c].avg = avg;
+		chan_peak[c].pos = pos;
+		chan_peak[c].neg = neg;
+
+		if (do_avg)
+			frag_peak->avg += avg / frag->n_channels;
+
+		if (pos > frag_peak->pos)
+			frag_peak->pos = pos;
+
+		if (neg < frag_peak->neg)
+			frag_peak->neg = neg;
+
+		neg = fabsf(neg);
+		pos = fabsf(pos);
+		chan_peak[c].peak = (neg > pos) ? neg : pos;
+
+		if (frag_peak->peak < chan_peak[c].peak)
+			frag_peak->peak = chan_peak[c].peak;
+	}
+}
+
+static PyObject *splat_peak_dict(const struct splat_peak *peak)
+{
+	return Py_BuildValue("{sdsdsdsd}", "avg", peak->avg, "pos", peak->pos,
+			     "neg", peak->neg, "peak", peak->peak);
 }
 
 
@@ -3074,9 +3228,9 @@ static void splat_init_audio_formats(PyObject *m, const char *name,
 		const struct splat_raw_io *io = &splat_raw_io_table[i];
 		PyObject *format = PyTuple_New(2);
 
-		PyTuple_SetItem(format, 0, PyLong_FromLong(io->sample_type));
-		PyTuple_SetItem(format, 1, PyLong_FromLong(io->sample_width));
-		PyList_SetItem(obj, i, format);
+		PyTuple_SET_ITEM(format, 0, PyLong_FromLong(io->sample_type));
+		PyTuple_SET_ITEM(format, 1, PyLong_FromLong(io->sample_width));
+		PyList_SET_ITEM(obj, i, format);
 	}
 
 	PyModule_AddObject(m, name, obj);
