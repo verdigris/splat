@@ -21,7 +21,7 @@ from _splat import SAMPLE_INT, SAMPLE_FLOAT
 from _splat import NATIVE_SAMPLE_TYPE, NATIVE_SAMPLE_WIDTH
 from _splat import audio_formats
 
-__all__ = ['gen', 'data', 'filters', 'sources', 'scales', 'interpol']
+__all__ = ['gen', 'data', 'filters', 'sources', 'scales', 'interpol', 'seq']
 
 VERSION = (1, 4)
 VERSION_STR = '.'.join([str(v) for v in VERSION])
