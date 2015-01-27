@@ -1,3 +1,5 @@
+.. _fragments:
+
 Fragment objects
 ================
 
@@ -19,6 +21,29 @@ Fragment objects
    .. autoattribute:: splat.data.Fragment.channels
    .. autoattribute:: splat.data.Fragment.name
 
+
+.. _filters:
+
+Filters and FilterChain objects
+===============================
+
+.. automodule:: splat.filters
+
+A *filter function* takes a :py:class:`splat.data.Fragment` and a tuple of
+arguments with its specific parameters.  It is expected to run on the entirety
+of the fragment.  Filter functions can be combined into a series via the
+:py:class:`splat.filters.FilterChain` class.
+
+.. autoclass:: splat.filters.FilterChain
+   :members:
+
+.. autofunction:: splat.filters.linear_fade
+.. autofunction:: splat.filters.dec_envelope
+.. autofunction:: splat.filters.reverse
+.. autofunction:: splat.filters.reverb
+
+
+.. _generators:
 
 Generator objects
 =================
@@ -76,69 +101,6 @@ Particle generators
 
 .. autoclass:: splat.gen.ParticleGenerator
    :members:
-
-
-.. _filters:
-
-Filters and FilterChain objects
-===============================
-
-.. automodule:: splat.filters
-
-A *filter function* takes a :py:class:`splat.data.Fragment` and a tuple of
-arguments with its specific parameters.  It is expected to run on the entirety
-of the fragment.  Filter functions can be combined into a series via the
-:py:class:`splat.filters.FilterChain` class.
-
-.. autoclass:: splat.filters.FilterChain
-   :members:
-
-.. autofunction:: splat.filters.linear_fade
-.. autofunction:: splat.filters.dec_envelope
-.. autofunction:: splat.filters.reverse
-.. autofunction:: splat.filters.reverb
-
-
-.. _interpolation:
-
-Interpolation and splines
-=========================
-
-.. automodule:: splat.interpol
-
-The :py:mod:`splat.interpol` module contains a set of classes designed to work
-together and provide polynomial interpolation functionality.  The principle is
-to build a continuous function for a given set of input discrete coordinates.
-A :py:class:`splat.interpol.Polynomial` object represents a polynomial function
-with a series of coefficients.  It can be calculated by reducing a matrix
-containing some coordinates using :py:class:`splat.interpol.PolyMatrix`.  It is
-usually preferred to use :py:func:`splat.interpol.spline` to create a long
-function composed of a list of different polynomials between each pair of
-points.  It is easier to control the interpolation of a spline containing many
-low-degree polynomials than a single high degree polynomial.
-
-.. autoclass:: splat.interpol.Polynomial
-   :members:
-
-.. autoclass:: splat.interpol.PolyMatrix
-   :members:
-
-.. autoclass:: splat.interpol.PolyList
-   :members:
-
-.. autofunction:: splat.interpol.spline
-.. autofunction:: splat.interpol.freqmod
-
-Example using a spline to create a continuous frequency modulation::
-
-    import splat.interpol
-    import splat.gen
-
-    pts = [(0.0, 220.0), (1.0, 330.0), (2.0, 110.0)]
-    fmod = splat.interpol.freqmod(pts)
-    gen = splat.gen.SineGenerator()
-    gen.run(fmod.start, fmod.end, fmod.f0, fmod.value)
-    gen.frag.save("freqmod.wav")
 
 
 .. _scales:
@@ -266,8 +228,10 @@ Scale objects
    :members:
 
 
-Sequencer
-=========
+.. _sequencer_objects:
+
+Sequencers
+==========
 
 .. automodule:: splat.seq
 
@@ -296,6 +260,52 @@ equivalent sounds together and pick one randomly.
 
 .. autoclass:: splat.seq.PatternSequencer
    :members:
+
+
+.. _interpolation:
+
+Interpolation and splines
+=========================
+
+.. automodule:: splat.interpol
+
+The :py:mod:`splat.interpol` module contains a set of classes designed to work
+together and provide polynomial interpolation functionality.  The principle is
+to build a continuous function for a given set of input discrete coordinates.
+A :py:class:`splat.interpol.Polynomial` object represents a polynomial function
+with a series of coefficients.  It can be calculated by reducing a matrix
+containing some data points coordinates using
+:py:class:`splat.interpol.PolyMatrix`.  It is usually preferred to create a
+continuous list of different polynomials between each input data point using a
+:py:class:`splat.interpol.PolyList` oject or using the
+:py:func:`splat.interpol.spline` function to directly calculate all the
+polynomials and create the list.  It is easier to control the interpolation of
+a spline containing many low-degree polynomials than a single high degree
+polynomial.
+
+
+.. autoclass:: splat.interpol.Polynomial
+   :members:
+
+.. autoclass:: splat.interpol.PolyMatrix
+   :members:
+
+.. autoclass:: splat.interpol.PolyList
+   :members:
+
+.. autofunction:: splat.interpol.spline
+.. autofunction:: splat.interpol.freqmod
+
+Example using a spline to create a continuous frequency modulation::
+
+    import splat.interpol
+    import splat.gen
+
+    pts = [(0.0, 220.0), (1.0, 330.0), (2.0, 110.0)]
+    fmod = splat.interpol.freqmod(pts)
+    gen = splat.gen.SineGenerator()
+    gen.run(fmod.start, fmod.end, fmod.f0, fmod.signal)
+    gen.frag.save("freqmod.wav")
 
 
 .. _utilities:
