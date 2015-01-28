@@ -139,11 +139,17 @@ class PolyMatrix(object):
 
 class PolyList(object):
 
-    """List of 3-tuples containing the ``x`` range and a
-    :py:class:`splat.interpol.Polynomial` object.  Each item in the list
-    corresponds to a segment between 2 input points."""
+    """List of 3-tuples containing a range where values are defined and a
+    :py:class:`splat.interpol.Polynomial` object to compute the values.  Each
+    item in the list corresponds to a segment between 2 input points.  The
+    segments do not need to be contiguous, although looking for a value outside
+    of the defined ranges will cause an error."""
 
     def __init__(self, pols, scale=1.0):
+        """The list of polynomial is built using the sequence of 3-tuples
+        ``pols``.  The ``scale`` argument is a convenient way to use the same
+        input points and independently adjust the scale of the values, which
+        get multiplied by this scale coefficient (1.0 by default)."""
         self._pols = pols
         self._pols_coefs = list((x0, x1, pol.coefs) for x0, x1, pol in pols)
         self._signal = _splat.Spline(self._pols_coefs, scale)
@@ -154,6 +160,7 @@ class PolyList(object):
 
     @property
     def scale(self):
+        """Scale factor for all returned values."""
         return self._scale
 
     @scale.setter
@@ -174,14 +181,17 @@ class PolyList(object):
 
     @property
     def signal(self):
+        """Object with optimised signal implementation."""
         return self._signal
 
-    def points(self):
-        xlist = list(p[0] for p in self)
-        xlist.append(self[-1][1])
-        return list((x, self.value(x)) for x in xlist)
-
     def integral(self, y0=0.0):
+        """Get a new PolyList object with the integral of this one.
+
+        For each polynomial, its integral is calculated based on its
+        coefficients and the last value of the previous polynomial to maintain
+        continuity.  The initial value for the first polynomial can be set with
+        ``y0``.  The scale is preserved from the current object.
+        """
         pols = []
         for x0, x1, p in self:
             p2 = p.integral(0.0)
@@ -192,6 +202,11 @@ class PolyList(object):
         return PolyList(pols, self.scale)
 
     def derivative(self):
+        """Get a new PolyList object with the derivative of this one.
+
+        For each polynomial, its derivative is calculated based on its
+        coefficients.  The scale is preserved from the current object.
+        """
         return PolyList(list((x0, x1, p.derivative()) for x0, x1, p in self),
                         self.scale)
 
