@@ -340,10 +340,12 @@ struct signal_vector {
 
 enum signal_ret {
 	SIGNAL_VECTOR_CONTINUE = 0,
+	SIGNAL_VECTOR_ERROR,
 	SIGNAL_VECTOR_STOP,
 };
 
 struct splat_signal {
+	enum signal_ret stat;
 	size_t origin;
 	size_t length;
 	size_t n_vectors;
@@ -371,7 +373,6 @@ struct Signal_object {
 	int init;
 	PyObject **signals;
 	struct splat_signal sig;
-	enum signal_ret stat;
 	unsigned offset;
 };
 typedef struct Signal_object Signal;
@@ -459,7 +460,6 @@ static int Signal_init(Signal *self, PyObject *args)
 	}
 
 	self->offset = 0;
-	self->stat = SIGNAL_VECTOR_CONTINUE;
 	self->init = 1;
 
 	return 0;
@@ -571,6 +571,8 @@ static int splat_signal_func(struct splat_signal *s, struct signal_vector *v)
 		ret = PyObject_Call(v->obj, s->py_args, NULL);
 
 		if (!PyFloat_Check(ret)) {
+			PyErr_SetString(PyExc_TypeError,
+					"Signal did not return a float");
 			Py_DECREF(ret);
 			return -1;
 		}
@@ -605,8 +607,16 @@ static int splat_signal_spline(struct splat_signal *s, struct signal_vector *v)
 	while (j--) {
 		const double x = i++ / rate;
 
-		if ((x > end) || (poly == NULL))
+		if ((x > end) || (poly == NULL)) {
 			poly = splat_find_spline_poly(spline->pols, x, &end);
+
+			if (poly == NULL) {
+				PyErr_SetString(PyExc_ValueError,
+						"Spline polynomial not found");
+				return -1;
+
+			}
+		}
 
 		*out++ = splat_spline_tuple_value(poly, x) * k0;
 	}
@@ -633,13 +643,18 @@ static int splat_signal_init(struct splat_signal *s, size_t length,
 
 	s->py_float = PyFloat_FromDouble(0);
 
-	if (s->py_float == NULL)
+	if (s->py_float == NULL) {
+		PyErr_SetString(PyExc_AssertionError,
+				"Failed to create float object");
 		return -1;
+	}
 
 	s->py_args = PyTuple_New(1);
 
-	if (s->py_args == NULL)
+	if (s->py_args == NULL) {
+		PyErr_NoMemory();
 		return -1;
+	}
 
 	PyTuple_SET_ITEM(s->py_args, 0, s->py_float);
 
@@ -696,6 +711,7 @@ static int splat_signal_init(struct splat_signal *s, size_t length,
 	s->cur = s->origin;
 	s->end = 0;
 	s->len = 0;
+	s->stat = SIGNAL_VECTOR_CONTINUE;
 
 	return 0;
 }
@@ -725,7 +741,7 @@ static int splat_signal_cache(struct splat_signal *s, size_t cur)
 		struct signal_vector *v = &s->vectors[i];
 
 		if ((v->signal != NULL) && (v->signal(s, v)))
-			return SIGNAL_VECTOR_STOP;
+			return SIGNAL_VECTOR_ERROR;
 	}
 
 	return SIGNAL_VECTOR_CONTINUE;
@@ -733,7 +749,9 @@ static int splat_signal_cache(struct splat_signal *s, size_t cur)
 
 static int splat_signal_next(struct splat_signal *s)
 {
-	return splat_signal_cache(s, (s->cur + s->len));
+	s->stat = splat_signal_cache(s, (s->cur + s->len));
+
+	return s->stat;
 }
 
 static ssize_t splat_signal_get(struct splat_signal *s, size_t n)
@@ -746,8 +764,9 @@ static ssize_t splat_signal_get(struct splat_signal *s, size_t n)
 
 	co = div(n, SIGNAL_VECTOR_LEN);
 	cur = co.quot * SIGNAL_VECTOR_LEN;
+	s->stat = splat_signal_cache(s, cur);
 
-	if (splat_signal_cache(s, cur) == SIGNAL_VECTOR_STOP)
+	if (s->stat != SIGNAL_VECTOR_CONTINUE)
 		return -1;
 
 	return co.rem;
@@ -1499,7 +1518,7 @@ static int frag_mix_signals(Fragment *self, const Fragment *frag,
 
 	splat_signal_free(&sig);
 
-	return 0;
+	return (sig.stat == SIGNAL_VECTOR_ERROR) ? -1 : 0;
 }
 
 PyDoc_STRVAR(Fragment_mix_doc,
@@ -1775,7 +1794,7 @@ static int frag_amp_signals(Fragment *self, const struct splat_levels *gains)
 
 	splat_signal_free(&sig);
 
-	return 0;
+	return (sig.stat == SIGNAL_VECTOR_ERROR) ? -1 : 0;
 }
 
 PyDoc_STRVAR(Fragment_amp_doc,
@@ -1851,6 +1870,9 @@ static PyObject *Fragment_offset(Fragment *self, PyObject *args)
 		}
 
 		splat_signal_free(&sig);
+
+		if (sig.stat == SIGNAL_VECTOR_ERROR)
+			return NULL;
 	}
 
 	Py_RETURN_NONE;
@@ -2290,7 +2312,7 @@ static int splat_sine_signals(Fragment *frag, PyObject **levels,
 
 	splat_signal_free(&sig);
 
-	return 0;
+	return (sig.stat == SIGNAL_VECTOR_ERROR) ? -1 : 0;
 }
 
 PyDoc_STRVAR(splat_sine_doc,
@@ -2418,7 +2440,7 @@ static int splat_square_signals(Fragment *frag, PyObject **levels,
 
 	splat_signal_free(&sig);
 
-	return 0;
+	return (sig.stat == SIGNAL_VECTOR_ERROR) ? -1 : 0;
 }
 
 PyDoc_STRVAR(splat_square_doc,
@@ -2567,7 +2589,7 @@ static int splat_triangle_signals(Fragment *frag, PyObject **levels,
 
 	splat_signal_free(&sig);
 
-	return 0;
+	return (sig.stat == SIGNAL_VECTOR_ERROR) ? -1 : 0;
 }
 
 PyDoc_STRVAR(splat_triangle_doc,
@@ -2721,7 +2743,7 @@ static int splat_overtones_mixed(Fragment *frag, PyObject **levels,
 
 	splat_signal_free(&sig);
 
-	return 0;
+	return (sig.stat == SIGNAL_VECTOR_ERROR) ? -1 : 0;
 }
 
 static int splat_overtones_signal(Fragment *frag, PyObject **levels,
@@ -2820,7 +2842,7 @@ static int splat_overtones_signal(Fragment *frag, PyObject **levels,
 	splat_signal_free(&sig);
 	PyMem_Free(signals);
 
-	return 0;
+	return (sig.stat == SIGNAL_VECTOR_ERROR) ? -1 : 0;
 }
 
 PyDoc_STRVAR(splat_overtones_doc,
