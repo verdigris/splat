@@ -17,9 +17,7 @@
 
 import _splat
 from _splat import lin2dB, dB2lin
-from _splat import SAMPLE_INT, SAMPLE_FLOAT
-from _splat import NATIVE_SAMPLE_TYPE, NATIVE_SAMPLE_WIDTH
-from _splat import audio_formats
+from _splat import sample_types, SAMPLE_TYPE, SAMPLE_WIDTH
 
 __all__ = ['gen', 'data', 'filters', 'sources', 'scales', 'interpol', 'seq']
 

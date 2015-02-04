@@ -39,13 +39,13 @@ splat.check_version((1, 4))
 class SplatTest(unittest.TestCase):
 
     def setUp(self):
-        self._places = 12 if splat.NATIVE_SAMPLE_WIDTH == 64 else 4
+        self._places = 12 if splat.SAMPLE_WIDTH == 64 else 4
 
     def assert_md5(self, frags, hexdigest):
         if isinstance(frags, splat.data.Fragment):
             frags = [frags]
         for frag in frags:
-            md5sum = frag.md5(sample_type=splat.SAMPLE_INT, sample_width=16)
+            md5sum = frag.md5(sample_type="int16")
             self.assertEqual(md5sum, hexdigest,
                              "MD5 mismatch: {0} {1}".format(md5sum, hexdigest))
 
@@ -75,9 +75,9 @@ class FragmentTest(SplatTest):
         """Fragment.md5"""
         frag = splat.data.Fragment()
         splat.gen.SineGenerator(frag=frag).run(0.0, 0.345, 123.0)
-        for st, sw in splat.audio_formats:
-            md5sum = md5.new(frag.export_bytes(st, sw)).hexdigest()
-            self.assertEqual(md5sum, frag.md5(st, sw))
+        for sample_type in splat.sample_types.iterkeys():
+            md5sum = md5.new(frag.export_bytes(sample_type)).hexdigest()
+            self.assertEqual(md5sum, frag.md5(sample_type))
 
     def test_frag_offset(self):
         """Fragment.offset"""
@@ -183,21 +183,21 @@ class FragmentTest(SplatTest):
         """Fragment.import_bytes"""
         frag = splat.data.Fragment()
         splat.gen.SineGenerator(frag).run(0.1, 2.7, 3456.7)
-        for st, sw in splat.audio_formats:
-            ref_bytes = frag.export_bytes(st, sw)
+        for sample_type, sample_width in splat.sample_types.iteritems():
+            ref_bytes = frag.export_bytes(sample_type)
             ref_md5 = md5.new(ref_bytes).hexdigest()
             imp = splat.data.Fragment()
-            imp.import_bytes(ref_bytes, frag.rate, frag.channels, st, sw)
-            exp_bytes = imp.export_bytes(st, sw)
+            imp.import_bytes(ref_bytes, frag.rate, frag.channels, sample_type)
+            exp_bytes = imp.export_bytes(sample_type)
             exp_md5 = md5.new(exp_bytes).hexdigest()
             self.assertEqual(ref_md5, exp_md5,
                              "Import/export MD5 mismatch (type={}, width={})"
-                             .format(st, sw))
+                             .format(sample_type, sample_width))
 
     def test_frag_export_bytes(self):
         """Fragment.export_bytes"""
         duration = 0.1
-        sample_type = splat.SAMPLE_INT
+        sample_type = "int16"
         sample_width = 16
         frag = splat.data.Fragment(duration=duration, channels=1)
         length = len(frag)
@@ -205,7 +205,7 @@ class FragmentTest(SplatTest):
             frag[i] = (float(i) / length,)
         x = list(int(length * r) for r in (0.0, 0.12, 0.34, 0.62, 0.987, 0.99))
         y = list((float(i) / length) for i in x)
-        frag_bytes = frag.export_bytes(sample_type, sample_width)
+        frag_bytes = frag.export_bytes(sample_type)
         max16 = (2 ** 15) - 1
         for i, j in zip(x, y):
             val = frag_bytes[i * 2] + (frag_bytes[(i * 2) + 1] * 256)
@@ -214,7 +214,7 @@ class FragmentTest(SplatTest):
                 val, ref,
                 "Incorrect 16-bit value: {} instead of {}".format(val, ref))
         i0, i1 = (int(length * r) for r in (0.23, 0.83))
-        frag_bytes = frag.export_bytes(sample_type, sample_width, i0, i1)
+        frag_bytes = frag.export_bytes(sample_type, i0, i1)
         self.assertEqual(len(frag_bytes), ((i1 - i0) * sample_width / 8),
                          "Incorrect length of bytes array")
         for i, j in zip(x, y):
@@ -228,8 +228,7 @@ class FragmentTest(SplatTest):
                 "Incorrect 16 bits value: {} instead of {}".format(val, ref))
         start = frag.s2n(-2.3)
         end = frag.s2n(duration * 1.2)
-        frag_bytes = frag.export_bytes(sample_type, sample_width,
-                                       frag.s2n(-2.3),
+        frag_bytes = frag.export_bytes(sample_type, frag.s2n(-2.3),
                                        frag.s2n(duration * 1.2))
         b_len = len(frag_bytes)
         ref_len = len(frag) * sample_width / 8
@@ -706,5 +705,5 @@ class SequencerTest(SplatTest):
 # main function
 
 if __name__ == '__main__':
-    print("Sample precision: {}-bit".format(splat.NATIVE_SAMPLE_WIDTH))
+    print("Sample precision: {}-bit".format(splat.SAMPLE_WIDTH))
     unittest.main()

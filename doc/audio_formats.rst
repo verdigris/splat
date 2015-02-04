@@ -3,43 +3,27 @@ Audio formats
 
 .. _sample_formats:
 
-Audio sample formats
---------------------
+Audio sample types
+------------------
 
-Audio samples in Splat can be either signed integer or floating point numbers.
-The :py:class:`splat.data.Fragment` objects internally deal with either 32-bit
-or 64-bit samples numbers, the precision being defined when the ``_splat`` C
-extension is compiled.  Sample formats are defined in Splat with the following
-attributes (names used in functions arguments):
+Audio samples in Splat can be signed integers or floating point numbers of
+different widths.  The :py:class:`splat.data.Fragment` objects internally deal
+with either 32-bit or 64-bit floating point samples, the precision being
+defined when the ``_splat`` C extension is compiled.  Sample types are defined
+in Splat with the following names (plain strings), which tell the numeric
+format (integer or float) and the width in number of bits:
 
-``sample_type``
-  Type of value used in samples, can be either:
+* ``int8``
+* ``int16``
+* ``int24``
+* ``float32``
+* ``float64``
 
-* ``splat.SAMPLE_INT`` for signed integers
-* ``splat.SAMPLE_FLOAT`` for floating point numbers
-
-``sample_width``
-  Width as a number of bits in each sample.
-
-The following format combinations are currently supported:
-
-+------------------------+--------------+
-| Sample type            | Sample width |
-+------------------------+--------------+
-| ``splat.SAMPLE_INT``   |            8 |
-+------------------------+--------------+
-| ``splat.SAMPLE_INT``   |           16 |
-+------------------------+--------------+
-| ``splat.SAMPLE_INT``   |           24 |
-+------------------------+--------------+
-| ``splat.SAMPLE_FLOAT`` |           32 |
-+------------------------+--------------+
-| ``splat.SAMPLE_FLOAT`` |           64 |
-+------------------------+--------------+
-
-The native sample format is 64-bit floating point; this is used as the default
-format when exporting raw data from a fragment.
-
+The native sample type is defined by ``splat.SAMPLE_TYPE`` and is usually
+``float64`` or ``float32`` in some special cases.  As a convenience, the width
+of the native sample type is defined by ``splat.SAMPLE_WIDTH``.  To
+automatically determine the width of any given sample type, or to list all the
+available sample types, the ``splat.sample_types`` dictionary can be used.
 
 .. _audio_files:
 
@@ -62,10 +46,10 @@ The following names are used to choose the audio file format in
   one into a Fragment and export it again as WAV.
 
 ``wav``
-  This is for standard WAV audio files, with 8-bit or 16-bit integer samples
-  and no compression.  It uses the standard ``wave`` Python module.  Any sample
-  width value supported by the library can be used, but only 8-bit and 16-bit
-  samples can be used when opening a WAV file in Splat.
+  This is for standard WAV audio files.  It uses the standard ``wave`` Python
+  module.  Any sample width value supported by the library can be used when
+  saving into a WAV file, but only 8-bit and 16-bit integer samples can be used
+  when opening a WAV file in Splat.
 
 
 Extra file formats with ``audiotools``
@@ -102,9 +86,6 @@ together as in this example::
 
   # Mix the second sample at 1.8 with -0.5 dB gain
   master.mix(sample2, start=1.8, levels=-0.5)
-
-  # Normalise amplitude to 0.0 dB
-  master.normalise()
 
   # Save result to output file as FLAC
   master.save('example.flac')
