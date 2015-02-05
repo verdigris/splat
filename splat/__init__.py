@@ -21,7 +21,7 @@ from _splat import sample_types, SAMPLE_TYPE, SAMPLE_WIDTH
 
 __all__ = ['gen', 'data', 'filters', 'sources', 'scales', 'interpol', 'seq']
 
-VERSION = (1, 4)
+VERSION = (1, 5)
 VERSION_STR = '.'.join([str(v) for v in VERSION])
 BUILD = 18
 

@@ -15,7 +15,7 @@ elif len(sys.argv) > 1 and sys.argv[1] == 'sdist':
 else:
     data_files = []
 
-setup(name='verdigris.mu-splat', version='1.4',
+setup(name='verdigris.mu-splat', version='1.5',
       description="Sound generator, synthesizer and editor",
       author="Guillaume Tucker",
       author_email="guillaume@mangoz.org",

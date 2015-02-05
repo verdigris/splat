@@ -31,7 +31,7 @@ import splat.interpol
 import splat.scales
 import splat.seq
 
-splat.check_version((1, 4))
+splat.check_version((1, 5))
 
 # -----------------------------------------------------------------------------
 # Splat test base class
