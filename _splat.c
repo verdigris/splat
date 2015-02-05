@@ -1967,8 +1967,8 @@ static void frag_get_levels_float(Fragment *frag, struct splat_levels *levels,
 	const double gain_lin = dB2lin(gain_log);
 	unsigned c;
 
-	levels->all_floats = 1;
 	levels->n = frag->n_channels;
+	levels->all_floats = 1;
 
 	for (c = 0; c < frag->n_channels; ++c) {
 		levels->obj[c] = levels_obj;
@@ -2011,22 +2011,32 @@ static int frag_get_levels_tuple(Fragment *frag, struct splat_levels *levels,
 	return 0;
 }
 
+static void frag_get_levels_signal(Fragment *frag, struct splat_levels *levels,
+				   PyObject *levels_obj)
+{
+	unsigned c;
+
+	levels->n = frag->n_channels;
+	levels->all_floats = 0;
+
+	for (c = 0; c < frag->n_channels; ++c)
+		levels->obj[c] = levels_obj;
+}
+
 static int frag_get_levels(Fragment *frag, struct splat_levels *levels,
 			   PyObject *levels_obj)
 {
 	double gain_log;
+	int res = 0;
 
-	if (!splat_obj2double(levels_obj, &gain_log)) {
+	if (!splat_obj2double(levels_obj, &gain_log))
 		frag_get_levels_float(frag, levels, levels_obj, gain_log);
-		return 0;
-	}
+	else if (PyTuple_Check(levels_obj))
+		res = frag_get_levels_tuple(frag, levels, levels_obj);
+	else
+		frag_get_levels_signal(frag, levels, levels_obj);
 
-	if (PyTuple_Check(levels_obj))
-		return frag_get_levels_tuple(frag, levels, levels_obj);
-
-	PyErr_SetString(PyExc_TypeError, "invalid level type");
-
-	return -1;
+	return res;
 }
 
 static int frag_resize(Fragment *frag, size_t length)
