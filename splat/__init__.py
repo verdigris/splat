@@ -23,7 +23,7 @@ __all__ = ['gen', 'data', 'filters', 'sources', 'scales', 'interpol', 'seq']
 
 VERSION = (1, 4)
 VERSION_STR = '.'.join([str(v) for v in VERSION])
-BUILD = 17
+BUILD = 18
 
 __version__ = VERSION_STR
 
