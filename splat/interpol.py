@@ -184,6 +184,11 @@ class PolyList(object):
         """Object with optimised signal implementation."""
         return self._signal
 
+    def points(self):
+        xlist = list(p[0] for p in self)
+        xlist.append(self[-1][1])
+        return list((x, self.value(x)) for x in xlist)
+
     def integral(self, y0=0.0):
         """Get a new PolyList object with the integral of this one.
 
