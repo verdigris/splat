@@ -24,6 +24,26 @@
 #include <Python.h>
 #include <math.h>
 
+/* Enable for speed using SIMD and 32-bit samples instead of 64-bit */
+#ifdef SPLAT_FAST
+#if defined(__ARM_NEON__)
+#include <arm_neon.h>
+#define SPLAT_NEON
+#elif defined(__SSE__)
+#include <x86intrin.h>
+#define SPLAT_SSE
+#endif
+#endif
+
+/* Sample type */
+#ifdef SPLAT_FAST
+typedef float sample_t;
+#define SPLAT_NATIVE_SAMPLE_TYPE SPLAT_FLOAT_32
+#else
+typedef double sample_t;
+#define SPLAT_NATIVE_SAMPLE_TYPE SPLAT_FLOAT_64
+#endif
+
 /* Maximum number of channels */
 #define SPLAT_MAX_CHANNELS 16
 
@@ -32,25 +52,21 @@
 #define dB2lin(dB) (pow10((dB) / 20))
 
 #ifndef min
-# define min(_a, _b) (((_a) < (_b)) ? (_a) : (_b))
+#define min(_a, _b) (((_a) < (_b)) ? (_a) : (_b))
 #endif
 
 #ifndef max
-# define max(_a, _b) (((_a) > (_b)) ? (_a) : (_b))
+#define max(_a, _b) (((_a) > (_b)) ? (_a) : (_b))
 #endif
 
 #ifndef minmax
-# define minmax(_val, _min, _max) \
+#define minmax(_val, _min, _max) \
 	((_val) < (_min) ? (_min) : ((_val) > (_max) ? (_max) : (_val)))
 #endif
 
 #ifndef ARRAY_SIZE
-# define ARRAY_SIZE(_array) (sizeof(_array) / sizeof(_array[0]))
+#define ARRAY_SIZE(_array) (sizeof(_array) / sizeof(_array[0]))
 #endif
-
-/* Sample type */
-typedef double sample_t;
-#define SPLAT_NATIVE_SAMPLE_TYPE SPLAT_FLOAT_64
 
 /* Convert any number type to a double or return -1 */
 extern int splat_obj2double(PyObject *obj, double *out);
