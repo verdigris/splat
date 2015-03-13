@@ -85,6 +85,8 @@ struct splat_levels {
 	int all_floats;
 #if defined(SPLAT_NEON)
 	float32x4_t flq[SPLAT_MAX_CHANNELS];
+#elif defined(SPLAT_SSE)
+	__m128 flq[SPLAT_MAX_CHANNELS];
 #endif
 };
 
@@ -103,6 +105,14 @@ extern const size_t splat_sine_table_len;
 #if defined(SPLAT_NEON)
 extern const uint32x4_t splat_neon_inc;
 extern float32x4_t splat_neon_sine_step;
+#elif defined(SPLAT_SSE)
+extern const __m128 splat_sse_zero;
+extern const __m128 splat_sse_one;
+extern const __m128 splat_sse_two;
+extern const __m128 splat_sse_pi;
+extern const __m128 splat_sse_pi2;
+extern const __m128 splat_sse_inc;
+extern __m128 splat_sse_sine_step;
 #endif
 
 /* ----------------------------------------------------------------------------
@@ -226,6 +236,9 @@ struct splat_overtone {
 #if defined(SPLAT_NEON)
 	float32x4_t fl_ratioq;
 	float32x4_t fl_phaseq;
+#elif defined(SPLAT_SSE)
+	__m128 fl_ratioq;
+	__m128 fl_phaseq;
 #endif
 };
 

@@ -78,6 +78,14 @@ static PyObject *splat_zero;
 #if defined(SPLAT_NEON)
 const uint32x4_t splat_neon_inc = { 0, 1, 2, 3 };
 float32x4_t splat_neon_sine_step;
+#elif defined(SPLAT_SSE)
+const __m128 splat_sse_zero = SPLAT_QUAD(0.0);
+const __m128 splat_sse_one = SPLAT_QUAD(1.0);
+const __m128 splat_sse_two = SPLAT_QUAD(2.0);
+const __m128 splat_sse_pi = SPLAT_QUAD(M_PI);
+const __m128 splat_sse_pi2 = SPLAT_QUAD(M_PI * 2.0);
+const __m128 splat_sse_inc = { 0.0, 1.0, 2.0, 3.0 };
+__m128 splat_sse_sine_step;
 #endif
 
 int splat_obj2double(PyObject *obj, double *out)
@@ -115,6 +123,8 @@ static void splat_levels_init_float(const struct splat_fragment *frag,
 		levels->fl[c] = gain;
 #if defined(SPLAT_NEON)
 		levels->flq[c] = vdupq_n_f32(gain);
+#elif defined(SPLAT_SSE)
+		levels->flq[c] = _mm_set1_ps(gain);
 #endif
 	}
 }
@@ -1719,6 +1729,8 @@ static PyObject *splat_overtones(PyObject *self, PyObject *args)
 			ot->fl_ratio = PyFloat_AS_DOUBLE(ot->ratio);
 #if defined(SPLAT_NEON)
 			ot->fl_ratioq = vdupq_n_f32(ot->fl_ratio);
+#elif defined(SPLAT_SSE)
+			ot->fl_ratioq = _mm_set1_ps(ot->fl_ratio);
 #endif
 		} else {
 			ot_all_floats = 0;
@@ -1730,6 +1742,8 @@ static PyObject *splat_overtones(PyObject *self, PyObject *args)
 			ot->fl_phase = PyFloat_AS_DOUBLE(ot->phase);
 #if defined(SPLAT_NEON)
 			ot->fl_phaseq = vdupq_n_f32(ot->fl_phase);
+#elif defined(SPLAT_SSE)
+			ot->fl_phaseq = _mm_set1_ps(ot->fl_phase);
 #endif
 		} else {
 			ot_all_floats = 0;
@@ -2072,5 +2086,7 @@ PyMODINIT_FUNC init_splat(void)
 
 #if defined(SPLAT_NEON)
 	splat_neon_sine_step = vdupq_n_f32((float)splat_sine_table_len / M_PI);
+#elif defined(SPLAT_SSE)
+	splat_sse_sine_step = _mm_set1_ps((float)splat_sine_table_len / M_PI);
 #endif
 }

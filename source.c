@@ -22,6 +22,8 @@
 
 #if defined(SPLAT_NEON)
 static float32x4_t splat_sine_neon(float32x4_t x);
+#elif defined(SPLAT_SSE)
+static __m128 splat_sine_sse(__m128 x);
 #endif
 
 /* -- sine source -- */
@@ -57,6 +59,36 @@ void splat_sine_floats(struct splat_fragment *frag, const double *levels,
 
 		for (c = 0; c < frag->n_channels; ++c)
 			*out[c]++ = vmulq_f32(y, levelsq[c]);
+	}
+}
+#elif defined(SPLAT_SSE)
+void splat_sine_floats(struct splat_fragment *frag, const double *levels,
+		       double freq, double phase)
+{
+	const __m128 k = _mm_set1_ps(2.0 * M_PI * freq / frag->rate);
+	const __m128 phrate = _mm_set1_ps(phase * frag->rate);
+	__m128 levelsq[SPLAT_MAX_CHANNELS];
+	__m128 *out[SPLAT_MAX_CHANNELS];
+	unsigned c;
+	size_t i;
+
+	for (c = 0; c < frag->n_channels; ++c) {
+		levelsq[c] = _mm_set1_ps(levels[c]);
+		out[c] = (__m128 *)frag->data[c];
+	}
+
+	for (i = 0; i < frag->length; i += 4) {
+		__m128 x;
+		__m128 y;
+
+		x = _mm_set1_ps((float)i);
+		x = _mm_add_ps(x, splat_sse_inc);
+		x = _mm_add_ps(x, phrate);
+		x = _mm_mul_ps(x, k);
+		y = splat_sine_sse(x);
+
+		for (c = 0; c < frag->n_channels; ++c)
+			*out[c]++ = _mm_mul_ps(y, levelsq[c]);
 	}
 }
 #else
@@ -378,6 +410,57 @@ static void _splat_overtones_float(struct splat_fragment *frag,
 			outq[c]++;
 	}
 }
+#elif defined(SPLAT_SSE)
+static void _splat_overtones_float(struct splat_fragment *frag,
+				   double freq, double phase,
+				   const struct splat_overtone *overtones,
+				   const struct splat_overtone *ot_end)
+{
+	const __m128 k = _mm_set1_ps(2.0 * M_PI * freq);
+	const __m128 ph = _mm_set1_ps(phase);
+	const __m128 rateq = _mm_set1_ps((float)frag->rate);
+	const __m128 max_ratio = _mm_set1_ps((frag->rate / 2.0) / freq);
+	__m128 *outq[SPLAT_MAX_CHANNELS];
+	unsigned c;
+	size_t i;
+
+	for (c = 0; c < frag->n_channels; ++c)
+		outq[c] = (__m128 *)frag->data[c];
+
+	/* x = (2 * M_PI * freq * ratio * (ph + i / frag->rate) */
+	for (i = 0; i < frag->length; i += 4) {
+		const struct splat_overtone *ot;
+		__m128 x0;
+
+		x0 = _mm_set1_ps((float)i);
+		x0 = _mm_add_ps(x0, splat_sse_inc);
+		x0 = _mm_div_ps(x0, rateq);
+		x0 = _mm_add_ps(x0, ph);
+
+		for (ot = overtones; ot != ot_end; ++ot) {
+			const __m128 *lvlq = ot->levels.flq;
+			__m128 clip;
+			__m128 x;
+			__m128 yr;
+
+			clip = _mm_cmplt_ps(ot->fl_ratioq, max_ratio);
+			x = _mm_add_ps(x0, ot->fl_phaseq);
+			x = _mm_mul_ps(x, ot->fl_ratioq);
+			x = _mm_mul_ps(x, k);
+			yr = splat_sine_sse(x);
+
+			for (c = 0; c < frag->n_channels; ++c) {
+				const __m128 g = _mm_and_ps(clip, lvlq[c]);
+				const __m128 y = _mm_mul_ps(yr, g);
+
+				*outq[c] = _mm_add_ps(*outq[c], y);
+			}
+		}
+
+		for (c = 0; c < frag->n_channels; ++c)
+			outq[c]++;
+	}
+}
 #else
 static void _splat_overtones_float(struct splat_fragment *frag,
 				   double freq, double phase,
@@ -648,5 +731,67 @@ static float32x4_t splat_sine_neon(float32x4_t x)
 
 	/* result = y * b */
 	return vmulq_f32(y, b);
+}
+#elif defined(SPLAT_SSE)
+static __m128 splat_sine_sse(__m128 x)
+{
+	__m128 xpi;
+	__m128 a;
+	__m128 b;
+	__m128i m;
+	uint32_t *mf = (uint32_t *)&m;
+	__m128 poly2;
+	__m128 poly3;
+	__m128 poly4;
+	__m128 neg;
+	__m128 y;
+
+	/* a = fmod(x, M_PI) */
+	xpi = _mm_div_ps(x, splat_sse_pi);
+	a = _mm_cvtepi32_ps(_mm_cvttps_epi32(xpi));
+	a = _mm_sub_ps(x, _mm_mul_ps(a, splat_sse_pi));
+
+	/* if a < 0 then a += M_PI (work around rounding issue) */
+	neg = _mm_cmplt_ps(a, splat_sse_zero);
+	neg = _mm_and_ps(neg, splat_sse_pi);
+	a = _mm_add_ps(a, neg);
+
+	/* if a > M_PI then a -= M_PI (work around rounding issue) */
+	neg = _mm_cmpgt_ps(a, splat_sse_pi);
+	neg = _mm_and_ps(neg, splat_sse_pi);
+	a = _mm_sub_ps(a, neg);
+
+	/* m = int(a * table_len / M_PI) */
+	m = _mm_cvttps_epi32(_mm_mul_ps(a, splat_sse_sine_step));
+
+	/* poly1..4 = transpose(table[m]) */
+	y = _mm_load_ps(splat_sine_table[mf[0]].coef);
+	poly2 = _mm_load_ps(splat_sine_table[mf[1]].coef);
+	poly3 = _mm_load_ps(splat_sine_table[mf[2]].coef);
+	poly4 = _mm_load_ps(splat_sine_table[mf[3]].coef);
+	_MM_TRANSPOSE4_PS(y, poly2, poly3, poly4);
+
+	/* y = p1 + (a * p2) + (a^2 * p3) + (a^3 * p4) */
+	poly2 = _mm_mul_ps(poly2, a);
+	y = _mm_add_ps(y, poly2);
+	b = _mm_mul_ps(a, a);
+	poly3 = _mm_mul_ps(poly3, b);
+	y = _mm_add_ps(y, poly3);
+	b = _mm_mul_ps(b, a);
+	poly4 = _mm_mul_ps(poly4, b);
+	y = _mm_add_ps(y, poly4);
+
+	/* b = fmod(x, 2 * M_PI) */
+	b = _mm_div_ps(x, splat_sse_pi2);
+	b = _mm_cvtepi32_ps(_mm_cvttps_epi32(b));
+	b = _mm_sub_ps(x, _mm_mul_ps(b, splat_sse_pi2));
+
+	/* if b > M_PI then b = -1 else b = 1 */
+	b = _mm_cmpgt_ps(b, splat_sse_pi);
+	b = _mm_and_ps(b, splat_sse_two);
+	b = _mm_sub_ps(splat_sse_one, b);
+
+	/* result = y * b */
+	return _mm_mul_ps(y, b);
 }
 #endif
