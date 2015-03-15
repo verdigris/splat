@@ -2,9 +2,9 @@ import sys
 import os.path
 try:
     import setuptools
-    from setuptool import setup, Extension
 except ImportError:
-    from distutils.core import setup, Extension
+    import distutils.core as setuptools
+from setuptools import setup, Extension
 
 # The manual needs to be generated with Sphinx but is only required when
 # running the sdist command.
