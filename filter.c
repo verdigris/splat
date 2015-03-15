@@ -51,7 +51,38 @@ void splat_filter_reverse(struct splat_fragment *frag)
 	}
 }
 
-#ifdef SPLAT_SSE
+#if defined(SPLAT_NEON)
+void splat_filter_reverb(struct splat_fragment *frag,
+			 struct splat_delay **delays, size_t n_delays,
+			 size_t max_index)
+{
+	const size_t n_loops = max_index / 4;
+	const size_t indexq = n_loops * 4;
+	unsigned c;
+
+	for (c = 0; c < frag->n_channels; ++c) {
+		const struct splat_delay *del = delays[c];
+		float32x4_t *c_data = (float32x4_t *)&frag->data[c][indexq];
+		size_t i = n_loops;
+
+		while (i--) {
+			const float32x4_t s = *c_data;
+			size_t d;
+
+			for (d = 0; d < n_delays; ++d) {
+				const float32x4_t gain =
+					vdupq_n_f32(del[c].gain);
+				const size_t offset = del[d].time / 4;
+				float32x4_t *o = &c_data[offset];
+
+				*o = vmlaq_f32(*o, s, gain);
+			}
+
+			c_data--;
+		}
+	}
+}
+#elif defined(SPLAT_SSE)
 void splat_filter_reverb(struct splat_fragment *frag,
 			 struct splat_delay **delays, size_t n_delays,
 			 size_t max_index)
