@@ -85,6 +85,14 @@ struct splat_levels {
 	int all_floats;
 };
 
+/* Fast sine function interpolation table */
+struct splat_sine_poly {
+	float coef[4];
+};
+
+extern const struct splat_sine_poly *splat_sine_table;
+extern const size_t splat_sine_table_len;
+
 /* ----------------------------------------------------------------------------
  * Fragment
  */
