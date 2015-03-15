@@ -419,6 +419,7 @@ int splat_overtones_signal(struct splat_fragment *frag, PyObject **levels,
 	static const size_t sig_phase = 1;
 	static const size_t sig_amp = 2;
 	const size_t sig_ot = sig_amp + frag->n_channels;
+	PyObject **sig_ot_it;
 	/* for each overtone: ratio, phase and levels */
 	const size_t sig_n = sig_ot + (n * (2 + frag->n_channels));
 	unsigned c;
@@ -437,16 +438,12 @@ int splat_overtones_signal(struct splat_fragment *frag, PyObject **levels,
 	for (c = 0; c < frag->n_channels; ++c)
 		signals[sig_amp + c] = levels[c];
 
-	{
-		PyObject **sig_ot_it = &signals[sig_ot];
+	for (sig_ot_it = &signals[sig_ot], ot = overtones; ot != ot_end; ++ot){
+		*sig_ot_it++ = ot->ratio;
+		*sig_ot_it++ = ot->phase;
 
-		for (ot = overtones; ot != ot_end; ++ot) {
-			*sig_ot_it++ = ot->ratio;
-			*sig_ot_it++ = ot->phase;
-
-			for (c = 0; c < frag->n_channels; ++c)
-				*sig_ot_it++ = ot->levels.obj[c];
-		}
+		for (c = 0; c < frag->n_channels; ++c)
+			*sig_ot_it++ = ot->levels.obj[c];
 	}
 
 	if (splat_signal_init(&sig, frag->length, (origin * frag->rate),
