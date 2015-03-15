@@ -1476,7 +1476,6 @@ static PyObject *splat_gen_ref(PyObject *self, PyObject *args)
 	struct splat_fragment *frag;
 	sample_t *data;
 	size_t n;
-	size_t i;
 
 	if (!PyArg_ParseTuple(args, "O!", &splat_FragmentType, &frag_obj))
 		return NULL;
@@ -1498,8 +1497,8 @@ static PyObject *splat_gen_ref(PyObject *self, PyObject *args)
 	data = frag->data[0];
 	n = frag->length;
 
-	for (i = 0; i < n; ++i)
-		*data++ = i / n;
+	while (n--)
+		*data++ = n;
 
 	Py_RETURN_NONE;
 }
