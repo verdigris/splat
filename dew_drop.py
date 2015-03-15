@@ -17,6 +17,7 @@
 
 import sys
 import time
+import argparse
 import splat
 import splat.data
 import splat.gen
@@ -28,15 +29,27 @@ def set_fade(gen, duration):
         [(splat.filters.linear_fade, (duration,))])
 
 def main(argv):
-    gen = splat.gen.OvertonesGenerator(splat.data.Fragment(2, 48000, 18.0))
+    parser = argparse.ArgumentParser("Dew Drop tune using irrational rythm.")
+    parser.add_argument('--save-as', default='dew_drop.wav',
+                        help="output file name, leave blank to not save")
+    parser.add_argument('--no-reverb', action='store_true',
+                        help="do not generate the reverb effect")
+    parser.add_argument('--dump-scale', action='store_true',
+                        help="dump the frequency of the notes in the scale")
+    parser.add_argument('--rate', type=int, default=48000,
+                        help="sample rate")
+    args = parser.parse_args(argv[1:])
+
+    gen = splat.gen.OvertonesGenerator(splat.data.Fragment(2, args.rate, 18.0))
     s = splat.scales.LogScale(fund=440.0)
 
-    # print frequencies of all the notes of the scale over 3 octaves
-    for octave in range(-2, 1):
-        for note in ['A', 'B', 'C#', 'D', 'E', 'F#', 'G#']:
-            note_name = "{0}{1}".format(note, octave)
-            print('{0:4s}: {1:.3f}'.format(note_name, s[note_name]))
-        print("-------------")
+    if args.dump_scale is True:
+        # print frequencies of all the notes of the scale over 3 octaves
+        for octave in range(-2, 1):
+            for note in ['A', 'B', 'C#', 'D', 'E', 'F#', 'G#']:
+                note_name = "{0}{1}".format(note, octave)
+                print('{0:4s}: {1:.3f}'.format(note_name, s[note_name]))
+            print("-------------")
 
     print("Voice 1")
     gen.levels = (-2.5, -2.5)
@@ -108,16 +121,16 @@ def main(argv):
     gen.run(15.372, 16.38, s['G#-1'])
     gen.run(16.38, 18.0, s['A'])
 
-    if (len(argv) > 1) and (argv[1] == 'reverb'):
-        print("Reverb...")
+    if args.no_reverb is False:
+        print("Reverb")
         d = splat.filters.reverb_delays()
         splat.filters.reverb(gen.frag, d)
 
-    print("Saving to file...")
-    padded = splat.data.Fragment(2, 48000, (gen.frag.duration + 1.0))
-    padded.mix(gen.frag, 0.5)
-    padded.normalize()
-    padded.save('dew_drop.wav')
+    if args.save_as:
+        print("Saving as {}".format(args.save_as))
+        padded = splat.data.Fragment(2, args.rate, (gen.frag.duration + 1.0))
+        padded.mix(gen.frag, 0.5)
+        padded.save(args.save_as)
 
 
 if __name__ == '__main__':
