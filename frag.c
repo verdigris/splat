@@ -149,6 +149,42 @@ int splat_frag_resize(struct splat_fragment *frag, size_t length)
 	return 0;
 }
 
+#if defined(SPLAT_SSE)
+static void splat_frag_mix_floats(struct splat_fragment *frag,
+				  const struct splat_fragment *incoming,
+				  size_t offset, size_t start, size_t length,
+				  const double *levels, int zero_dB)
+{
+	unsigned c;
+
+	start = splat_mask4(start);
+	offset = splat_mask4(offset);
+	length /= 4;
+
+	for (c = 0; c < frag->n_channels; ++c) {
+		const __m128 *src = (__m128 *)&incoming->data[c][start];
+		__m128 *dst = (__m128 *)&frag->data[c][offset];
+		size_t i = length;
+
+		if (zero_dB) {
+			while (i--) {
+				*dst = _mm_add_ps(*dst, *src++);
+				dst++;
+			}
+		} else {
+			const __m128 gain = _mm_set1_ps(levels[c]);
+
+			while (i-- ) {
+				__m128 s = *src++;
+
+				s = _mm_mul_ps(s, gain);
+				*dst = _mm_add_ps(*dst, s);
+				dst++;
+			}
+		}
+	}
+}
+#else
 static void splat_frag_mix_floats(struct splat_fragment *frag,
 				  const struct splat_fragment *incoming,
 				  size_t offset, size_t start, size_t length,
@@ -172,6 +208,7 @@ static void splat_frag_mix_floats(struct splat_fragment *frag,
 		}
 	}
 }
+#endif
 
 static int splat_frag_mix_signals(struct splat_fragment *frag,
 				  const struct splat_fragment *incoming,
