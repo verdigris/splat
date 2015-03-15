@@ -75,6 +75,11 @@ static PyObject *splat_sample_types;
 /* A Python float with the value of 0.0 */
 static PyObject *splat_zero;
 
+#if defined(SPLAT_NEON)
+const uint32x4_t splat_neon_inc = { 0, 1, 2, 3 };
+float32x4_t splat_neon_sine_step;
+#endif
+
 int splat_obj2double(PyObject *obj, double *out)
 {
 	double value;
@@ -108,6 +113,9 @@ static void splat_levels_init_float(const struct splat_fragment *frag,
 	for (c = 0; c < frag->n_channels; ++c) {
 		levels->obj[c] = levels_obj;
 		levels->fl[c] = gain;
+#if defined(SPLAT_NEON)
+		levels->flq[c] = vdupq_n_f32(gain);
+#endif
 	}
 }
 
@@ -1707,17 +1715,25 @@ static PyObject *splat_overtones(PyObject *self, PyObject *args)
 
 		ot->ratio = PyTuple_GET_ITEM(ot_params, OT_RATIO);
 
-		if (ot_all_floats && PyFloat_Check(ot->ratio))
+		if (ot_all_floats && PyFloat_Check(ot->ratio)) {
 			ot->fl_ratio = PyFloat_AS_DOUBLE(ot->ratio);
-		else
+#if defined(SPLAT_NEON)
+			ot->fl_ratioq = vdupq_n_f32(ot->fl_ratio);
+#endif
+		} else {
 			ot_all_floats = 0;
+		}
 
 		ot->phase = PyTuple_GET_ITEM(ot_params, OT_PHASE);
 
-		if (ot_all_floats && PyFloat_Check(ot->phase))
+		if (ot_all_floats && PyFloat_Check(ot->phase)) {
 			ot->fl_phase = PyFloat_AS_DOUBLE(ot->phase);
-		else
+#if defined(SPLAT_NEON)
+			ot->fl_phaseq = vdupq_n_f32(ot->fl_phase);
+#endif
+		} else {
 			ot_all_floats = 0;
+		}
 
 		ot_levels = PyTuple_GET_ITEM(ot_params, OT_LEVELS);
 
@@ -2053,4 +2069,8 @@ PyMODINIT_FUNC init_splat(void)
 
 	PyModule_AddStringConstant(m, "SAMPLE_TYPE", SPLAT_NATIVE_SAMPLE_TYPE);
 	PyModule_AddIntConstant(m, "SAMPLE_WIDTH", SPLAT_NATIVE_SAMPLE_WIDTH);
+
+#if defined(SPLAT_NEON)
+	splat_neon_sine_step = vdupq_n_f32((float)splat_sine_table_len / M_PI);
+#endif
 }

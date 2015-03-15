@@ -20,8 +20,46 @@
 
 #include "_splat.h"
 
+#if defined(SPLAT_NEON)
+static float32x4_t splat_sine_neon(float32x4_t x);
+#endif
+
 /* -- sine source -- */
 
+#if defined(SPLAT_NEON)
+void splat_sine_floats(struct splat_fragment *frag, const double *levels,
+		       double freq, double phase)
+{
+	const float32x4_t phrate = vdupq_n_f32(phase * frag->rate);
+	const float32x4_t k = vdupq_n_f32(2.0 * M_PI * freq / frag->rate);
+	float32x4_t levelsq[SPLAT_MAX_CHANNELS];
+	float32x4_t *out[SPLAT_MAX_CHANNELS];
+	unsigned c;
+	size_t i;
+
+	for (c = 0; c < frag->n_channels; ++c) {
+		levelsq[c] = vdupq_n_f32(levels[c]);
+		out[c] = (float32x4_t *)frag->data[c];
+	}
+
+	for (i = 0; i < frag->length; i += 4) {
+		uint32x4_t iq;
+		float32x4_t x;
+		float32x4_t y;
+
+		/* x = 2 * M_PI * freq * (phrate + i) / frag->rate) */
+		iq = vdupq_n_u32(i);
+		iq = vaddq_u32(iq, splat_neon_inc);
+		x = vcvtq_f32_u32(iq);
+		x = vaddq_f32(x, phrate);
+		x = vmulq_f32(x, k);
+		y = splat_sine_neon(x);
+
+		for (c = 0; c < frag->n_channels; ++c)
+			*out[c]++ = vmulq_f32(y, levelsq[c]);
+	}
+}
+#else
 void splat_sine_floats(struct splat_fragment *frag, const double *levels,
 		       double freq, double phase)
 {
@@ -37,6 +75,7 @@ void splat_sine_floats(struct splat_fragment *frag, const double *levels,
 			frag->data[c][i] = s * levels[c];
 	}
 }
+#endif
 
 int splat_sine_signals(struct splat_fragment *frag, PyObject **levels,
 		       PyObject *freq, PyObject *phase, double origin)
@@ -87,7 +126,6 @@ int splat_sine_signals(struct splat_fragment *frag, PyObject **levels,
 
 	return (sig.stat == SPLAT_SIGNAL_ERROR) ? -1 : 0;
 }
-
 
 /* -- square source -- */
 
@@ -288,16 +326,91 @@ int splat_triangle_signals(struct splat_fragment *frag, PyObject **levels,
 
 /* -- overtones source -- */
 
+#if defined(SPLAT_NEON)
+static void _splat_overtones_float(struct splat_fragment *frag,
+				   double freq, double phase,
+				   const struct splat_overtone *overtones,
+				   const struct splat_overtone *ot_end)
+{
+	const float32x4_t k = vdupq_n_f32(2 * M_PI * freq);
+	const float32x4_t ph = vdupq_n_f32(phase);
+	const float32x4_t rate_inv = vdupq_n_f32(1.0 / frag->rate);
+	const float32x4_t max_ratio = vdupq_n_f32((frag->rate / 2.0) / freq);
+	float32x4_t *outq[SPLAT_MAX_CHANNELS];
+	unsigned c;
+	size_t i;
+
+	for (c = 0; c < frag->n_channels; ++c)
+		outq[c] = (float32x4_t *)frag->data[c];
+
+	/* x = 2 * M_PI * freq * ratio * (ph + i/rate) */
+	for (i = 0; i < frag->length; i += 4) {
+		const struct splat_overtone *ot;
+		uint32x4_t iq;
+		float32x4_t x0;
+
+		iq = vdupq_n_u32(i);
+		iq = vaddq_u32(iq, splat_neon_inc);
+		x0 = vcvtq_f32_u32(iq);
+		x0 = vmulq_f32(x0, rate_inv);
+		x0 = vaddq_f32(x0, ph);
+
+		for (ot = overtones; ot != ot_end; ++ot) {
+			const float32x4_t *lvlq = ot->levels.flq;
+			float32x4_t xr;
+			float32x4_t yr;
+			uint32x4_t clip;
+
+			clip = vcltq_f32(ot->fl_ratioq, max_ratio);
+			xr = vaddq_f32(x0, ot->fl_phaseq);
+			xr = vmulq_f32(xr, k);
+			xr = vmulq_f32(xr, ot->fl_ratioq);
+			yr = splat_sine_neon(xr);
+			yr = (float32x4_t)vandq_u32((uint32x4_t)yr, clip);
+
+			for (c = 0; c < frag->n_channels; ++c) {
+				const float32x4_t y = vmulq_f32(yr, lvlq[c]);
+				*outq[c] = vaddq_f32(*outq[c], y);
+			}
+		}
+
+		for (c = 0; c < frag->n_channels; ++c)
+			outq[c]++;
+	}
+}
+#else
+static void _splat_overtones_float(struct splat_fragment *frag,
+				   double freq, double phase,
+				   const struct splat_overtone *overtones,
+				   const struct splat_overtone *ot_end)
+{
+	const double k = 2 * M_PI * freq;
+	size_t i;
+
+	for (i = 0; i < frag->length; ++i) {
+		const double t = phase + (double)i / frag->rate;
+		const struct splat_overtone *ot;
+
+		for (ot = overtones; ot != ot_end; ++ot) {
+			const double s =
+				sin(k * ot->fl_ratio * (t + ot->fl_phase));
+			unsigned c;
+
+			for (c = 0; c < frag->n_channels; ++c)
+				frag->data[c][i] += s * ot->levels.fl[c];
+		}
+	}
+}
+#endif
+
 void splat_overtones_float(struct splat_fragment *frag, const double *levels,
 			   double freq, double phase,
 			   struct splat_overtone *overtones, Py_ssize_t n)
 {
-	const double k = 2 * M_PI * freq;
 	const double max_ratio = (frag->rate / freq) / 2;
 	struct splat_overtone *ot;
-	const struct splat_overtone *ot_end = &overtones[n];
+	const struct splat_overtone * const ot_end = &overtones[n];
 	unsigned c;
-	size_t i;
 
 	/* Silence harmonics above (rate / 2) to avoid spectrum overlap
 	   and multiply each overtone levels with global levels. */
@@ -311,17 +424,7 @@ void splat_overtones_float(struct splat_fragment *frag, const double *levels,
 		}
 	}
 
-	for (i = 0; i < frag->length; ++i) {
-		const double t = phase + (double)i / frag->rate;
-
-		for (ot = overtones; ot != ot_end; ++ot) {
-			const double s =
-				sin(k * ot->fl_ratio * (t + ot->fl_phase));
-
-			for (c = 0; c < frag->n_channels; ++c)
-				frag->data[c][i] += s * ot->levels.fl[c];
-		}
-	}
+	_splat_overtones_float(frag, freq, phase, overtones, ot_end);
 }
 
 int splat_overtones_mixed(struct splat_fragment *frag, PyObject **levels,
@@ -484,3 +587,66 @@ int splat_overtones_signal(struct splat_fragment *frag, PyObject **levels,
 	return (sig.stat == SPLAT_SIGNAL_ERROR) ? -1 : 0;
 }
 
+/* -- Fast functions -- */
+
+#if defined(SPLAT_NEON)
+static float32x4_t splat_sine_neon(float32x4_t x)
+{
+	const float32x4_t *sine_tableq = (float32x4_t *)splat_sine_table;
+	const float32x4_t pi = vdupq_n_f32(M_PI);
+	float32x4_t polyq[4];
+	float32x4_t a;
+	float32x4_t b;
+	float32x4_t p;
+	float32x4_t y;
+	uint32x4_t neg;
+	uint32x4_t m;
+
+	/* a = fmod(x, M_PI) */
+	a = vmulq_f32(x, vdupq_n_f32(1.0 / M_PI));
+	a = vcvtq_f32_u32(vcvtq_u32_f32(a));
+	a = vmlsq_f32(x, a, pi);
+
+	/* if a < 0 then a += M_PI */
+	neg = vcltq_f32(a, vdupq_n_f32(0.0));
+	neg = vandq_u32(neg, (uint32x4_t)pi);
+	a = vaddq_f32(a, (float32x4_t)neg);
+
+	/* m = int(a * table_len / M_PI) */
+	m = vcvtq_u32_f32(vmulq_f32(a, splat_neon_sine_step));
+
+	/* polyq1..4 = transpose(table[m]) */
+	/* y = p0 + (x * p1) + (x^2 * p2) + (x^3 * p3) */
+	polyq[0] = sine_tableq[m[0]];
+	polyq[1] = sine_tableq[m[1]];
+	*((float32x4x2_t *)&polyq[0]) = vtrnq_f32(polyq[0], polyq[1]);
+	polyq[2] = sine_tableq[m[2]];
+	polyq[3] = sine_tableq[m[3]];
+	*((float32x4x2_t *)&polyq[2]) = vtrnq_f32(polyq[2], polyq[3]);
+	y = vcombine_f32(vget_low_f32(polyq[0]), vget_low_f32(polyq[2]));
+	p = vcombine_f32(vget_low_f32(polyq[1]), vget_low_f32(polyq[3]));
+	y = vmlaq_f32(y, a, p);
+	b = vmulq_f32(a, a);
+	p = vcombine_f32(vget_high_f32(polyq[0]), vget_high_f32(polyq[2]));
+	y = vmlaq_f32(y, b, p);
+	b = vmulq_f32(b, a);
+	p = vcombine_f32(vget_high_f32(polyq[1]), vget_high_f32(polyq[3]));
+	y = vmlaq_f32(y, b, p);
+
+	/* b = fmod(x, 2 * M_PI) */
+	b = vmulq_f32(x, vdupq_n_f32(1.0 / (2.0 * M_PI)));
+	b = vcvtq_f32_u32(vcvtq_u32_f32(b));
+	b = vmlsq_f32(x, b, vdupq_n_f32(M_PI * 2.0));
+
+	/* neg = 2 if b < M_PI */
+	neg = vcgtq_f32(b, pi);
+	neg = vshrq_n_u32(neg, 31);
+	neg = vshlq_n_u32(neg, 1);
+
+	/* b = -1 if M_PI < fmod(x, 2 * M_PI) < 2 * M_PI else 1 */
+	b = vsubq_f32(vdupq_n_f32(1.0), vcvtq_f32_u32(neg));
+
+	/* result = y * b */
+	return vmulq_f32(y, b);
+}
+#endif

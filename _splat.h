@@ -83,6 +83,9 @@ struct splat_levels {
 	PyObject *obj[SPLAT_MAX_CHANNELS];
 	double fl[SPLAT_MAX_CHANNELS]; /* levels converted to linear scale */
 	int all_floats;
+#if defined(SPLAT_NEON)
+	float32x4_t flq[SPLAT_MAX_CHANNELS];
+#endif
 };
 
 /* Fast sine function interpolation table */
@@ -92,6 +95,15 @@ struct splat_sine_poly {
 
 extern const struct splat_sine_poly *splat_sine_table;
 extern const size_t splat_sine_table_len;
+
+#ifdef SPLAT_FAST
+#define SPLAT_QUAD(_x) { (_x), (_x), (_x), (_x) }
+#endif
+
+#if defined(SPLAT_NEON)
+extern const uint32x4_t splat_neon_inc;
+extern float32x4_t splat_neon_sine_step;
+#endif
 
 /* ----------------------------------------------------------------------------
  * Fragment
@@ -211,6 +223,10 @@ struct splat_overtone {
 	PyObject *phase;
 	double fl_phase;
 	struct splat_levels levels;
+#if defined(SPLAT_NEON)
+	float32x4_t fl_ratioq;
+	float32x4_t fl_phaseq;
+#endif
 };
 
 extern void splat_sine_floats(struct splat_fragment *frag,
