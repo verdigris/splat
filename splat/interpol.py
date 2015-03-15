@@ -159,6 +159,10 @@ class PolyList(object):
         return self._pols.__getitem__(i)
 
     @property
+    def pols(self):
+        return copy.copy(self._pols)
+
+    @property
     def scale(self):
         """Scale factor for all returned values."""
         return self._scale
