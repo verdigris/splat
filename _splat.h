@@ -51,6 +51,12 @@ typedef double sample_t;
 #define lin2dB(level) (20 * log10(level))
 #define dB2lin(dB) (pow10((dB) / 20))
 
+/* Round to the next multiple of 4, used in fast mode for 4x float vectors */
+#ifdef SPLAT_FAST
+#define splat_round4(_len) ((_len) % 4 ? ((((_len) / 4) + 1) * 4) : (_len))
+#define splat_mask4(_x) (_x & 0xFFFFFFFFFFFFFFFC)
+#endif
+
 #ifndef min
 #define min(_a, _b) (((_a) < (_b)) ? (_a) : (_b))
 #endif

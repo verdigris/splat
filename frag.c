@@ -20,24 +20,59 @@
 
 #include "_splat.h"
 
+static void *splat_frag_realloc(void *data, size_t cur_size, size_t new_size)
+{
+	void *new_data;
+
+#ifdef SPLAT_FAST
+	if (posix_memalign(&new_data, 16, new_size))
+		return NULL;
+
+	if (data != NULL) {
+		memcpy(new_data, data, min(cur_size, new_size));
+		free(data);
+	}
+#else
+	if (data == NULL)
+		new_data = PyMem_Malloc(new_size);
+	else
+		new_data = PyMem_Realloc(data, new_size);
+#endif
+
+	return new_data;
+}
+
 int splat_frag_init(struct splat_fragment *frag, unsigned n_channels,
 		    unsigned rate, size_t length, const char *name)
 {
-	const size_t data_size = length * sizeof(sample_t);
-	unsigned i;
+	size_t data_size;
+	unsigned c;
 
-	for (i = 0; i < n_channels; ++i) {
-		if (!data_size) {
-			frag->data[i] = NULL;
+#ifdef SPLAT_FAST
+	length = splat_round4(length);
+#endif
+	data_size = length * sizeof(sample_t);
+
+	for (c = 0; c < n_channels; ++c) {
+		if (!length) {
+			frag->data[c] = NULL;
 		} else {
-			frag->data[i] = PyMem_Malloc(data_size);
+#ifdef SPLAT_FAST
+			void *data;
 
-			if (frag->data[i] == NULL) {
+			if (posix_memalign(&data, 16, data_size))
+				frag->data[c] = NULL;
+			else
+				frag->data[c] = data;
+#else
+			frag->data[c] = PyMem_Malloc(data_size);
+#endif
+			if (frag->data[c] == NULL) {
 				PyErr_NoMemory();
 				return -1;
 			}
 
-			memset(frag->data[i], 0, data_size);
+			memset(frag->data[c], 0, data_size);
 		}
 	}
 
@@ -58,7 +93,11 @@ void splat_frag_free(struct splat_fragment *frag)
 	unsigned c;
 
 	for (c = 0; c < frag->n_channels; ++c)
+#ifdef SPLAT_FAST
+		free(frag->data[c]);
+#else
 		PyMem_Free(frag->data[c]);
+#endif
 
 	if (frag->name != NULL)
 		free(frag->name);
@@ -81,16 +120,20 @@ int splat_frag_set_name(struct splat_fragment *frag, const char *name)
 
 int splat_frag_resize(struct splat_fragment *frag, size_t length)
 {
-	const size_t start = frag->length * sizeof(sample_t);
-	const size_t size = length * sizeof(sample_t);
-	const ssize_t extra = size - start;
+	size_t start = frag->length * sizeof(sample_t);
+	size_t size;
+	ssize_t extra;
 	unsigned c;
 
+	start = frag->length * sizeof(sample_t);
+#if SPLAT_FAST
+	length = splat_round4(length);
+#endif
+	size = length * sizeof(sample_t);
+	extra = size - start;
+
 	for (c = 0; c < frag->n_channels; ++c) {
-		if (frag->data[c] == NULL)
-			frag->data[c] = PyMem_Malloc(size);
-		else
-			frag->data[c] = PyMem_Realloc(frag->data[c], size);
+		frag->data[c] = splat_frag_realloc(frag->data[c], start, size);
 
 		if (frag->data[c] == NULL) {
 			PyErr_NoMemory();
@@ -116,7 +159,7 @@ static void splat_frag_mix_floats(struct splat_fragment *frag,
 	for (c = 0; c < frag->n_channels; ++c) {
 		const sample_t *src = &incoming->data[c][start];
 		sample_t *dst =  &frag->data[c][offset];
-		Py_ssize_t i = length;
+		size_t i = length;
 
 		if (zero_dB) {
 			while (i--)
