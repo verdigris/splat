@@ -69,10 +69,10 @@ int splat_sine_signals(struct splat_fragment *frag, PyObject **levels,
 		size_t j;
 
 		for (j = 0; j < sig.len; ++i, ++j) {
-			const double t = (double)i / frag->rate;
 			const double f = sig.vectors[SIG_FREQ].data[j];
 			const double ph = sig.vectors[SIG_PHASE].data[j];
-			const double s = sin(k * f * (t + ph + origin));
+			const double t = ph + origin + (double)i / frag->rate;
+			const double s = sin(k * f * t);
 
 			for (c = 0; c < frag->n_channels; ++c) {
 				const double a =
@@ -95,7 +95,6 @@ void splat_square_floats(struct splat_fragment *frag, const double *fl_pos,
 			 double freq, double phase, double ratio)
 {
 	const double k = freq / frag->rate;
-	const double ph0 = freq * phase;
 	double fl_neg[SPLAT_MAX_CHANNELS];
 	unsigned c;
 	Py_ssize_t i;
@@ -108,7 +107,7 @@ void splat_square_floats(struct splat_fragment *frag, const double *fl_pos,
 
 	for (i = 0; i < frag->length; ++i) {
 		double n_periods;
-		const double t_rel = modf(((i * k) + ph0), &n_periods);
+		const double t_rel = modf(((i * k) + phase), &n_periods);
 		const double *levels;
 
 		if (t_rel < ratio)
@@ -156,10 +155,9 @@ int splat_square_signals(struct splat_fragment *frag, PyObject **levels,
 		for (j = 0; j < sig.len; ++i, ++j) {
 			const double f = sig.vectors[SIG_FREQ].data[j];
 			const double ph = sig.vectors[SIG_PHASE].data[j];
-			const double t = (double)i / frag->rate;
-			const double tph = t + ph + origin;
+			const double t = ph + origin + (double)i / frag->rate;
 			double n_periods;
-			const double t_rel = modf((f * (tph)), &n_periods);
+			const double t_rel = modf((f * t), &n_periods);
 			double ratio = sig.vectors[SIG_RATIO].data[j];
 			double s;
 
@@ -187,7 +185,6 @@ void splat_triangle_floats(struct splat_fragment *frag, const double *lvls,
 			   double freq, double phase, double ratio)
 {
 	const double k = freq / frag->rate;
-	const double ph0 = freq * phase;
 	double a1[SPLAT_MAX_CHANNELS], b1[SPLAT_MAX_CHANNELS];
 	double a2[SPLAT_MAX_CHANNELS], b2[SPLAT_MAX_CHANNELS];
 	const double *a, *b;
@@ -208,7 +205,7 @@ void splat_triangle_floats(struct splat_fragment *frag, const double *lvls,
 
 	for (i = 0; i < frag->length; ++i) {
 		double n_periods;
-		const double t_rel = modf(((i * k) + ph0), &n_periods);
+		const double t_rel = modf(((i * k) + phase), &n_periods);
 
 		if (t_rel < ratio) {
 			a = a1;
@@ -258,10 +255,9 @@ int splat_triangle_signals(struct splat_fragment *frag, PyObject **levels,
 		for (j = 0; j < sig.len; ++i, ++j) {
 			const double f = sig.vectors[SIG_FREQ].data[j];
 			const double ph = sig.vectors[SIG_PHASE].data[j];
-			const double t = (double)i / frag->rate;
-			const double tph = t + ph + origin;
+			const double t = ph + origin + (double)i / frag->rate;
 			double n_periods;
-			const double t_rel = modf((f * (tph)), &n_periods);
+			const double t_rel = modf((f * t), &n_periods);
 			double ratio = sig.vectors[SIG_RATIO].data[j];
 
 			ratio = min(ratio, 1.0);
@@ -317,7 +313,7 @@ void splat_overtones_float(struct splat_fragment *frag, const double *levels,
 	}
 
 	for (i = 0; i < frag->length; ++i) {
-		const double t = phase + ((double)i / frag->rate);
+		const double t = phase + (double)i / frag->rate;
 
 		for (ot = overtones; ot != ot_end; ++ot) {
 			const double s =
@@ -369,8 +365,7 @@ int splat_overtones_mixed(struct splat_fragment *frag, PyObject **levels,
 			const double max_ratio = half_rate / f;
 			const double m = k * f;
 			const double ph = sig.vectors[SIG_PHASE].data[j];
-			const double t = (double)i / frag->rate;
-			const double tph = t + ph + origin;
+			const double t = ph + origin + (double)i / frag->rate;
 
 			for (ot = overtones; ot != ot_end; ++ot) {
 				double s;
@@ -378,8 +373,7 @@ int splat_overtones_mixed(struct splat_fragment *frag, PyObject **levels,
 				if (ot->fl_ratio >= max_ratio)
 					continue;
 
-				s = sin(m * ot->fl_ratio *
-					(tph + ot->fl_phase));
+				s = sin(m * ot->fl_ratio * (t + ot->fl_phase));
 
 				for (c = 0; c < frag->n_channels; ++c) {
 					double x;
@@ -456,12 +450,11 @@ int splat_overtones_signal(struct splat_fragment *frag, PyObject **levels,
 		size_t j;
 
 		for (j = 0; j < sig.len; ++i, ++j) {
-			const double t = (double)i / frag->rate;
 			const double f = sig.vectors[sig_freq].data[j];
 			const double max_ratio = half_rate / f;
 			const double ph = sig.vectors[sig_phase].data[j];
+			const double t = ph + origin + (double)i / frag->rate;
 			const double m = k * f;
-			const double tph = t + ph + origin;
 			const struct splat_vector *otv = &sig.vectors[sig_ot];
 
 			for (ot = overtones; ot != ot_end; ++ot) {
@@ -474,7 +467,7 @@ int splat_overtones_signal(struct splat_fragment *frag, PyObject **levels,
 					continue;
 				}
 
-				s = sin(m * ratio * (tph + ot_ph));
+				s = sin(m * ratio * (t + ot_ph));
 
 				for (c = 0; c < frag->n_channels; ++c) {
 					double x, y;
