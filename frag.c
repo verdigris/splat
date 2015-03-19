@@ -149,7 +149,39 @@ int splat_frag_resize(struct splat_fragment *frag, size_t length)
 	return 0;
 }
 
-#if defined(SPLAT_SSE)
+#if defined(SPLAT_NEON)
+static void splat_frag_mix_floats(struct splat_fragment *frag,
+				  const struct splat_fragment *in,
+				  size_t offset, size_t start, size_t length,
+				  const double *levels, int zero_dB)
+{
+	unsigned c;
+
+	start = splat_mask4(start);
+	offset = splat_mask4(offset);
+	length /= 4;
+
+	for (c = 0; c < frag->n_channels; ++c) {
+		const float32x4_t *src = (float32x4_t *)&in->data[c][start];
+		float32x4_t *dst = (float32x4_t *)&frag->data[c][offset];
+		size_t i = length;
+
+		if (zero_dB) {
+			while (i--) {
+				*dst = vaddq_f32(*dst, *src++);
+				dst++;
+			}
+		} else {
+			const float32x4_t gain = vdupq_n_f32(levels[c]);
+
+			while (i--) {
+				*dst = vmlaq_f32(*dst, *src++, gain);
+				dst++;
+			}
+		}
+	}
+}
+#elif defined(SPLAT_SSE)
 static void splat_frag_mix_floats(struct splat_fragment *frag,
 				  const struct splat_fragment *incoming,
 				  size_t offset, size_t start, size_t length,
@@ -289,7 +321,7 @@ int splat_frag_sample_number(size_t *val, long min_val, long max_val,
 		return -1;
 	}
 
-	tmp_val = min(PyInt_AsLong(obj), max_val);
+	tmp_val = min(PyInt_AS_LONG(obj), max_val);
 	*val = max(tmp_val, min_val);
 
 	return 0;
