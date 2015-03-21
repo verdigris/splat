@@ -156,7 +156,7 @@ static int splat_frag_mix_signals(struct splat_fragment *frag,
 
 		for (j = 0; j < sig.len; ++i, ++j, ++in) {
 			for (c = 0; c < incoming->n_channels; ++c) {
-				double a = dB2lin(sig.vectors[c].data[j]);
+				double a = sig.vectors[c].data[j];
 
 				frag->data[c][i] += incoming->data[c][in] * a;
 			}
@@ -269,13 +269,12 @@ void splat_frag_get_peak(const struct splat_fragment *frag,
 void splat_frag_normalize(struct splat_fragment *frag, double level_dB,
 			  int do_zero)
 {
+	const double level = dB2lin(level_dB);
 	struct splat_peak chan_peak[SPLAT_MAX_CHANNELS];
 	struct splat_peak frag_peak;
 	unsigned c;
-	double level;
 	double gain;
 
-	level = dB2lin(level_dB);
 	splat_frag_get_peak(frag, chan_peak, &frag_peak, do_zero);
 
 	if (do_zero) {
@@ -359,13 +358,9 @@ static int splat_frag_amp_signals(struct splat_fragment *frag,
 	while (splat_signal_next(&sig) == SPLAT_SIGNAL_CONTINUE) {
 		size_t j;
 
-		for (j = 0; j < sig.len; ++i, ++j, ++in) {
-			for (c = 0; c < frag->n_channels; ++c) {
-				double g = dB2lin(sig.vectors[c].data[j]);
-
-				frag->data[c][i] *= g;
-			}
-		}
+		for (j = 0; j < sig.len; ++i, ++j, ++in)
+			for (c = 0; c < frag->n_channels; ++c)
+				frag->data[c][i] *= sig.vectors[c].data[j];
 	}
 
 	splat_signal_free(&sig);

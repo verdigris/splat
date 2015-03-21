@@ -98,9 +98,8 @@ int splat_obj2double(PyObject *obj, double *out)
 
 static void splat_levels_init_float(const struct splat_fragment *frag,
 				    struct splat_levels *levels,
-				    PyObject *levels_obj, double gain_log)
+				    PyObject *levels_obj, double gain)
 {
-	const double gain_lin = dB2lin(gain_log);
 	unsigned c;
 
 	levels->n = frag->n_channels;
@@ -108,7 +107,7 @@ static void splat_levels_init_float(const struct splat_fragment *frag,
 
 	for (c = 0; c < frag->n_channels; ++c) {
 		levels->obj[c] = levels_obj;
-		levels->fl[c] = gain_lin;
+		levels->fl[c] = gain;
 	}
 }
 
@@ -136,10 +135,10 @@ static int splat_levels_init_tuple(const struct splat_fragment *frag,
 		levels->obj[c] = PyTuple_GetItem(levels_obj, c);
 
 		if (levels->all_floats) {
-			double level_dB;
+			double gain;
 
-			if (!splat_obj2double(levels->obj[c], &level_dB))
-				levels->fl[c] = dB2lin(level_dB);
+			if (!splat_obj2double(levels->obj[c], &gain))
+				levels->fl[c] = gain;
 			else
 				levels->all_floats = 0;
 		}
@@ -164,11 +163,11 @@ static void splat_levels_init_signal(const struct splat_fragment *frag,
 static int splat_levels_init(const struct splat_fragment *frag,
 			     struct splat_levels *levels, PyObject *levels_obj)
 {
-	double gain_log;
+	double gain;
 	int res = 0;
 
-	if (!splat_obj2double(levels_obj, &gain_log))
-		splat_levels_init_float(frag, levels, levels_obj, gain_log);
+	if (!splat_obj2double(levels_obj, &gain))
+		splat_levels_init_float(frag, levels, levels_obj, gain);
 	else if (PyTuple_Check(levels_obj))
 		res = splat_levels_init_tuple(frag, levels, levels_obj);
 	else

@@ -30,6 +30,7 @@ import splat.sources
 import splat.interpol
 import splat.scales
 import splat.seq
+from splat import dB2lin as dB
 
 splat.check_version((1, 5))
 
@@ -118,8 +119,7 @@ class FragmentTest(SplatTest):
 
     def test_frag_normalize(self):
         """Fragment.normalize"""
-        levels = -3.0
-        levels_lin = splat.dB2lin(levels)
+        levels = dB(-3.0)
         places = int(self._places / 2)
         small_places = 2
         frag = splat.data.Fragment(channels=1)
@@ -129,7 +129,7 @@ class FragmentTest(SplatTest):
         frag_peak = frag.get_peak()[0]
         peak, avg = (frag_peak[item] for item in ['peak', 'avg'])
         self.assertAlmostEqual(avg, 0.0, small_places)
-        self.assertAlmostEqual(levels_lin, peak, places)
+        self.assertAlmostEqual(levels, peak, places)
         frag.normalize()
         frag_peak = frag.get_peak()[0]
         norm_peak, norm_avg = (frag_peak[item] for item in ['peak', 'avg'])
@@ -137,7 +137,7 @@ class FragmentTest(SplatTest):
         self.assertAlmostEqual(norm_peak, ref_peak, places)
         self.assertAlmostEqual(norm_avg, 0.0, places)
         y = frag[sample_n][0]
-        ref = x * ref_peak / levels_lin
+        ref = x * ref_peak / levels
         self.assertAlmostEqual(y, ref, small_places)
 
     def test_frag_mix(self):
@@ -413,20 +413,21 @@ class GeneratorTest(SplatTest):
             gen = splat.gen.SineGenerator()
             gen.run(0.0, duration, freq, levels=levels)
             self.assert_md5([frag, gen.frag],
-                            '7df0f551461f50296a1dddead24b82f6')        
+                            '1d6c38f467b1bdb5a9c3e8d573e815f4')        
 
     def test_sine(self):
         """sources.sine"""
         freq = 1237.9
         ph = 0.123
+        lvl0 = dB(-0.5)
         frag_float = splat.data.Fragment(duration=1.0)
-        splat.sources.sine(frag_float, -0.5, freq, ph)
+        splat.sources.sine(frag_float, lvl0, freq, ph)
         frag_signal = splat.data.Fragment(duration=1.0)
-        splat.sources.sine(frag_signal, -0.5, freq, lambda x: ph)
+        splat.sources.sine(frag_signal, lvl0, freq, lambda x: ph)
         frag_freq = splat.data.Fragment(duration=1.0, channels=1)
         frag_freq.offset(freq)
         frag_frag = splat.data.Fragment(duration=1.0)
-        splat.sources.sine(frag_frag, -0.5, frag_freq, ph)
+        splat.sources.sine(frag_frag, lvl0, frag_freq, ph)
         self.assert_md5([frag_float, frag_signal, frag_frag],
                         'ebd3117927861068cf77af5ed2e7c5d7')
 
@@ -444,14 +445,15 @@ class GeneratorTest(SplatTest):
     def test_square(self):
         """sources.square"""
         freq = 1237.9
+        lvl0 = dB(-0.5)
         frag_float = splat.data.Fragment(duration=1.0)
-        splat.sources.square(frag_float, -0.5, freq)
+        splat.sources.square(frag_float, lvl0, freq)
         frag_signal = splat.data.Fragment(duration=1.0)
-        splat.sources.square(frag_signal, -0.5, freq, lambda x: 0.0)
+        splat.sources.square(frag_signal, lvl0, freq, lambda x: 0.0)
         frag_freq = splat.data.Fragment(duration=1.0, channels=1)
         frag_freq.offset(freq)
         frag_frag = splat.data.Fragment(duration=1.0)
-        splat.sources.square(frag_frag, -0.5, frag_freq)
+        splat.sources.square(frag_frag, lvl0, frag_freq)
         self.assert_md5([frag_float, frag_signal, frag_frag],
                         '6a6ab2e991baf48a6fe2c1d18700e40e')
 
@@ -468,14 +470,15 @@ class GeneratorTest(SplatTest):
     def test_triangle(self):
         """sources.triangle"""
         freq = 1237.5
+        lvl0 = dB(-0.5)
         frag_float = splat.data.Fragment(duration=1.0)
-        splat.sources.triangle(frag_float, -0.5, freq)
+        splat.sources.triangle(frag_float, lvl0, freq)
         frag_signal = splat.data.Fragment(duration=1.0)
-        splat.sources.triangle(frag_signal, -0.5, freq, lambda x: 0.0)
+        splat.sources.triangle(frag_signal, lvl0, freq, lambda x: 0.0)
         frag_freq = splat.data.Fragment(duration=1.0, channels=1)
         frag_freq.offset(freq)
         frag_frag = splat.data.Fragment(duration=1.0)
-        splat.sources.triangle(frag_frag, -0.5, frag_freq)
+        splat.sources.triangle(frag_frag, lvl0, frag_freq)
         self.assert_md5([frag_float, frag_signal, frag_frag],
                         '4bce3885732ba2f5450e79e42155adaa')
 
@@ -484,7 +487,7 @@ class GeneratorTest(SplatTest):
         gen = splat.gen.TriangleGenerator()
         f = 1000.0
         ratio = 0.567
-        gen.run(0.0, 1.0, f, 0.0, ratio, levels=0.0)
+        gen.run(0.0, 1.0, f, 0.0, ratio)
         nf = gen.frag.rate / f
         x1 = 0.25
         t1 = int(nf * ratio * x1)
@@ -502,18 +505,19 @@ class GeneratorTest(SplatTest):
     def test_overtones(self):
         """sources.overtones"""
         freq = 1237.5
-        ot = [(1.3, 0.0, -2.5), (5.7, 10.0, -12.9)]
-        ot_sig = [(1.3, 0.0, -2.5), (5.7, lambda x: 10.0, -12.9)]
+        lvl0 = dB(-0.5)
+        ot = [(1.3, 0.0, dB(-2.5)), (5.7, 10.0, dB(-12.9))]
+        ot_sig = [(1.3, 0.0, dB(-2.5)), (5.7, lambda x: 10.0, dB(-12.9))]
         frag_float = splat.data.Fragment(duration=1.0)
-        splat.sources.overtones(frag_float, -0.5, freq, ot)
+        splat.sources.overtones(frag_float, lvl0, freq, ot)
         frag_mixed = splat.data.Fragment(duration=1.0)
-        splat.sources.overtones(frag_mixed, -0.5, freq, ot, lambda x: 0.0)
+        splat.sources.overtones(frag_mixed, lvl0, freq, ot, lambda x: 0.0)
         frag_signal = splat.data.Fragment(duration=1.0)
-        splat.sources.overtones(frag_signal, -0.5, freq, ot_sig, lambda x: 0.0)
+        splat.sources.overtones(frag_signal, lvl0, freq, ot_sig, lambda x: 0.0)
         frag_freq = splat.data.Fragment(duration=1.0, channels=1)
         frag_freq.offset(1237.5)
         frag_frag = splat.data.Fragment(duration=1.0)
-        splat.sources.overtones(frag_frag, -0.5, frag_freq, ot)
+        splat.sources.overtones(frag_frag, lvl0, frag_freq, ot)
         self.assert_md5([frag_float, frag_mixed, frag_signal, frag_frag],
                         '8974a1eea0db97af1aa171f531685e9d')
 

@@ -55,11 +55,11 @@ class Generator(object):
         """
         self.frag = frag
         self._filter_chain = FilterChain(filters)
-        self._levels = 0.0
+        self._levels = 1.0
 
     @property
     def levels(self):
-        """Sound levels as a tuple in dB."""
+        """Sound levels as a tuple."""
         return self._levels
 
     @levels.setter
@@ -214,7 +214,7 @@ class OvertonesGenerator(SourceGenerator):
 
     def __init__(self, *args, **kw):
         super(OvertonesGenerator, self).__init__(sources.overtones, *args,**kw)
-        self.overtones = [(1.0, 0.0, 0.0)]
+        self.overtones = [(1.0, 0.0, 1.0)]
 
     def ot_decexp(self, k=1.0, n=24):
         """Set harmonic overtones levels following a decreasing exponential.
@@ -234,10 +234,9 @@ class OvertonesGenerator(SourceGenerator):
         A higher ``k`` value means the function will decrease faster causing
         less high-frequency harmonics.
         """
-        self.overtones = list()
-        for j in (float(i) for i in range(n)):
-            l = _splat.lin2dB(math.exp(-j / k))
-            self.overtones.append(((j + 1), 0.0, l))
+        self.overtones = list(
+            ((j + 1), 0.0, math.exp(-j / k))
+            for j in (float(i) for i in range(n)))
 
     def _run(self, frag, levels, origin, freq, phase=0.0, *args, **kw):
         super(OvertonesGenerator, self).source(frag, levels, freq,
@@ -328,7 +327,6 @@ class ParticlePool(object):
 
         self._start = envelope.start
         self._end = envelope.end
-
 
     @property
     def start(self):

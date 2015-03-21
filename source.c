@@ -78,7 +78,7 @@ int splat_sine_signals(struct splat_fragment *frag, PyObject **levels,
 				const double a =
 					sig.vectors[SIG_AMP + c].data[j];
 
-				frag->data[c][i] = s * dB2lin(a);
+				frag->data[c][i] = s * a;
 			}
 		}
 	}
@@ -169,7 +169,7 @@ int splat_square_signals(struct splat_fragment *frag, PyObject **levels,
 				const double a =
 					sig.vectors[SIG_AMP + c].data[j];
 
-				frag->data[c][i] = dB2lin(a) * s;
+				frag->data[c][i] = a * s;
 			}
 		}
 	}
@@ -264,9 +264,8 @@ int splat_triangle_signals(struct splat_fragment *frag, PyObject **levels,
 			ratio = max(ratio, 0.0);
 
 			for (c = 0; c < frag->n_channels; ++c) {
-				const double l_log =
+				const double l =
 					sig.vectors[SIG_AMP + c].data[j];
-				const double l = dB2lin(l_log);
 				double a, b;
 
 				if (t_rel < ratio) {
@@ -379,7 +378,6 @@ int splat_overtones_mixed(struct splat_fragment *frag, PyObject **levels,
 					double x;
 
 					x = sig.vectors[SIG_AMP + c].data[j];
-					x = dB2lin(x);
 					x *= ot->levels.fl[c];
 					frag->data[c][i] += s * x;
 				}
@@ -474,8 +472,7 @@ int splat_overtones_signal(struct splat_fragment *frag, PyObject **levels,
 
 					x = sig.vectors[sig_amp + c].data[j];
 					y = (otv++)->data[j];
-					frag->data[c][i] +=
-						s * dB2lin(x) * dB2lin(y);
+					frag->data[c][i] += s * x * y;
 				}
 			}
 		}
