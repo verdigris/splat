@@ -106,6 +106,8 @@ extern void splat_frag_normalize(struct splat_fragment *frag, double level_dB,
 				 int do_zero);
 extern int splat_frag_amp(struct splat_fragment *frag,
 			  struct splat_levels *gains);
+extern void splat_frag_lin2dB(struct splat_fragment *frag);
+extern void splat_frag_dB2lin(struct splat_fragment *frag);
 extern int splat_frag_offset(struct splat_fragment *frag, PyObject *offset_obj,
 			     double start);
 

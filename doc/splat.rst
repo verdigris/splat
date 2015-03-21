@@ -14,6 +14,8 @@ Fragment objects
    .. automethod:: splat.data.Fragment.get_peak
    .. automethod:: splat.data.Fragment.normalize
    .. automethod:: splat.data.Fragment.amp
+   .. automethod:: splat.data.Fragment.lin2dB
+   .. automethod:: splat.data.Fragment.dB2lin
    .. automethod:: splat.data.Fragment.offset
    .. automethod:: splat.data.Fragment.resize
    .. autoattribute:: splat.data.Fragment.rate

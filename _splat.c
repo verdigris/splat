@@ -1260,6 +1260,30 @@ static PyObject *Fragment_amp(Fragment *self, PyObject *args)
 	Py_RETURN_NONE;
 }
 
+PyDoc_STRVAR(Fragment_lin2dB_doc,
+"lin2dB()\n"
+"\n"
+"Convert all the samples to dB.\n");
+
+static PyObject *Fragment_lin2dB(Fragment *self, PyObject *_)
+{
+	splat_frag_lin2dB(&self->frag);
+
+	Py_RETURN_NONE;
+}
+
+PyDoc_STRVAR(Fragment_dB2lin_doc,
+"dB2lin()\n"
+"\n"
+"Convert all the samples in dB to linear scale.\n");
+
+static PyObject *Fragment_dB2lin(Fragment *self, PyObject *_)
+{
+	splat_frag_dB2lin(&self->frag);
+
+	Py_RETURN_NONE;
+}
+
 PyDoc_STRVAR(Fragment_offset_doc,
 "offset(value, start=0.0)\n"
 "\n"
@@ -1330,6 +1354,10 @@ static PyMethodDef Fragment_methods[] = {
 	  Fragment_normalize_doc },
 	{ "amp", (PyCFunction)Fragment_amp, METH_VARARGS,
 	  Fragment_amp_doc },
+	{ "lin2dB", (PyCFunction)Fragment_lin2dB, METH_NOARGS,
+	  Fragment_lin2dB_doc },
+	{ "dB2lin", (PyCFunction)Fragment_dB2lin, METH_NOARGS,
+	  Fragment_dB2lin_doc },
 	{ "offset", (PyCFunction)Fragment_offset, METH_VARARGS,
 	  Fragment_offset_doc },
 	{ "resize", (PyCFunction)Fragment_resize, METH_KEYWORDS,

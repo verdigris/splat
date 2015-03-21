@@ -383,6 +383,30 @@ int splat_frag_amp(struct splat_fragment *frag, struct splat_levels *gains)
 	return 0;
 }
 
+void splat_frag_lin2dB(struct splat_fragment *frag)
+{
+	unsigned c;
+
+	for (c = 0; c < frag->n_channels; ++c) {
+		size_t i;
+
+		for (i = 0; i < frag->length; ++i)
+			frag->data[c][i] = lin2dB(frag->data[c][i]);
+	}
+}
+
+void splat_frag_dB2lin(struct splat_fragment *frag)
+{
+	unsigned c;
+
+	for (c = 0; c < frag->n_channels; ++c) {
+		size_t i;
+
+		for (i = 0; i < frag->length; ++i)
+			frag->data[c][i] = dB2lin(frag->data[c][i]);
+	}
+}
+
 int splat_frag_offset(struct splat_fragment *frag, PyObject *offset_obj,
 		      double start)
 {
