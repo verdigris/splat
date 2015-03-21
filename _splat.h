@@ -163,10 +163,11 @@ struct splat_spline {
 	double k0;
 	double start;
 	double end;
+	int db;
 };
 
 extern struct splat_spline *splat_spline_from_obj(PyObject *obj);
-extern double splat_spline_tuple_value(PyObject *poly, double x);
+extern double splat_spline_tuple_value(PyObject *poly, double x, int db);
 extern PyObject *splat_spline_find_poly(PyObject *spline, double x,
 					double *end);
 

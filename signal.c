@@ -69,6 +69,7 @@ static int splat_signal_spline(struct splat_signal *s, struct splat_vector *v)
 
 	while (j--) {
 		const double x = i++ / rate;
+		double y;
 
 		if ((x > end) || (poly == NULL)) {
 			poly = splat_spline_find_poly(spline->pols, x, &end);
@@ -80,7 +81,9 @@ static int splat_signal_spline(struct splat_signal *s, struct splat_vector *v)
 			}
 		}
 
-		*out++ = splat_spline_tuple_value(poly, x) * k0;
+		y = splat_spline_tuple_value(poly, x, spline->db);
+
+		*out++ = y * k0;
 	}
 
 	return 0;

@@ -20,7 +20,7 @@
 
 #include "_splat.h"
 
-double splat_spline_tuple_value(PyObject *poly, double x)
+double splat_spline_tuple_value(PyObject *poly, double x, int db)
 {
 	Py_ssize_t i;
 	double value = 0.0;
@@ -33,6 +33,9 @@ double splat_spline_tuple_value(PyObject *poly, double x)
 		value += k * x_pow;
 		x_pow *= x;
 	}
+
+	if (db)
+		value = dB2lin(value);
 
 	return value;
 }

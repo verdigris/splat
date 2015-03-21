@@ -55,10 +55,10 @@ class Polynomial(object):
         coefs = (y0,) + tuple((k / (i + 1)) for i, k in enumerate(self.coefs))
         return Polynomial(coefs)
 
-    def value(self, x):
+    def value(self, x, dB2lin=False):
         """Return the value of the polynomial for the given ``x`` input
         value."""
-        return _splat.poly_value(self.coefs, x)
+        return _splat.poly_value(self.coefs, x, dB2lin)
 
 
 class PolyMatrix(object):
@@ -145,15 +145,16 @@ class PolyList(object):
     segments do not need to be contiguous, although looking for a value outside
     of the defined ranges will cause an error."""
 
-    def __init__(self, pols, scale=1.0):
+    def __init__(self, pols, scale=1.0, dB2lin=False):
         """The list of polynomial is built using the sequence of 3-tuples
         ``pols``.  The ``scale`` argument is a convenient way to use the same
         input points and independently adjust the scale of the values, which
         get multiplied by this scale coefficient (1.0 by default)."""
         self._pols = pols
         self._pols_coefs = list((x0, x1, pol.coefs) for x0, x1, pol in pols)
-        self._signal = _splat.Spline(self._pols_coefs, scale)
+        self._signal = _splat.Spline(self._pols_coefs, scale, dB2lin)
         self._scale = scale
+        self._dB2lin = dB2lin
 
     def __getitem__(self, i):
         return self._pols.__getitem__(i)
@@ -222,7 +223,10 @@ class PolyList(object):
     def value(self, x):
         """Return the spline value for a given ``x`` input value, or ``None``
         if undefined."""
-        return _splat.spline_value(self._pols_coefs, x) * self.scale
+        y = _splat.spline_value(self._pols_coefs, x, self._dB2lin)
+        if y is None:
+            return None
+        return y * self.scale
 
     def slices(self, y0, xmin=None, xmax=None, xstep=0.001):
         """Get slices of the a given ``y0`` value.
@@ -265,7 +269,7 @@ class PolyList(object):
         return slices
 
 
-def spline(pts, scale=1.0, n=2):
+def spline(pts, scale=1.0, n=2, dB2lin=False):
     """Build a spline from a series of points and slope coordinates.
 
     For a given list of ``(x, y)`` or ``(x, y, d)`` coordinates, where ``d`` is
@@ -309,7 +313,7 @@ def spline(pts, scale=1.0, n=2):
     if n > 2:
         pols.append((x1, pts[-1][0], m.poly))
 
-    return PolyList(pols, scale)
+    return PolyList(pols, scale, dB2lin)
 
 
 def freqmod(pts):

@@ -220,9 +220,10 @@ static int Spline_init(Spline *self, PyObject *args)
 {
 	PyObject *poly;
 	struct splat_spline *spline = &self->spline;
+	PyObject *db;
 
-	if (!PyArg_ParseTuple(args, "O!d", &PyList_Type, &spline->pols,
-			      &spline->k0))
+	if (!PyArg_ParseTuple(args, "O!dO!", &PyList_Type, &spline->pols,
+			      &spline->k0, &PyBool_Type, &db))
 		return -1;
 
 	Py_INCREF(spline->pols);
@@ -232,6 +233,8 @@ static int Spline_init(Spline *self, PyObject *args)
 
 	poly = PyList_GET_ITEM(spline->pols, PyList_GET_SIZE(spline->pols)-1);
 	spline->end = PyFloat_AS_DOUBLE(PyTuple_GET_ITEM(poly, 1));
+
+	spline->db = (db == Py_True) ? 1 : 0;
 
 	self->init = 1;
 
@@ -1928,29 +1931,40 @@ static PyObject *splat_poly_value(PyObject *self, PyObject *args)
 {
 	PyObject *coefs;
 	double x;
+	PyObject *db_obj;
 
-	if (!PyArg_ParseTuple(args, "O!d", &PyTuple_Type, &coefs, &x))
+	int db;
+
+	if (!PyArg_ParseTuple(args, "O!dO!", &PyTuple_Type, &coefs, &x,
+			      &PyBool_Type, &db_obj))
 		return NULL;
 
-	return PyFloat_FromDouble(splat_spline_tuple_value(coefs, x));
+	db = (db_obj == Py_True) ? 1 : 0;
+
+	return PyFloat_FromDouble(splat_spline_tuple_value(coefs, x, db));
 }
 
 static PyObject *splat_spline_value(PyObject *self, PyObject *args)
 {
 	PyObject *spline;
 	double x;
+	PyObject *db_obj;
 
 	PyObject *poly;
+	int db;
 
-	if (!PyArg_ParseTuple(args, "O!d", &PyList_Type, &spline, &x))
+	if (!PyArg_ParseTuple(args, "O!dO!", &PyList_Type, &spline, &x,
+			      &PyBool_Type, &db_obj))
 		return NULL;
 
 	poly = splat_spline_find_poly(spline, x, NULL);
 
 	if (poly == NULL)
-		return NULL;
+		Py_RETURN_NONE;
 
-	return PyFloat_FromDouble(splat_spline_tuple_value(poly, x));
+	db = (db_obj == Py_True) ? 1 : 0;
+
+	return PyFloat_FromDouble(splat_spline_tuple_value(poly, x, db));
 }
 
 static PyMethodDef splat_methods[] = {
