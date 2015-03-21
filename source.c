@@ -28,6 +28,12 @@ static __m128 splat_sine_sse(__m128 x);
 
 /* -- sine source -- */
 
+enum {
+	SIG_SINE_FREQ = 0,
+	SIG_SINE_PHASE,
+	SIG_SINE_AMP,
+} splat_sine_signal;
+
 #if defined(SPLAT_NEON)
 void splat_sine_floats(struct splat_fragment *frag, const double *levels,
 		       double freq, double phase)
@@ -109,50 +115,95 @@ void splat_sine_floats(struct splat_fragment *frag, const double *levels,
 }
 #endif
 
-int splat_sine_signals(struct splat_fragment *frag, PyObject **levels,
-		       PyObject *freq, PyObject *phase, double origin)
+#if defined(SPLAT_SSE)
+static void _splat_sine_signals(struct splat_fragment *frag,
+				struct splat_signal *sig, double origin)
 {
-	enum {
-		SIG_FREQ = 0,
-		SIG_PHASE,
-		SIG_AMP,
-	};
-	static const double k = 2 * M_PI;
-	struct splat_signal sig;
-	PyObject *signals[SIG_AMP + SPLAT_MAX_CHANNELS];
+	const __m128 k = _mm_set1_ps(2.0 * M_PI);
+	const __m128 rateq = _mm_set1_ps(frag->rate);
+	const __m128 originq = _mm_set1_ps(origin);
+	__m128 *out[SPLAT_MAX_CHANNELS];
 	unsigned c;
-	size_t i;
-
-	signals[SIG_FREQ] = freq;
-	signals[SIG_PHASE] = phase;
+	size_t i = 0;
 
 	for (c = 0; c < frag->n_channels; ++c)
-		signals[SIG_AMP + c] = levels[c];
+		out[c] = (__m128 *)frag->data[c];
 
-	if (splat_signal_init(&sig, frag->length, (origin * frag->rate),
-			      signals, (SIG_AMP + frag->n_channels),
-			      frag->rate))
-		return -1;
-
-	i = 0;
-
-	while (splat_signal_next(&sig) == SPLAT_SIGNAL_CONTINUE) {
+	while (splat_signal_next(sig) == SPLAT_SIGNAL_CONTINUE) {
+		const __m128 *fq = (__m128 *)sig->vectors[SIG_SINE_FREQ].data;
+		const __m128 *phq = (__m128 *)sig->vectors[SIG_SINE_PHASE].data;
+		const __m128 *aq[SPLAT_MAX_CHANNELS];
 		size_t j;
 
-		for (j = 0; j < sig.len; ++i, ++j) {
-			const double f = sig.vectors[SIG_FREQ].data[j];
-			const double ph = sig.vectors[SIG_PHASE].data[j];
+		for (c = 0; c < frag->n_channels; ++c)
+			aq[c] = (__m128 *)sig->vectors[SIG_SINE_AMP + c].data;
+
+		for (j = 0; j < sig->len; i += 4, j += 4) {
+			__m128 x;
+			__m128 f;
+			__m128 y;
+
+			x = _mm_set1_ps((float)i);
+			x = _mm_add_ps(x, splat_sse_inc);
+			x = _mm_div_ps(x, rateq);
+			x = _mm_add_ps(x, *phq++);
+			x = _mm_add_ps(x, originq);
+			f = _mm_mul_ps(*fq++, k);
+			x = _mm_mul_ps(x, f);
+			y = splat_sine_sse(x);
+
+			for (c = 0; c < frag->n_channels; ++c)
+				*out[c]++ = _mm_mul_ps(y, *aq[c]++);
+		}
+	}
+}
+#else
+static void _splat_sine_signals(struct splat_fragment *frag,
+				struct splat_signal *sig, double origin)
+{
+	static const double k = 2.0 * M_PI;
+	size_t i = 0;
+
+	while (splat_signal_next(sig) == SPLAT_SIGNAL_CONTINUE) {
+		size_t j;
+
+		for (j = 0; j < sig->len; ++i, ++j) {
+			const double f = sig->vectors[SIG_SINE_FREQ].data[j];
+			const double ph = sig->vectors[SIG_SINE_PHASE].data[j];
 			const double t = ph + origin + (double)i / frag->rate;
 			const double s = sin(k * f * t);
+			unsigned c;
 
 			for (c = 0; c < frag->n_channels; ++c) {
 				const double a =
-					sig.vectors[SIG_AMP + c].data[j];
+					sig->vectors[SIG_SINE_AMP + c].data[j];
 
 				frag->data[c][i] = s * a;
 			}
 		}
 	}
+}
+#endif
+
+int splat_sine_signals(struct splat_fragment *frag, PyObject **levels,
+		       PyObject *freq, PyObject *phase, double origin)
+{
+	struct splat_signal sig;
+	PyObject *signals[SIG_SINE_AMP + SPLAT_MAX_CHANNELS];
+	unsigned c;
+
+	signals[SIG_SINE_FREQ] = freq;
+	signals[SIG_SINE_PHASE] = phase;
+
+	for (c = 0; c < frag->n_channels; ++c)
+		signals[SIG_SINE_AMP + c] = levels[c];
+
+	if (splat_signal_init(&sig, frag->length, (origin * frag->rate),
+			      signals, (SIG_SINE_AMP + frag->n_channels),
+			      frag->rate))
+		return -1;
+
+	_splat_sine_signals(frag, &sig, origin);
 
 	splat_signal_free(&sig);
 
