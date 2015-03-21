@@ -65,6 +65,48 @@ def main(argv):
             delta_dB = 'infinity'
         print(t, y1, y2, delta_dB)
 
+    # -------------------------------------------------------------------------
+
+    duration = 1.0
+    sig = splat.data.Fragment(channels=1)
+    splat.gen.TriangleGenerator(frag=sig).run(0.0, duration, 12.0, levels=0.5)
+    sig.offset(0.5)
+
+    mod = splat.data.Fragment(channels=1)
+    splat.gen.TriangleGenerator(frag=mod).run(0.0, duration, 4.0, levels=0.002)
+    mod.offset(0.5)
+
+    frag = splat.data.Fragment()
+    splat.gen.SineGenerator(frag=frag).run(0.0, duration, 456.0, levels=sig,
+                                           phase=lambda x: math.sin(x))
+    frag.save('sine-signal-{}.wav'.format(splat.SAMPLE_WIDTH), normalize=False)
+
+    frag = splat.data.Fragment()
+    gen = splat.gen.OvertonesGenerator(frag=frag)
+    gen.overtones = overtones
+    gen.run(0.0, duration, 456.0, levels=sig)
+    frag.save('overtones-mixed1-{}.wav'.format(splat.SAMPLE_WIDTH),
+              normalize=False)
+
+    frag = splat.data.Fragment()
+    gen = splat.gen.OvertonesGenerator(frag=frag)
+    gen.overtones = overtones
+    gen.run(0.0, duration, 456.0, levels=sig, phase=mod)
+    frag.save('overtones-mixed2-{}.wav'.format(splat.SAMPLE_WIDTH),
+              normalize=False)
+
+    sig2 = splat.data.Fragment(channels=1)
+    splat.gen.TriangleGenerator(frag=sig2).run(0.0, duration, 1.8, levels=0.1)
+    sig2.offset(-sig2.get_peak()[0]['min'])
+    overtones.append((0.54, 0.0, sig2))
+
+    frag = splat.data.Fragment()
+    gen = splat.gen.OvertonesGenerator(frag=frag)
+    gen.overtones = overtones
+    gen.run(0.0, duration, 456.0, levels=sig, phase=mod)
+    frag.save('overtones-signal-{}.wav'.format(splat.SAMPLE_WIDTH),
+              normalize=False)
+
     return True
 
 if __name__ == '__main__':
