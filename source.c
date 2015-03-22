@@ -409,6 +409,12 @@ int splat_triangle_signals(struct splat_fragment *frag, PyObject **levels,
 
 /* -- overtones source -- */
 
+enum {
+	SIG_OT_FREQ = 0,
+	SIG_OT_PHASE = 1,
+	SIG_OT_AMP = 2,
+};
+
 #if defined(SPLAT_NEON)
 static void _splat_overtones_float(struct splat_fragment *frag,
 				   double freq, double phase,
@@ -556,54 +562,117 @@ void splat_overtones_float(struct splat_fragment *frag, const double *levels,
 			for (c = 0; c < frag->n_channels; ++c)
 				ot->levels.fl[c] *= levels[c];
 		}
+
+#if defined(SPLAT_NEON)
+		for (c = 0; c < frag->n_channels; ++c)
+			ot->levels.flq[c] = vdupq_n_f32(ot->levels.fl[c]);
+#elif defined(SPLAT_SSE)
+		for (c = 0; c < frag->n_channels; ++c)
+			ot->levels.flq[c] = _mm_set1_ps(ot->levels.fl[c]);
+#endif
 	}
 
 	_splat_overtones_float(frag, freq, phase, overtones, ot_end);
 }
 
-int splat_overtones_mixed(struct splat_fragment *frag, PyObject **levels,
-			  PyObject *freq, PyObject *phase,
-			  struct splat_overtone *overtones, Py_ssize_t n,
-			  double origin)
+#if defined(SPLAT_SSE)
+static void _splat_overtones_mixed(struct splat_fragment *frag,
+				   struct splat_signal *sig,
+				   const struct splat_overtone *overtones,
+				   size_t n, double origin)
 {
-	enum {
-		SIG_FREQ = 0,
-		SIG_PHASE,
-		SIG_AMP,
-	};
-	const double k = 2 * M_PI;
-	const double half_rate = frag->rate / 2;
-	PyObject *signals[SIG_AMP + SPLAT_MAX_CHANNELS];
-	struct splat_signal sig;
-	struct splat_overtone *ot;
-	const struct splat_overtone *ot_end = &overtones[n];
+	const __m128 k = _mm_set1_ps(2.0 * M_PI);
+	const __m128 rateq = _mm_set1_ps((float)frag->rate);
+	const __m128 half_rate = _mm_set1_ps(frag->rate / 2.0);
+	const __m128 originq = _mm_set1_ps(origin);
+	const struct splat_overtone * const ot_end = &overtones[n];
+	__m128 *out[SPLAT_MAX_CHANNELS];
+	size_t i = 0;
 	unsigned c;
-	size_t i;
-
-	signals[SIG_FREQ] = freq;
-	signals[SIG_PHASE] = phase;
 
 	for (c = 0; c < frag->n_channels; ++c)
-		signals[SIG_AMP + c] = levels[c];
+		out[c] = (__m128 *)frag->data[c];
 
-	if (splat_signal_init(&sig, frag->length, (origin * frag->rate),
-			      signals, (SIG_AMP + frag->n_channels),
-			      frag->rate))
-		return -1;
-
-	i = 0;
-
-	while (splat_signal_next(&sig) == SPLAT_SIGNAL_CONTINUE) {
+	while (splat_signal_next(sig) == SPLAT_SIGNAL_CONTINUE) {
+		const __m128 *fq = (__m128 *)sig->vectors[SIG_OT_FREQ].data;
+		const __m128 *phq = (__m128 *)sig->vectors[SIG_OT_PHASE].data;
+		const __m128 *amq[SPLAT_MAX_CHANNELS];
 		size_t j;
 
-		for (j = 0; j < sig.len; ++i, ++j) {
-			const double f = sig.vectors[SIG_FREQ].data[j];
+		for (c = 0; c < frag->n_channels; ++c)
+			amq[c] = (__m128 *)sig->vectors[SIG_OT_AMP + c].data;
+
+		for (j = 0; j < sig->len; i +=4, j += 4) {
+			const struct splat_overtone *ot;
+			const __m128 f = *fq++;
+			const __m128 max_ratio = _mm_div_ps(half_rate, f);
+			const __m128 fk = _mm_mul_ps(f, k);
+			const __m128 pho = _mm_add_ps(*phq++, originq);
+			__m128 aq[SPLAT_MAX_CHANNELS];
+			__m128 y[SPLAT_MAX_CHANNELS];
+			__m128 x0;
+
+			for (c = 0; c < frag->n_channels; ++c) {
+				aq[c] = *amq[c]++;
+				y[c] = _mm_setzero_ps();
+			}
+
+			x0 = _mm_set1_ps((float)i);
+			x0 = _mm_add_ps(x0, splat_sse_inc);
+			x0 = _mm_div_ps(x0, rateq);
+			x0 = _mm_add_ps(x0, pho);
+
+			for (ot = overtones; ot != ot_end; ++ot) {
+				const __m128 *lvlq = ot->levels.flq;
+				__m128 x;
+				__m128 yr;
+				__m128 clip;
+
+				clip = _mm_cmplt_ps(ot->fl_ratioq, max_ratio);
+				x = _mm_add_ps(x0, ot->fl_phaseq);
+				x = _mm_mul_ps(x, ot->fl_ratioq);
+				x = _mm_mul_ps(x, fk);
+				yr = splat_sine_sse(x);
+
+				for (c = 0; c < frag->n_channels; ++c) {
+					__m128 y0;
+
+					y0 = _mm_mul_ps(yr, aq[c]);
+					y0 = _mm_mul_ps(y0, lvlq[c]);
+					y0 = _mm_and_ps(y0, clip);
+					y[c] = _mm_add_ps(y[c], y0);
+				}
+			}
+
+			for (c = 0; c < frag->n_channels; ++c)
+				*out[c]++ = y[c];
+		}
+	}
+}
+#else
+static void _splat_overtones_mixed(struct splat_fragment *frag,
+				   struct splat_signal *sig,
+				   const struct splat_overtone *overtones,
+				   size_t n, double origin)
+{
+	const double k = 2 * M_PI;
+	const double half_rate = frag->rate / 2;
+	const struct splat_overtone * const ot_end = &overtones[n];
+	size_t i = 0;
+
+	while (splat_signal_next(sig) == SPLAT_SIGNAL_CONTINUE) {
+		size_t j;
+
+		for (j = 0; j < sig->len; ++i, ++j) {
+			const struct splat_overtone *ot;
+			const double f = sig->vectors[SIG_OT_FREQ].data[j];
 			const double max_ratio = half_rate / f;
 			const double m = k * f;
-			const double ph = sig.vectors[SIG_PHASE].data[j];
+			const double ph = sig->vectors[SIG_OT_PHASE].data[j];
 			const double t = ph + origin + (double)i / frag->rate;
 
 			for (ot = overtones; ot != ot_end; ++ot) {
+				unsigned c;
 				double s;
 
 				if (ot->fl_ratio >= max_ratio)
@@ -614,45 +683,186 @@ int splat_overtones_mixed(struct splat_fragment *frag, PyObject **levels,
 				for (c = 0; c < frag->n_channels; ++c) {
 					double x;
 
-					x = sig.vectors[SIG_AMP + c].data[j];
+					x = sig->vectors[SIG_OT_AMP+c].data[j];
 					x *= ot->levels.fl[c];
 					frag->data[c][i] += s * x;
 				}
 			}
 		}
 	}
+}
+#endif
+
+int splat_overtones_mixed(struct splat_fragment *frag, PyObject **levels,
+			  PyObject *freq, PyObject *phase,
+			  struct splat_overtone *overtones, Py_ssize_t n,
+			  double origin)
+{
+	PyObject *signals[SIG_OT_AMP + SPLAT_MAX_CHANNELS];
+	struct splat_signal sig;
+	unsigned c;
+
+	signals[SIG_OT_FREQ] = freq;
+	signals[SIG_OT_PHASE] = phase;
+
+	for (c = 0; c < frag->n_channels; ++c)
+		signals[SIG_OT_AMP + c] = levels[c];
+
+	if (splat_signal_init(&sig, frag->length, (origin * frag->rate),
+			      signals, (SIG_OT_AMP + frag->n_channels),
+			      frag->rate))
+		return -1;
+
+	_splat_overtones_mixed(frag, &sig, overtones, n, origin);
 
 	splat_signal_free(&sig);
 
 	return (sig.stat == SPLAT_SIGNAL_ERROR) ? -1 : 0;
 }
 
+#if defined(SPLAT_SSE)
+static void _splat_overtones_signal(struct splat_fragment *frag,
+				    struct splat_signal *sig,
+				    const struct splat_overtone *overtones,
+				    size_t n, double origin)
+{
+	const __m128 k = _mm_set1_ps(2.0 * M_PI);
+	const __m128 rateq = _mm_set1_ps(frag->rate);
+	const __m128 half_rate = _mm_set1_ps(frag->rate / 2.0);
+	const __m128 originq = _mm_set1_ps(origin);
+	const struct splat_overtone * const ot_end = &overtones[n];
+	const size_t sig_ot = SIG_OT_AMP + frag->n_channels;
+	__m128 *out[SPLAT_MAX_CHANNELS];
+	size_t i = 0;
+	unsigned c;
+
+	for (c = 0; c < frag->n_channels; ++c)
+		out[c] = (__m128 *)frag->data[c];
+
+	while (splat_signal_next(sig) == SPLAT_SIGNAL_CONTINUE) {
+		const __m128 *fq = (__m128 *)sig->vectors[SIG_OT_FREQ].data;
+		const __m128 *phq = (__m128 *)sig->vectors[SIG_OT_PHASE].data;
+		const __m128 *amq[SPLAT_MAX_CHANNELS];
+		size_t j;
+
+		for (c = 0; c < frag->n_channels; ++c)
+			amq[c] = (__m128 *)sig->vectors[SIG_OT_AMP + c].data;
+
+		for (j = 0; j < sig->len; i +=4, j += 4) {
+			const struct splat_vector *otv = &sig->vectors[sig_ot];
+			const struct splat_overtone *ot;
+			const __m128 f = *fq++;
+			const __m128 max_ratio = _mm_div_ps(half_rate, f);
+			const __m128 fk = _mm_mul_ps(f, k);
+			const __m128 pho = _mm_add_ps(*phq++, originq);
+			__m128 aq[SPLAT_MAX_CHANNELS];
+			__m128 y[SPLAT_MAX_CHANNELS];
+			__m128 x0;
+
+			for (c = 0; c < frag->n_channels; ++c) {
+				aq[c] = *amq[c]++;
+				y[c] = _mm_setzero_ps();
+			}
+
+			x0 = _mm_set1_ps((float)i);
+			x0 = _mm_add_ps(x0, splat_sse_inc);
+			x0 = _mm_div_ps(x0, rateq);
+			x0 = _mm_add_ps(x0, pho);
+
+			for (ot = overtones; ot != ot_end; ++ot) {
+				__m128 ot_r = _mm_load_ps(&(otv++)->data[j]);
+				__m128 ot_ph = _mm_load_ps(&(otv++)->data[j]);
+				__m128 clip;
+				__m128 x;
+				__m128 yr;
+
+				clip = _mm_cmplt_ps(ot_r, max_ratio);
+				x = _mm_add_ps(x0, ot_ph);
+				x = _mm_mul_ps(x, ot_r);
+				x = _mm_mul_ps(x, fk);
+				yr = splat_sine_sse(x);
+
+				for (c = 0; c < frag->n_channels; ++c) {
+					__m128 g;
+					__m128 y0;
+
+					g = _mm_load_ps(&(otv++)->data[j]);
+					y0 = _mm_mul_ps(yr, aq[c]);
+					y0 = _mm_mul_ps(y0, g);
+					y0 = _mm_and_ps(y0, clip);
+					y[c] = _mm_add_ps(y[c], y0);
+				}
+			}
+
+			for (c = 0; c < frag->n_channels; ++c)
+				*out[c]++ = y[c];
+		}
+	}
+}
+#else
+static void _splat_overtones_signal(struct splat_fragment *frag,
+				    struct splat_signal *sig,
+				    const struct splat_overtone *overtones,
+				    size_t n, double origin)
+{
+	const double k = 2 * M_PI;
+	const double half_rate = frag->rate / 2;
+	const struct splat_overtone * const ot_end = &overtones[n];
+	const size_t sig_ot = SIG_OT_AMP + frag->n_channels;
+	size_t i = 0;
+
+	while (splat_signal_next(sig) == SPLAT_SIGNAL_CONTINUE) {
+		size_t j;
+
+		for (j = 0; j < sig->len; ++i, ++j) {
+			const double f = sig->vectors[SIG_OT_FREQ].data[j];
+			const double max_ratio = half_rate / f;
+			const double ph = sig->vectors[SIG_OT_PHASE].data[j];
+			const double t = ph + origin + (double)i / frag->rate;
+			const double m = k * f;
+			const struct splat_vector *otv = &sig->vectors[sig_ot];
+			const struct splat_overtone *ot;
+
+			for (ot = overtones; ot != ot_end; ++ot) {
+				const double ratio = (otv++)->data[j];
+				const double ot_ph = (otv++)->data[j];
+				unsigned c;
+				double s;
+
+				if (ratio >= max_ratio) {
+					otv += frag->n_channels;
+					continue;
+				}
+
+				s = sin(m * ratio * (t + ot_ph));
+
+				for (c = 0; c < frag->n_channels; ++c) {
+					double g;
+
+					g = sig->vectors[SIG_OT_AMP+c].data[j];
+					g *= (otv++)->data[j];
+					frag->data[c][i] += s * g;
+				}
+			}
+		}
+	}
+}
+#endif
+
 int splat_overtones_signal(struct splat_fragment *frag, PyObject **levels,
 			   PyObject *freq, PyObject *phase,
 			   struct splat_overtone *overtones, Py_ssize_t n,
 			   double origin)
 {
-	enum {
-		SIG_FREQ = 0,
-		SIG_PHASE = 1,
-		SIG_AMP = 2,
-		SIG_OT = 2 + SPLAT_MAX_CHANNELS,
-	};
-	const double k = 2 * M_PI;
-	const double half_rate = frag->rate / 2;
 	PyObject **signals;
 	struct splat_signal sig;
-	struct splat_overtone *ot;
-	const struct splat_overtone *ot_end = &overtones[n];
-	static const size_t sig_freq = 0;
-	static const size_t sig_phase = 1;
-	static const size_t sig_amp = 2;
-	const size_t sig_ot = sig_amp + frag->n_channels;
+	const struct splat_overtone *ot;
+	const size_t sig_ot = SIG_OT_AMP + frag->n_channels;
+	const struct splat_overtone * const ot_end = &overtones[n];
 	PyObject **sig_ot_it;
 	/* for each overtone: ratio, phase and levels */
 	const size_t sig_n = sig_ot + (n * (2 + frag->n_channels));
 	unsigned c;
-	size_t i;
 
 	signals = PyMem_Malloc(sig_n * sizeof(PyObject *));
 
@@ -661,11 +871,11 @@ int splat_overtones_signal(struct splat_fragment *frag, PyObject **levels,
 		return -1;
 	}
 
-	signals[sig_freq] = freq;
-	signals[sig_phase] = phase;
+	signals[SIG_OT_FREQ] = freq;
+	signals[SIG_OT_PHASE] = phase;
 
 	for (c = 0; c < frag->n_channels; ++c)
-		signals[sig_amp + c] = levels[c];
+		signals[SIG_OT_AMP + c] = levels[c];
 
 	for (sig_ot_it = &signals[sig_ot], ot = overtones; ot != ot_end; ++ot){
 		*sig_ot_it++ = ot->ratio;
@@ -679,41 +889,7 @@ int splat_overtones_signal(struct splat_fragment *frag, PyObject **levels,
 			      signals, sig_n, frag->rate))
 		return -1;
 
-	i = 0;
-
-	while (splat_signal_next(&sig) == SPLAT_SIGNAL_CONTINUE) {
-		size_t j;
-
-		for (j = 0; j < sig.len; ++i, ++j) {
-			const double f = sig.vectors[sig_freq].data[j];
-			const double max_ratio = half_rate / f;
-			const double ph = sig.vectors[sig_phase].data[j];
-			const double t = ph + origin + (double)i / frag->rate;
-			const double m = k * f;
-			const struct splat_vector *otv = &sig.vectors[sig_ot];
-
-			for (ot = overtones; ot != ot_end; ++ot) {
-				const double ratio = (otv++)->data[j];
-				const double ot_ph = (otv++)->data[j];
-				double s;
-
-				if (ratio >= max_ratio) {
-					otv += frag->n_channels;
-					continue;
-				}
-
-				s = sin(m * ratio * (t + ot_ph));
-
-				for (c = 0; c < frag->n_channels; ++c) {
-					double x, y;
-
-					x = sig.vectors[sig_amp + c].data[j];
-					y = (otv++)->data[j];
-					frag->data[c][i] += s * x * y;
-				}
-			}
-		}
-	}
+	_splat_overtones_signal(frag, &sig, overtones, n, origin);
 
 	splat_signal_free(&sig);
 	PyMem_Free(signals);
