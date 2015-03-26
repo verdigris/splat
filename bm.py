@@ -18,6 +18,7 @@
 import sys
 import argparse
 import benchmark
+import copy
 import _splat
 import splat
 import splat.data
@@ -84,8 +85,14 @@ class Overtones(benchmark.Benchmark, GenMixin):
 
     def setUp(self):
         super(Overtones, self).setUp()
-        self.ot = [(1.0, 0.0, 0.0), (2.5, 0.0, -12.0)]
-        self.sig_ot = [(1.0, 0.0, lambda x: 0.0), (2.5, 0.0, lambda x: -12.0)]
+        tmp_gen = splat.gen.OvertonesGenerator()
+        tmp_gen.ot_decexp(n=6)
+        self.ot = tmp_gen.overtones
+        self.sig_ot = copy.copy(self.ot)
+        mod = splat.data.Fragment(channels=1)
+        splat.gen.TriangleGenerator(frag=mod).run(
+            0.0, self.frag.duration, 6.5, 12.0)
+        self.sig_ot += [(2.3, 0.0, mod)]
 
     def test_source_single(self):
         super(Overtones, self).test_source([(1.0, 0.0, 0.0)])
