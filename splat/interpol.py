@@ -159,6 +159,10 @@ class PolyList(object):
         return self._pols.__getitem__(i)
 
     @property
+    def pols(self):
+        return copy.copy(self._pols)
+
+    @property
     def scale(self):
         """Scale factor for all returned values."""
         return self._scale
@@ -183,6 +187,11 @@ class PolyList(object):
     def signal(self):
         """Object with optimised signal implementation."""
         return self._signal
+
+    def points(self):
+        xlist = list(p[0] for p in self)
+        xlist.append(self[-1][1])
+        return list((x, self.value(x)) for x in xlist)
 
     def integral(self, y0=0.0):
         """Get a new PolyList object with the integral of this one.

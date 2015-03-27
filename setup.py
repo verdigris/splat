@@ -2,9 +2,9 @@ import sys
 import os.path
 try:
     import setuptools
-    from setuptool import setup, Extension
 except ImportError:
-    from distutils.core import setup, Extension
+    import distutils.core as setuptools
+from setuptools import setup, Extension
 
 # The manual needs to be generated with Sphinx but is only required when
 # running the sdist command.
@@ -21,7 +21,10 @@ setup(name='verdigris.mu-splat', version='1.5',
       author_email="guillaume@mangoz.org",
       url="https://github.com/verdigris/splat",
       py_modules=['test', 'example', 'dew_drop'],
-      ext_modules=[Extension('_splat', ['_splat.c'])],
+      ext_modules=[Extension('_splat',
+                             sources=['_splat.c', 'signal.c', 'spline.c',
+                                      'frag.c', 'source.c', 'filter.c'],
+                             depends=['_splat.h'])],
       packages=['splat'],
       data_files=data_files,
       long_description=open('README.rst', 'rb').read(),

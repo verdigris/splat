@@ -16,6 +16,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import sys
+import argparse
 import benchmark
 import _splat
 import splat
@@ -144,6 +145,10 @@ class Spline(benchmark.Benchmark, RefMixin):
 
 
 if __name__ == '__main__':
-    benchmark.main(format="reST", numberFormat="%.4g", each=15,
+    parser = argparse.ArgumentParser("Standard Splat benchmark.")
+    parser.add_argument('--iterations', type=int, default=15,
+                        help="number of iterations")
+    args = parser.parse_args(sys.argv[1:])
+    benchmark.main(format="reST", numberFormat="%.4g", each=args.iterations,
                    prefix='run_test_')
     sys.exit(0)

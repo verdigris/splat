@@ -18,17 +18,9 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <Python.h>
-#include <math.h>
-
-/* Set to 1 to use 4xfloat vectors (SSE) */
-#define USE_V4SF 0
+#include "_splat.h"
 
 #define BASE_TYPE_FLAGS (Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE)
-#define MAX_CHANNELS 16
-
-#define lin2dB(level) (20 * log10(level))
-#define dB2lin(dB) (pow10((dB) / 20))
 
 /* Use PP_NARG to get the number of arguments in __VA_ARGS__ */
 #define PP_NARG(...) \
@@ -52,38 +44,11 @@
          19,18,17,16,15,14,13,12,11,10, \
          9,8,7,6,5,4,3,2,1,0
 
-#ifndef min
-# define min(_a, _b) (((_a) < (_b)) ? (_a) : (_b))
-#endif
-
-#ifndef max
-# define max(_a, _b) (((_a) > (_b)) ? (_a) : (_b))
-#endif
-
-#ifndef minmax
-# define minmax(_val, _min, _max) \
-	((_val) < (_min) ? (_min) : ((_val) > (_max) ? (_max) : (_val)))
-#endif
-
-#ifndef ARRAY_SIZE
-# define ARRAY_SIZE(_array) (sizeof(_array) / sizeof(_array[0]))
-#endif
-
 static const char SPLAT_INT_8[] = "int8";
 static const char SPLAT_INT_16[] = "int16";
 static const char SPLAT_INT_24[] = "int24";
 static const char SPLAT_FLOAT_32[] = "float32";
 static const char SPLAT_FLOAT_64[] = "float64";
-
-/* Internal sample type used in Fragment, sources, effects etc... */
-#if USE_V4SF /* for speed and smaller memory footprint */
-typedef float sample_t;
-typedef float v4sf __attribute__ ((vector_size(16)));
-#define SPLAT_NATIVE_SAMPLE_TYPE SPLAT_FLOAT_32
-#else /* for precision */
-typedef double sample_t;
-#define SPLAT_NATIVE_SAMPLE_TYPE SPLAT_FLOAT_64
-#endif
 
 #define SPLAT_NATIVE_SAMPLE_WIDTH (sizeof(sample_t) * 8)
 
@@ -97,8 +62,20 @@ struct splat_raw_io {
 
 static const struct splat_raw_io *splat_get_raw_io(const char *sample_type);
 
-/* Convert any number type to a double or return -1 */
-static int splat_obj2double(PyObject *obj, double *out)
+/* ----------------------------------------------------------------------------
+ * Module constants
+ */
+
+/* Initial ratio for sound sources (square, triangle) */
+static PyObject *splat_init_source_ratio;
+
+/* A dictionary with sample type names as keys and size as values */
+static PyObject *splat_sample_types;
+
+/* A Python float with the value of 0.0 */
+static PyObject *splat_zero;
+
+int splat_obj2double(PyObject *obj, double *out)
 {
 	double value;
 
@@ -117,31 +94,95 @@ static int splat_obj2double(PyObject *obj, double *out)
 	return 0;
 }
 
-/* ----------------------------------------------------------------------------
- * Module constants
- */
+/* Levels */
 
-/* Initial ratio for sound sources (square, triangle) */
-static PyObject *splat_init_source_ratio;
+static void splat_levels_init_float(const struct splat_fragment *frag,
+				    struct splat_levels *levels,
+				    PyObject *levels_obj, double gain_log)
+{
+	const double gain_lin = dB2lin(gain_log);
+	unsigned c;
 
-/* A Python float with the value of 0.0 */
-static PyObject *splat_zero;
+	levels->n = frag->n_channels;
+	levels->all_floats = 1;
 
-/* A dictionary with sample type names as keys and size as values */
-static PyObject *splat_sample_types;
+	for (c = 0; c < frag->n_channels; ++c) {
+		levels->obj[c] = levels_obj;
+		levels->fl[c] = gain_lin;
+	}
+}
 
-/* ----------------------------------------------------------------------------
- * Fragment class interface
- */
+static int splat_levels_init_tuple(const struct splat_fragment *frag,
+				   struct splat_levels *levels,
+				   PyObject *levels_obj)
+{
+	const Py_ssize_t n_channels = PyTuple_GET_SIZE(levels_obj);
+	unsigned c;
+
+	if (n_channels > SPLAT_MAX_CHANNELS) {
+		PyErr_SetString(PyExc_ValueError, "too many channels");
+		return -1;
+	}
+
+	if (n_channels != frag->n_channels) {
+		PyErr_SetString(PyExc_ValueError, "channels number mismatch");
+		return -1;
+	}
+
+	levels->n = n_channels;
+	levels->all_floats = 1;
+
+	for (c = 0; c < n_channels; ++c) {
+		levels->obj[c] = PyTuple_GetItem(levels_obj, c);
+
+		if (levels->all_floats) {
+			double level_dB;
+
+			if (!splat_obj2double(levels->obj[c], &level_dB))
+				levels->fl[c] = dB2lin(level_dB);
+			else
+				levels->all_floats = 0;
+		}
+	}
+
+	return 0;
+}
+
+static void splat_levels_init_signal(const struct splat_fragment *frag,
+				     struct splat_levels *levels,
+				     PyObject *levels_obj)
+{
+	unsigned c;
+
+	levels->n = frag->n_channels;
+	levels->all_floats = 0;
+
+	for (c = 0; c < frag->n_channels; ++c)
+		levels->obj[c] = levels_obj;
+}
+
+static int splat_levels_init(const struct splat_fragment *frag,
+			     struct splat_levels *levels, PyObject *levels_obj)
+{
+	double gain_log;
+	int res = 0;
+
+	if (!splat_obj2double(levels_obj, &gain_log))
+		splat_levels_init_float(frag, levels, levels_obj, gain_log);
+	else if (PyTuple_Check(levels_obj))
+		res = splat_levels_init_tuple(frag, levels, levels_obj);
+	else
+		splat_levels_init_signal(frag, levels, levels_obj);
+
+	return res;
+}
+
+/* Fragment class declaration */
 
 struct Fragment_object {
 	PyObject_HEAD;
 	int init;
-	unsigned n_channels;
-	unsigned rate;
-	size_t length;
-	sample_t *data[MAX_CHANNELS];
-	const char *name;
+	struct splat_fragment frag;
 };
 typedef struct Fragment_object Fragment;
 
@@ -154,23 +195,24 @@ static PyTypeObject splat_FragmentType;
 struct Spline_object {
 	PyObject_HEAD;
 	int init;
-	PyObject *pols; /* List of tuples with (x0, x1, coeffs) */
-	double k0;
-	double start;
-	double end;
+	struct splat_spline spline;
 };
 typedef struct Spline_object Spline;
 
 static PyTypeObject splat_SplineType;
 
-static double splat_spline_tuple_value(PyObject *poly, double x);
-static PyObject *splat_find_spline_poly(PyObject *spline, double x,
-					double *end);
+struct splat_spline *splat_spline_from_obj(PyObject *obj)
+{
+	if (!PyObject_TypeCheck(obj, &splat_SplineType))
+		return NULL;
+
+	return &((Spline *)obj)->spline;
+}
 
 static void Spline_dealloc(Spline *self)
 {
 	if (self->init) {
-		Py_DECREF(self->pols);
+		Py_DECREF(self->spline.pols);
 		self->init = 0;
 	}
 }
@@ -178,18 +220,19 @@ static void Spline_dealloc(Spline *self)
 static int Spline_init(Spline *self, PyObject *args)
 {
 	PyObject *poly;
+	struct splat_spline *spline = &self->spline;
 
-	if (!PyArg_ParseTuple(args, "O!d", &PyList_Type, &self->pols,
-			      &self->k0))
+	if (!PyArg_ParseTuple(args, "O!d", &PyList_Type, &spline->pols,
+			      &spline->k0))
 		return -1;
 
-	Py_INCREF(self->pols);
+	Py_INCREF(spline->pols);
 
-	poly = PyList_GET_ITEM(self->pols, 0);
-	self->start = PyFloat_AS_DOUBLE(PyTuple_GET_ITEM(poly, 0));
+	poly = PyList_GET_ITEM(spline->pols, 0);
+	spline->start = PyFloat_AS_DOUBLE(PyTuple_GET_ITEM(poly, 0));
 
-	poly = PyList_GET_ITEM(self->pols, PyList_GET_SIZE(self->pols) - 1);
-	self->end = PyFloat_AS_DOUBLE(PyTuple_GET_ITEM(poly, 1));
+	poly = PyList_GET_ITEM(spline->pols, PyList_GET_SIZE(spline->pols)-1);
+	spline->end = PyFloat_AS_DOUBLE(PyTuple_GET_ITEM(poly, 1));
 
 	self->init = 1;
 
@@ -252,132 +295,6 @@ static PyTypeObject splat_SplineType = {
 	Spline_new,                        /* tp_new */
 };
 
-static double splat_spline_tuple_value(PyObject *poly, double x)
-{
-	Py_ssize_t i;
-	double value = 0.0;
-	double x_pow = 1.0;
-
-	for (i = 0; i < PyTuple_GET_SIZE(poly); ++i) {
-		PyObject *py_k = PyTuple_GET_ITEM(poly, i);
-		const double k = PyFloat_AS_DOUBLE(py_k);
-
-		value += k * x_pow;
-		x_pow *= x;
-	}
-
-	return value;
-}
-
-static PyObject *splat_find_spline_poly(PyObject *spline, double x,
-					double *end)
-{
-	Py_ssize_t i;
-
-	if (!PyList_CheckExact(spline)) {
-		PyErr_SetString(PyExc_TypeError, "spline must be a list");
-		return NULL;
-	}
-
-	for (i = 0; i < PyList_GET_SIZE(spline); ++i) {
-		PyObject *poly_params = PyList_GET_ITEM(spline, i);
-		PyObject *param;
-		double poly_start;
-		double poly_end;
-
-		if (!PyTuple_CheckExact(poly_params) ||
-		    (PyTuple_GET_SIZE(poly_params) != 3)) {
-			PyErr_SetString(PyExc_TypeError,
-					"spline list item must be a 3-tuple");
-			return NULL;
-		}
-
-		param = PyTuple_GET_ITEM(poly_params, 1);
-
-		if (!PyFloat_CheckExact(param)) {
-			PyErr_SetString(PyExc_TypeError,
-				"spline list item start time must be a float");
-			return NULL;
-		}
-
-		poly_end = PyFloat_AS_DOUBLE(param);
-
-		if (x > poly_end)
-			continue;
-
-		param = PyTuple_GET_ITEM(poly_params, 0);
-
-		if (!PyFloat_CheckExact(param)) {
-			PyErr_SetString(PyExc_TypeError,
-				"spline list item end time must be a float");
-			return NULL;
-		}
-
-		poly_start = PyFloat_AS_DOUBLE(param);
-
-		if (x < poly_start)
-			continue;
-
-		param = PyTuple_GET_ITEM(poly_params, 2);
-
-		if (!PyTuple_CheckExact(param)) {
-			PyErr_SetString(PyExc_TypeError,
-				"spline list item coefs must be a tuple");
-			return NULL;
-		}
-
-		if (end != NULL)
-			*end = poly_end;
-
-		return param;
-	}
-
-	return NULL;
-}
-
-/* ----------------------------------------------------------------------------
- * Signal vector interface
- */
-
-#define SIGNAL_VECTOR_BITS 8
-#define SIGNAL_VECTOR_LEN (1 << SIGNAL_VECTOR_BITS)
-
-struct splat_signal;
-
-struct signal_vector {
-	sample_t data[SIGNAL_VECTOR_LEN];
-	PyObject *obj;
-	int (*signal)(struct splat_signal *s, struct signal_vector *v);
-};
-
-enum signal_ret {
-	SIGNAL_VECTOR_CONTINUE = 0,
-	SIGNAL_VECTOR_ERROR,
-	SIGNAL_VECTOR_STOP,
-};
-
-struct splat_signal {
-	enum signal_ret stat;
-	size_t origin;
-	size_t length;
-	size_t n_vectors;
-	struct signal_vector *vectors;
-	unsigned rate;
-	PyObject *py_float;
-	PyObject *py_args;
-	size_t cur;
-	size_t end;
-	size_t len;
-};
-
-static int splat_signal_init(struct splat_signal *s, size_t length,
-			     size_t origin, PyObject **signals,
-			     size_t n_signals, unsigned rate);
-static void splat_signal_free(struct splat_signal *s);
-static int splat_signal_next(struct splat_signal *s);
-static ssize_t splat_signal_get(struct splat_signal *s, size_t n);
-static PyObject *splat_signal_tuple(struct splat_signal *s, size_t offset);
-
 /* -- Signal class -- */
 
 struct Signal_object {
@@ -438,9 +355,9 @@ static int Signal_init(Signal *self, PyObject *args)
 			return -1;
 		}
 
-		length = duration * frag->rate;
+		length = duration * frag->frag.rate;
 	} else {
-		length = frag->length;
+		length = frag->frag.length;
 	}
 
 	if (origin < 0.0) {
@@ -465,8 +382,8 @@ static int Signal_init(Signal *self, PyObject *args)
 	for (i = 0; i < n_signals; ++i)
 		Py_INCREF(self->signals[i]);
 
-	if (splat_signal_init(&self->sig, length, (origin * frag->rate),
-			      self->signals, n_signals, frag->rate)) {
+	if (splat_signal_init(&self->sig, length, (origin * frag->frag.rate),
+			      self->signals, n_signals, frag->frag.rate)) {
 		Signal_free_signals(self, n_signals);
 		return -1;
 	}
@@ -567,291 +484,28 @@ static PyTypeObject splat_SignalType = {
 	Signal_new,                        /* tp_new */
 };
 
-/* -- Signal internal functions -- */
-
-static int splat_signal_func(struct splat_signal *s, struct signal_vector *v)
-{
-	const double rate = s->rate;
-	sample_t *out = v->data;
-	size_t i = s->cur;
-	size_t j = s->len;
-
-	while (j--) {
-		PyObject *ret;
-
-		PyFloat_AS_DOUBLE(s->py_float) = i++ / rate;
-		ret = PyObject_Call(v->obj, s->py_args, NULL);
-
-		if (!PyFloat_Check(ret)) {
-			PyErr_SetString(PyExc_TypeError,
-					"Signal did not return a float");
-			Py_DECREF(ret);
-			return -1;
-		}
-
-		*out++ = PyFloat_AS_DOUBLE(ret);
-		Py_DECREF(ret);
-	}
-
-	return 0;
-}
-
-static int splat_signal_frag(struct splat_signal *s, struct signal_vector *v)
-{
-	Fragment *frag = (Fragment *)v->obj;
-
-	memcpy(v->data, &frag->data[0][s->cur], (s->len * sizeof(sample_t)));
-
-	return 0;
-}
-
-static int splat_signal_spline(struct splat_signal *s, struct signal_vector *v)
-{
-	Spline *spline = (Spline *)v->obj;
-	const double rate = s->rate;
-	const double k0 = spline->k0;
-	sample_t *out = v->data;
-	size_t i = s->cur;
-	size_t j = s->len;
-	PyObject *poly = NULL;
-	double end = 0.0;
-
-	while (j--) {
-		const double x = i++ / rate;
-
-		if ((x > end) || (poly == NULL)) {
-			poly = splat_find_spline_poly(spline->pols, x, &end);
-
-			if (poly == NULL) {
-				PyErr_SetString(PyExc_ValueError,
-						"Spline polynomial not found");
-				return -1;
-
-			}
-		}
-
-		*out++ = splat_spline_tuple_value(poly, x) * k0;
-	}
-
-	return 0;
-}
-
-static int splat_signal_init(struct splat_signal *s, size_t length,
-			     size_t origin, PyObject **signals,
-			     size_t n_signals, unsigned rate)
-{
-	size_t i;
-
-	s->origin = origin;
-	s->length = length + s->origin;
-	s->n_vectors = n_signals;
-	s->vectors = PyMem_Malloc(n_signals * sizeof(struct signal_vector));
-	s->rate = rate;
-
-	if (s->vectors == NULL) {
-		PyErr_NoMemory();
-		return -1;
-	}
-
-	s->py_float = PyFloat_FromDouble(0);
-
-	if (s->py_float == NULL) {
-		PyErr_SetString(PyExc_AssertionError,
-				"Failed to create float object");
-		return -1;
-	}
-
-	s->py_args = PyTuple_New(1);
-
-	if (s->py_args == NULL) {
-		PyErr_NoMemory();
-		return -1;
-	}
-
-	PyTuple_SET_ITEM(s->py_args, 0, s->py_float);
-
-	for (i = 0; i < n_signals; ++i) {
-		struct signal_vector *v = &s->vectors[i];
-		PyObject *signal = signals[i];
-
-		if (PyFloat_Check(signal)) {
-			const sample_t value = PyFloat_AS_DOUBLE(signal);
-			size_t j;
-
-			for (j = 0; j < SIGNAL_VECTOR_LEN; ++j)
-				v->data[j] = value;
-
-			v->signal = NULL;
-		} else if (PyCallable_Check(signal)) {
-			v->signal = splat_signal_func;
-		} else if (PyObject_TypeCheck(signal, &splat_FragmentType)) {
-			Fragment *sig_frag = (Fragment *)signal;
-
-			if (sig_frag->n_channels != 1) {
-				PyErr_SetString(PyExc_ValueError,
-				"Fragment signal must have only 1 channel");
-				return -1;
-			}
-
-			if (s->length > sig_frag->length) {
-				PyErr_SetString(PyExc_ValueError,
-				"Fragment signal length too short");
-				return -1;
-			}
-
-			v->signal = splat_signal_frag;
-		} else if (PyObject_TypeCheck(signal, &splat_SplineType)) {
-			Spline *spline = (Spline *)signal;
-			size_t spline_length = spline->end * rate;
-
-			if (s->length > spline_length) {
-				PyErr_SetString(PyExc_ValueError,
-				"Spline signal length too short");
-				return -1;
-			}
-
-			v->signal = splat_signal_spline;
-		} else {
-			PyErr_SetString(PyExc_TypeError,
-					"unsupported signal type");
-			return -1;
-		}
-
-		v->obj = signal;
-	}
-
-	s->cur = s->origin;
-	s->end = 0;
-	s->len = 0;
-	s->stat = SIGNAL_VECTOR_CONTINUE;
-
-	return 0;
-}
-
-static void splat_signal_free(struct splat_signal *s)
-{
-	Py_DECREF(s->py_float);
-	Py_DECREF(s->py_args);
-	PyMem_Free(s->vectors);
-}
-
-static int splat_signal_cache(struct splat_signal *s, size_t cur)
-{
-	size_t i;
-
-	if (cur >= s->length)
-		return SIGNAL_VECTOR_STOP;
-
-	if ((cur == s->cur) && s->len)
-		return SIGNAL_VECTOR_CONTINUE;
-
-	s->cur = cur;
-	s->end = min((s->cur + SIGNAL_VECTOR_LEN), s->length);
-	s->len = s->end - s->cur;
-
-	for (i = 0; i < s->n_vectors; ++i) {
-		struct signal_vector *v = &s->vectors[i];
-
-		if ((v->signal != NULL) && (v->signal(s, v)))
-			return SIGNAL_VECTOR_ERROR;
-	}
-
-	return SIGNAL_VECTOR_CONTINUE;
-}
-
-static int splat_signal_next(struct splat_signal *s)
-{
-	s->stat = splat_signal_cache(s, (s->cur + s->len));
-
-	return s->stat;
-}
-
-static ssize_t splat_signal_get(struct splat_signal *s, size_t n)
-{
-	div_t co; /* cursor, offset */
-	size_t cur;
-
-	if (n >= s->length)
-		return -1;
-
-	co = div(n, SIGNAL_VECTOR_LEN);
-	cur = co.quot * SIGNAL_VECTOR_LEN;
-	s->stat = splat_signal_cache(s, cur);
-
-	if (s->stat != SIGNAL_VECTOR_CONTINUE)
-		return -1;
-
-	return co.rem;
-}
-
-static PyObject *splat_signal_tuple(struct splat_signal *s, size_t offset)
-{
-	PyObject *sig_tuple;
-	size_t i;
-
-	sig_tuple = PyTuple_New(s->n_vectors);
-
-	if (sig_tuple == NULL)
-		return NULL;
-
-	for (i = 0; i < s->n_vectors; ++i) {
-		PyObject *val = PyFloat_FromDouble(s->vectors[i].data[offset]);
-
-		if (val == NULL) {
-			Py_DECREF(sig_tuple);
-			return NULL;
-		}
-
-		PyTuple_SET_ITEM(sig_tuple, i, val);
-	}
-
-	return sig_tuple;
-}
-
 /* ----------------------------------------------------------------------------
  * Fragment class
  */
 
-/* -- internal functions -- */
+static PyObject *splat_frag_peak_as_dict(const struct splat_peak *peak)
+{
+	return Py_BuildValue("{sdsdsdsd}", "avg", peak->avg, "pos", peak->pos,
+			     "neg", peak->neg, "peak", peak->peak);
+}
 
-struct splat_levels {
-	unsigned n;
-	PyObject *obj[MAX_CHANNELS];
-	double fl[MAX_CHANNELS]; /* levels converted to linear scale */
-	int all_floats;
-};
+struct splat_fragment *splat_frag_from_obj(PyObject *obj)
+{
+	if (!PyObject_TypeCheck(obj, &splat_FragmentType))
+		return NULL;
 
-struct splat_peak {
-	double avg;
-	double pos;
-	double neg;
-	double peak;
-};
-
-static int frag_get_levels(Fragment *frag, struct splat_levels *levels,
-			   PyObject *levels_obj);
-static int frag_resize(Fragment *self, size_t length);
-#define frag_grow(_frag, _length)					\
-	(((_length) <= (_frag)->length) ? 0 : frag_resize((_frag), (_length)))
-static int frag_get_sample_number(size_t *val, long min_val, long max_val,
-				  PyObject *obj);
-static void frag_get_peak(Fragment *frag, struct splat_peak *chan_peak,
-			  struct splat_peak *frag_peak, int do_avg);
-static PyObject *splat_peak_dict(const struct splat_peak *peak);
-
-/* -- Fragment functions -- */
+	return &((Fragment *)obj)->frag;
+}
 
 static void Fragment_dealloc(Fragment *self)
 {
 	if (self->init) {
-		unsigned i;
-
-		for (i = 0; i < self->n_channels; ++i)
-			PyMem_Free(self->data[i]);
-
-		if (self->name != NULL)
-			free((void *)self->name);
-
+		splat_frag_free(&self->frag);
 		self->init = 0;
 	}
 
@@ -868,15 +522,12 @@ static int Fragment_init(Fragment *self, PyObject *args, PyObject *kw)
 	unsigned long length = 0;
 	const char *name = NULL;
 
-	unsigned i;
-	size_t data_size;
-
 	if (!PyArg_ParseTupleAndKeywords(args, kw, "|IIdkz", kwlist,
 					 &n_channels, &rate, &duration,
 					 &length, &name))
 		return -1;
 
-	if (n_channels > MAX_CHANNELS) {
+	if (n_channels > SPLAT_MAX_CHANNELS) {
 		PyErr_SetString(PyExc_ValueError,
 				"exceeding maximum number of channels");
 		return -1;
@@ -900,32 +551,9 @@ static int Fragment_init(Fragment *self, PyObject *args, PyObject *kw)
 		return -1;
 	}
 
-	data_size = length * sizeof(sample_t);
+	if (splat_frag_init(&self->frag, n_channels, rate, length, name))
+		return -1;
 
-	for (i = 0; i < n_channels; ++i) {
-		if (!data_size) {
-			self->data[i] = NULL;
-		} else {
-			self->data[i] = PyMem_Malloc(data_size);
-
-			if (self->data[i] == NULL) {
-				PyErr_NoMemory();
-				return -1;
-			}
-
-			memset(self->data[i], 0, data_size);
-		}
-	}
-
-	if (name == NULL)
-		self->name = NULL;
-	else
-		self->name = strdup(name);
-
-
-	self->n_channels = n_channels;
-	self->rate = rate;
-	self->length = length;
 	self->init = 1;
 
 	return 0;
@@ -949,7 +577,7 @@ static PyObject *Fragment_new(PyTypeObject *type, PyObject *args, PyObject *kw)
 
 static Py_ssize_t Fragment_sq_length(Fragment *self)
 {
-	return self->length;
+	return self->frag.length;
 }
 
 static PyObject *Fragment_sq_item(Fragment *self, Py_ssize_t i)
@@ -957,18 +585,18 @@ static PyObject *Fragment_sq_item(Fragment *self, Py_ssize_t i)
 	PyObject *sample;
 	unsigned c;
 
-	if ((i < 0) || (i >= self->length)) {
+	if ((i < 0) || (i >= self->frag.length)) {
 		PyErr_SetString(PyExc_IndexError, "index out of range");
 		return NULL;
 	}
 
-	sample = PyTuple_New(self->n_channels);
+	sample = PyTuple_New(self->frag.n_channels);
 
 	if (sample == NULL)
 		return NULL;
 
-	for (c = 0; c < self->n_channels; ++c) {
-		const sample_t s = self->data[c][i];
+	for (c = 0; c < self->frag.n_channels; ++c) {
+		const sample_t s = self->frag.data[c][i];
 		PyTuple_SET_ITEM(sample, c, PyFloat_FromDouble(s));
 	}
 
@@ -984,17 +612,17 @@ static int Fragment_sq_ass_item(Fragment *self, Py_ssize_t i, PyObject *v)
 		return -1;
 	}
 
-	if (PyTuple_GET_SIZE(v) != self->n_channels) {
+	if (PyTuple_GET_SIZE(v) != self->frag.n_channels) {
 		PyErr_SetString(PyExc_ValueError, "channels number mismatch");
 		return -1;
 	}
 
-	if ((i < 0) || (i >= self->length)) {
+	if ((i < 0) || (i >= self->frag.length)) {
 		PyErr_SetString(PyExc_IndexError, "set index error");
 		return -1;
 	}
 
-	for (c = 0; c < self->n_channels; ++c) {
+	for (c = 0; c < self->frag.n_channels; ++c) {
 		PyObject *s = PyTuple_GET_ITEM(v, c);
 
 		if (!PyFloat_CheckExact(s)) {
@@ -1003,7 +631,7 @@ static int Fragment_sq_ass_item(Fragment *self, Py_ssize_t i, PyObject *v)
 			return -1;
 		}
 
-		self->data[c][i] = (sample_t)PyFloat_AS_DOUBLE(s);
+		self->frag.data[c][i] = (sample_t)PyFloat_AS_DOUBLE(s);
 	}
 
 	return 0;
@@ -1028,47 +656,42 @@ PyDoc_STRVAR(rate_doc, "Get the sample rate in Hz.");
 
 static PyObject *Fragment_get_rate(Fragment *self, void *_)
 {
-	return Py_BuildValue("I", self->rate);
+	return Py_BuildValue("I", self->frag.rate);
 }
 
 PyDoc_STRVAR(duration_doc, "Get the fragment duration in seconds.");
 
 static PyObject *Fragment_get_duration(Fragment *self, void *_)
 {
-	return Py_BuildValue("f", (double)self->length / self->rate);
+	return Py_BuildValue("f", (double)self->frag.length / self->frag.rate);
 }
 
 PyDoc_STRVAR(channels_doc, "Get the number of channels.");
 
 static PyObject *Fragment_get_channels(Fragment *self, void *_)
 {
-	return Py_BuildValue("I", self->n_channels);
+	return Py_BuildValue("I", self->frag.n_channels);
 }
 
 PyDoc_STRVAR(name_doc, "Get and set the fragment name.");
 
 static PyObject *Fragment_get_name(Fragment *self, void *_)
 {
-	if (self->name == NULL)
+	if (self->frag.name == NULL)
 		Py_RETURN_NONE;
 
-	return PyString_FromString(self->name);
+	return PyString_FromString(self->frag.name);
 }
 
 static int Fragment_set_name(Fragment *self, PyObject *value, void *_)
 {
-	if (self->name != NULL)
-		free((void *)self->name);
-
 	if (!PyString_Check(value)) {
 		PyErr_SetString(PyExc_TypeError,
 				"Fragment name must be a string");
 		return -1;
 	}
 
-	self->name = strdup(PyString_AS_STRING(value));
-
-	return 0;
+	return splat_frag_set_name(&self->frag, PyString_AS_STRING(value));
 }
 
 static PyGetSetDef Fragment_getsetters[] = {
@@ -1313,12 +936,12 @@ static PyObject *Fragment_import_bytes(Fragment *self, PyObject *args,
 					 &offset_obj, &start_obj, &end_obj))
 		return NULL;
 
-	if (rate != self->rate) {
+	if (rate != self->frag.rate) {
 		PyErr_SetString(PyExc_ValueError, "wrong sample rate");
 		return NULL;
 	}
 
-	if (n_channels != self->n_channels) {
+	if (n_channels != self->frag.n_channels) {
 		PyErr_SetString(PyExc_ValueError, "wrong number of channels");
 		return NULL;
 	}
@@ -1341,30 +964,30 @@ static PyObject *Fragment_import_bytes(Fragment *self, PyObject *args,
 
 	if (offset_obj == Py_None)
 		offset = 0;
-	else if (frag_get_sample_number(&offset, 0, LONG_MAX, offset_obj))
+	else if (splat_frag_sample_number(&offset, 0, LONG_MAX, offset_obj))
 		return NULL;
 
 	if (start_obj == Py_None)
 		start = 0;
-	else if (frag_get_sample_number(&start, 0, bytes_length, start_obj))
+	else if (splat_frag_sample_number(&start, 0, bytes_length, start_obj))
 		return NULL;
 
 	if (end_obj == Py_None)
 		end = bytes_length;
-	else if (frag_get_sample_number(&end, start, bytes_length, end_obj))
+	else if (splat_frag_sample_number(&end, start, bytes_length, end_obj))
 		return NULL;
 
 	length = end - start;
 
-	if (frag_grow(self, (offset + length)))
+	if (splat_frag_grow(&self->frag, (offset + length)))
 		return NULL;
 
 	bytes = PyByteArray_AsString(bytes_obj);
 
-	for (c = 0; c < self->n_channels; ++c) {
+	for (c = 0; c < self->frag.n_channels; ++c) {
 		const char *in =
 			bytes + (start * frame_size) + (c * sample_size);
-		sample_t *out = &self->data[c][offset];
+		sample_t *out = &self->frag.data[c][offset];
 
 		io->import(out, in, length, frame_size);
 	}
@@ -1393,6 +1016,7 @@ static PyObject *Fragment_export_bytes(Fragment *self, PyObject *args,
 	PyObject *start_obj = Py_None;
 	PyObject *end_obj = Py_None;
 
+	struct splat_fragment *frag = &self->frag;
 	const struct splat_raw_io *io;
 	size_t sample_size;
 	size_t frame_size;
@@ -1403,7 +1027,7 @@ static PyObject *Fragment_export_bytes(Fragment *self, PyObject *args,
 	PyObject *bytes_obj;
 	Py_ssize_t bytes_size;
 	char *out;
-	const sample_t *in[MAX_CHANNELS];
+	const sample_t *in[SPLAT_MAX_CHANNELS];
 
 	if (!PyArg_ParseTupleAndKeywords(args, kw, "|sOO", kwlist,
 					 &sample_type, &start_obj, &end_obj))
@@ -1415,16 +1039,16 @@ static PyObject *Fragment_export_bytes(Fragment *self, PyObject *args,
 		return NULL;
 
 	sample_size = io->sample_width / 8;
-	frame_size = sample_size * self->n_channels;
+	frame_size = sample_size * frag->n_channels;
 
 	if (start_obj == Py_None)
 		start = 0;
-	else if (frag_get_sample_number(&start, 0, self->length, start_obj))
+	else if (splat_frag_sample_number(&start, 0, frag->length, start_obj))
 		return NULL;
 
 	if (end_obj == Py_None)
-		end = self->length;
-	else if (frag_get_sample_number(&end, start, self->length, end_obj))
+		end = frag->length;
+	else if (splat_frag_sample_number(&end, start, frag->length, end_obj))
 		return NULL;
 
 	length = end - start;
@@ -1436,72 +1060,12 @@ static PyObject *Fragment_export_bytes(Fragment *self, PyObject *args,
 
 	out = PyByteArray_AS_STRING(bytes_obj);
 
-	for (c = 0; c < self->n_channels; ++c)
-		in[c] = &self->data[c][start];
+	for (c = 0; c < frag->n_channels; ++c)
+		in[c] = &frag->data[c][start];
 
-	io->export(out, in, self->n_channels, length);
+	io->export(out, in, frag->n_channels, length);
 
 	return bytes_obj;
-}
-
-static void frag_mix_floats(Fragment *self, const Fragment *frag,
-			    size_t offset, size_t start, size_t length,
-			    const double *levels, int zero_dB)
-{
-	unsigned c;
-
-	for (c = 0; c < self->n_channels; ++c) {
-		const sample_t *src = &frag->data[c][start];
-		sample_t *dst =  &self->data[c][offset];
-		Py_ssize_t i = length;
-
-		if (zero_dB) {
-			while (i--)
-				*dst++ += *src++;
-		} else {
-			const double g = levels[c];
-
-			while (i--)
-				*dst++ += g * (*src++);
-		}
-	}
-}
-
-static int frag_mix_signals(Fragment *self, const Fragment *frag,
-			    size_t offset, size_t start, size_t length,
-			    const struct splat_levels *levels)
-{
-	struct splat_signal sig;
-	PyObject *signals[MAX_CHANNELS];
-	unsigned c;
-	size_t in;
-	size_t i;
-
-	for (c = 0; c < frag->n_channels; ++c)
-		signals[c] = levels->obj[c];
-
-	if (splat_signal_init(&sig, length, offset, signals, self->n_channels,
-			      self->rate))
-		return -1;
-
-	in = sig.cur;
-	i = 0;
-
-	while (splat_signal_next(&sig) == SIGNAL_VECTOR_CONTINUE) {
-		size_t j;
-
-		for (j = 0; j < sig.len; ++i, ++j, ++in) {
-			for (c = 0; c < frag->n_channels; ++c) {
-				double a = dB2lin(sig.vectors[c].data[j]);
-
-				self->data[c][i] += frag->data[c][in] * a;
-			}
-		}
-	}
-
-	splat_signal_free(&sig);
-
-	return (sig.stat == SIGNAL_VECTOR_ERROR) ? -1 : 0;
 }
 
 PyDoc_STRVAR(Fragment_mix_doc,
@@ -1529,29 +1093,31 @@ static PyObject *Fragment_mix(Fragment *self, PyObject *args, PyObject *kw)
 {
 	static char *kwlist[] = {
 		"frag", "offset", "skip", "levels", "duration", NULL };
-	Fragment *frag;
+	Fragment *incoming_obj;
 	double offset = 0.0;
 	double skip = 0.0;
 	PyObject *levels_obj = Py_None;
 	PyObject *duration_obj = Py_None;
 
+	struct splat_fragment *frag = &self->frag;
+	const struct splat_fragment *incoming;
 	struct splat_levels levels;
 	ssize_t length;
-	ssize_t offset_sample;
-	ssize_t skip_sample;
-	size_t total_length;
 
 	if (!PyArg_ParseTupleAndKeywords(args, kw, "O!|ddOO", kwlist,
-					 &splat_FragmentType, &frag, &offset,
-					 &skip, &levels_obj, &duration_obj))
+					 &splat_FragmentType, &incoming_obj,
+					 &offset, &skip, &levels_obj,
+					 &duration_obj))
 		return NULL;
 
-	if (frag->n_channels != self->n_channels) {
+	incoming = &incoming_obj->frag;
+
+	if (incoming->n_channels != frag->n_channels) {
 		PyErr_SetString(PyExc_ValueError, "channels number mismatch");
 		return NULL;
 	}
 
-	if (frag->rate != self->rate) {
+	if (incoming->rate != frag->rate) {
 		PyErr_SetString(PyExc_ValueError, "sample rate mismatch");
 		return NULL;
 	}
@@ -1559,7 +1125,7 @@ static PyObject *Fragment_mix(Fragment *self, PyObject *args, PyObject *kw)
 	if (levels_obj == Py_None)
 		levels_obj = splat_zero;
 
-	if (frag_get_levels(self, &levels, levels_obj))
+	if (splat_levels_init(frag, &levels, levels_obj))
 		return NULL;
 
 	if (duration_obj != Py_None) {
@@ -1569,26 +1135,13 @@ static PyObject *Fragment_mix(Fragment *self, PyObject *args, PyObject *kw)
 			return NULL;
 		}
 
-		length = PyFloat_AS_DOUBLE(duration_obj) * self->rate;
+		length = PyFloat_AS_DOUBLE(duration_obj) * frag->rate;
 	} else {
-		length = frag->length;
+		length = incoming->length;
 	}
 
-	offset_sample = offset * self->rate;
-	offset_sample = max(offset_sample, 0);
-	skip_sample = skip * self->rate;
-	skip_sample = minmax(skip_sample, 0, frag->length);
-	length = minmax(length, 0, (frag->length - skip_sample));
-	total_length = offset_sample + length;
-
-	if (frag_grow(self, total_length))
-		return NULL;
-
-	if (levels.all_floats)
-		frag_mix_floats(self, frag, offset_sample, skip_sample,
-				length, levels.fl, levels_obj == splat_zero);
-	else if (frag_mix_signals(self, frag, offset_sample, skip_sample,
-				  length, &levels))
+	if (splat_frag_mix(frag, incoming, &levels, length, offset, skip,
+			   levels_obj == splat_zero))
 		return NULL;
 
 	Py_RETURN_NONE;
@@ -1608,7 +1161,7 @@ PyDoc_STRVAR(Fragment_get_peak_doc,
 
 static PyObject *Fragment_get_peak(Fragment *self, PyObject *_)
 {
-	struct splat_peak chan_peak[MAX_CHANNELS];
+	struct splat_peak chan_peak[SPLAT_MAX_CHANNELS];
 	struct splat_peak frag_peak;
 	unsigned c;
 
@@ -1616,20 +1169,19 @@ static PyObject *Fragment_get_peak(Fragment *self, PyObject *_)
 	PyObject *frag_peak_obj;
 	PyObject *chan_peak_obj;
 
-	frag_get_peak(self, chan_peak, &frag_peak, 1);
-
-	frag_peak_obj = splat_peak_dict(&frag_peak);
+	splat_frag_get_peak(&self->frag, chan_peak, &frag_peak, 1);
+	frag_peak_obj = splat_frag_peak_as_dict(&frag_peak);
 
 	if (frag_peak_obj == NULL)
 		return PyErr_NoMemory();
 
-	chan_peak_obj = PyList_New(self->n_channels);
+	chan_peak_obj = PyList_New(self->frag.n_channels);
 
 	if (chan_peak_obj == NULL)
 		return PyErr_NoMemory();
 
-	for (c = 0; c < self->n_channels; ++c) {
-		PyObject *peak_dict = splat_peak_dict(&chan_peak[c]);
+	for (c = 0; c < self->frag.n_channels; ++c) {
+		PyObject *peak_dict = splat_frag_peak_as_dict(&chan_peak[c]);
 
 		if (peak_dict == NULL)
 			return PyErr_NoMemory();
@@ -1664,120 +1216,23 @@ PyDoc_STRVAR(Fragment_normalize_doc,
 
 static PyObject *Fragment_normalize(Fragment *self, PyObject *args)
 {
-	double level = -0.05;
+	double level_dB = -0.05;
 	PyObject *zero = NULL;
 
 	int do_zero;
-	struct splat_peak chan_peak[MAX_CHANNELS];
-	struct splat_peak frag_peak;
-	unsigned c;
-	double gain;
 
-	if (!PyArg_ParseTuple(args, "|dO!", &level, &PyBool_Type, &zero))
+	if (!PyArg_ParseTuple(args, "|dO!", &level_dB, &PyBool_Type, &zero))
 		return NULL;
 
-	if (self->n_channels > MAX_CHANNELS) {
+	if (self->frag.n_channels > SPLAT_MAX_CHANNELS) {
 		PyErr_SetString(PyExc_ValueError, "too many channels");
 		return NULL;
 	}
 
-	level = dB2lin(level);
 	do_zero = ((zero == NULL) || (zero == Py_True)) ? 1 : 0;
-	frag_get_peak(self, chan_peak, &frag_peak, do_zero);
-
-	if (do_zero) {
-		double offset = 0.0;
-
-		for (c = 0; c < self->n_channels; ++c) {
-			const double avg = chan_peak[c].avg;
-
-			if (fabs(offset) < fabs(avg))
-				offset = avg;
-		}
-
-		gain = level / (frag_peak.peak + fabs(offset));
-	} else {
-		gain = level / frag_peak.peak;
-	}
-
-	if ((1.0 < gain) && (gain < 1.001)) {
-		int zero;
-
-		if (!do_zero)
-			Py_RETURN_NONE;
-
-		for (c = 0, zero = 1; c < self->n_channels && zero; ++c)
-			if (fabs(chan_peak[c].avg) > 0.001)
-				zero = 0;
-
-		if (zero)
-			Py_RETURN_NONE;
-	}
-
-	for (c = 0; c < self->n_channels; ++c) {
-		const double chan_avg = chan_peak[c].avg;
-		sample_t * const chan_data = self->data[c];
-		const sample_t * const end = &chan_data[self->length];
-		sample_t *it;
-
-		for (it = chan_data; it != end; ++it) {
-			*it -= chan_avg;
-			*it *= gain;
-		}
-	}
+	splat_frag_normalize(&self->frag, level_dB, do_zero);
 
 	Py_RETURN_NONE;
-}
-
-static void frag_amp_floats(Fragment *self, const double *gains)
-{
-	unsigned c;
-
-	for (c = 0; c < self->n_channels; ++c) {
-		const double g = gains[c];
-		size_t i;
-
-		if (g == 1.0)
-			continue;
-
-		for (i = 0; i < self->length; ++i)
-			self->data[c][i] *= g;
-	}
-}
-
-static int frag_amp_signals(Fragment *self, const struct splat_levels *gains)
-{
-	struct splat_signal sig;
-	PyObject *signals[MAX_CHANNELS];
-	unsigned c;
-	size_t in;
-	size_t i;
-
-	for (c = 0; c < self->n_channels; ++c)
-		signals[c] = gains->obj[c];
-
-	if (splat_signal_init(&sig, self->length, 0.0, signals,
-			      self->n_channels, self->rate))
-		return -1;
-
-	in = sig.cur;
-	i = 0;
-
-	while (splat_signal_next(&sig) == SIGNAL_VECTOR_CONTINUE) {
-		size_t j;
-
-		for (j = 0; j < sig.len; ++i, ++j, ++in) {
-			for (c = 0; c < self->n_channels; ++c) {
-				double g = dB2lin(sig.vectors[c].data[j]);
-
-				self->data[c][i] *= g;
-			}
-		}
-	}
-
-	splat_signal_free(&sig);
-
-	return (sig.stat == SIGNAL_VECTOR_ERROR) ? -1 : 0;
 }
 
 PyDoc_STRVAR(Fragment_amp_doc,
@@ -1796,12 +1251,10 @@ static PyObject *Fragment_amp(Fragment *self, PyObject *args)
 	if (!PyArg_ParseTuple(args, "O", &gain_obj))
 		return NULL;
 
-	if (frag_get_levels(self, &gains, gain_obj))
+	if (splat_levels_init(&self->frag, &gains, gain_obj))
 		return NULL;
 
-	if (gains.all_floats)
-		frag_amp_floats(self, gains.fl);
-	else if (frag_amp_signals(self, &gains))
+	if (splat_frag_amp(&self->frag, &gains))
 		return NULL;
 
 	Py_RETURN_NONE;
@@ -1819,44 +1272,11 @@ static PyObject *Fragment_offset(Fragment *self, PyObject *args)
 	PyObject *offset;
 	double start = 0.0;
 
-	unsigned c;
-	size_t i;
-
 	if (!PyArg_ParseTuple(args, "O|d", &offset, &start))
 		return NULL;
 
-	if (PyFloat_Check(offset)) {
-		const double offset_float = PyFloat_AS_DOUBLE(offset);
-
-		for (c = 0; c < self->n_channels; ++c) {
-			for (i = 0; i < self->length; ++i)
-				self->data[c][i] += offset_float;
-		}
-	} else {
-		struct splat_signal sig;
-
-		if (splat_signal_init(&sig, self->length, (start * self->rate),
-				      &offset, 1, self->rate))
-			return NULL;
-
-		i = 0;
-
-		while (splat_signal_next(&sig) == SIGNAL_VECTOR_CONTINUE) {
-			size_t j;
-
-			for (j = 0; j < sig.len; ++i, ++j) {
-				const double value = sig.vectors[0].data[j];
-
-				for (c = 0; c < self->n_channels; ++c)
-					self->data[c][i] += value;
-			}
-		}
-
-		splat_signal_free(&sig);
-
-		if (sig.stat == SIGNAL_VECTOR_ERROR)
-			return NULL;
-	}
+	if (splat_frag_offset(&self->frag, offset, start))
+		return NULL;
 
 	Py_RETURN_NONE;
 }
@@ -1884,14 +1304,14 @@ static PyObject *Fragment_resize(Fragment *self, PyObject *args, PyObject *kw)
 	}
 
 	if (!length) {
-		length = duration * self->rate;
+		length = duration * self->frag.rate;
 	} else if (duration != 0.0) {
 		PyErr_SetString(PyExc_ValueError,
 				"cannot specify both length and duration");
 		return NULL;
 	}
 
-	if (frag_resize(self, length))
+	if (splat_frag_resize(&self->frag, length))
 		return NULL;
 
 	Py_RETURN_NONE;
@@ -1959,187 +1379,6 @@ static PyTypeObject splat_FragmentType = {
 	Fragment_new,                      /* tp_new */
 };
 
-/* -- Fragment internal functions -- */
-
-static void frag_get_levels_float(Fragment *frag, struct splat_levels *levels,
-				  PyObject *levels_obj, double gain_log)
-{
-	const double gain_lin = dB2lin(gain_log);
-	unsigned c;
-
-	levels->n = frag->n_channels;
-	levels->all_floats = 1;
-
-	for (c = 0; c < frag->n_channels; ++c) {
-		levels->obj[c] = levels_obj;
-		levels->fl[c] = gain_lin;
-	}
-}
-
-static int frag_get_levels_tuple(Fragment *frag, struct splat_levels *levels,
-				 PyObject *levels_obj)
-{
-	const Py_ssize_t n_channels = PyTuple_GET_SIZE(levels_obj);
-	unsigned c;
-
-	if (n_channels > MAX_CHANNELS) {
-		PyErr_SetString(PyExc_ValueError, "too many channels");
-		return -1;
-	}
-
-	if (n_channels != frag->n_channels) {
-		PyErr_SetString(PyExc_ValueError, "channels number mismatch");
-		return -1;
-	}
-
-	levels->n = n_channels;
-	levels->all_floats = 1;
-
-	for (c = 0; c < n_channels; ++c) {
-		levels->obj[c] = PyTuple_GetItem(levels_obj, c);
-
-		if (levels->all_floats) {
-			double level_dB;
-
-			if (!splat_obj2double(levels->obj[c], &level_dB))
-				levels->fl[c] = dB2lin(level_dB);
-			else
-				levels->all_floats = 0;
-		}
-	}
-
-	return 0;
-}
-
-static void frag_get_levels_signal(Fragment *frag, struct splat_levels *levels,
-				   PyObject *levels_obj)
-{
-	unsigned c;
-
-	levels->n = frag->n_channels;
-	levels->all_floats = 0;
-
-	for (c = 0; c < frag->n_channels; ++c)
-		levels->obj[c] = levels_obj;
-}
-
-static int frag_get_levels(Fragment *frag, struct splat_levels *levels,
-			   PyObject *levels_obj)
-{
-	double gain_log;
-	int res = 0;
-
-	if (!splat_obj2double(levels_obj, &gain_log))
-		frag_get_levels_float(frag, levels, levels_obj, gain_log);
-	else if (PyTuple_Check(levels_obj))
-		res = frag_get_levels_tuple(frag, levels, levels_obj);
-	else
-		frag_get_levels_signal(frag, levels, levels_obj);
-
-	return res;
-}
-
-static int frag_resize(Fragment *frag, size_t length)
-{
-	const size_t start = frag->length * sizeof(sample_t);
-	const size_t size = length * sizeof(sample_t);
-	const ssize_t extra = size - start;
-	unsigned c;
-
-	for (c = 0; c < frag->n_channels; ++c) {
-		if (frag->data[c] == NULL)
-			frag->data[c] = PyMem_Malloc(size);
-		else
-			frag->data[c] = PyMem_Realloc(frag->data[c], size);
-
-		if (frag->data[c] == NULL) {
-			PyErr_NoMemory();
-			return -1;
-		}
-
-		if (extra > 0)
-			memset(&frag->data[c][frag->length], 0, extra);
-	}
-
-	frag->length = length;
-
-	return 0;
-}
-
-static int frag_get_sample_number(size_t *val, long min_val, long max_val,
-				  PyObject *obj)
-{
-	long tmp_val;
-
-	if (!PyInt_Check(obj)) {
-		PyErr_SetString(PyExc_TypeError,
-				"sample number must be an integer");
-		return -1;
-	}
-
-	tmp_val = min(PyInt_AsLong(obj), max_val);
-	*val = max(tmp_val, min_val);
-
-	return 0;
-}
-
-static void frag_get_peak(Fragment *frag, struct splat_peak *chan_peak,
-			  struct splat_peak *frag_peak, int do_avg)
-{
-	unsigned c;
-
-	frag_peak->avg = 0.0;
-	frag_peak->pos = -1.0;
-	frag_peak->neg = 1.0;
-	frag_peak->peak = 0.0;
-
-	for (c = 0; c < frag->n_channels; ++c) {
-		sample_t * const chan_data = frag->data[c];
-		const sample_t * const end = &chan_data[frag->length];
-		const sample_t *it;
-		double avg = 0.0;
-		double pos = -1.0;
-		double neg = 1.0;
-
-		for (it = chan_data; it != end; ++it) {
-			if (do_avg)
-				avg += *it / frag->length;
-
-			if (*it > pos)
-				pos = *it;
-			else if (*it < neg)
-				neg = *it;
-		}
-
-		chan_peak[c].avg = avg;
-		chan_peak[c].pos = pos;
-		chan_peak[c].neg = neg;
-
-		if (do_avg)
-			frag_peak->avg += avg / frag->n_channels;
-
-		if (pos > frag_peak->pos)
-			frag_peak->pos = pos;
-
-		if (neg < frag_peak->neg)
-			frag_peak->neg = neg;
-
-		neg = fabsf(neg);
-		pos = fabsf(pos);
-		chan_peak[c].peak = (neg > pos) ? neg : pos;
-
-		if (frag_peak->peak < chan_peak[c].peak)
-			frag_peak->peak = chan_peak[c].peak;
-	}
-}
-
-static PyObject *splat_peak_dict(const struct splat_peak *peak)
-{
-	return Py_BuildValue("{sdsdsdsd}", "avg", peak->avg, "pos", peak->pos,
-			     "neg", peak->neg, "peak", peak->peak);
-}
-
-
 /* ----------------------------------------------------------------------------
  * _splat methods
  */
@@ -2183,13 +1422,16 @@ PyDoc_STRVAR(splat_gen_ref_doc,
 
 static PyObject *splat_gen_ref(PyObject *self, PyObject *args)
 {
-	Fragment *frag;
+	Fragment *frag_obj;
+	struct splat_fragment *frag;
 	sample_t *data;
 	size_t n;
 	size_t i;
 
-	if (!PyArg_ParseTuple(args, "O!", &splat_FragmentType, &frag))
+	if (!PyArg_ParseTuple(args, "O!", &splat_FragmentType, &frag_obj))
 		return NULL;
+
+	frag = &frag_obj->frag;
 
 	if (frag->n_channels != 1) {
 		PyErr_SetString(PyExc_ValueError,
@@ -2240,74 +1482,6 @@ static int _splat_check_all_floats(size_t n, ...)
 	return (i == n);
 }
 
-/* -- sine source -- */
-
-static void splat_sine_floats(Fragment *frag, const double *levels,
-			      double freq, double phase)
-{
-	const double k = 2 * M_PI * freq / frag->rate;
-	const long ph = phase * frag->rate;
-	size_t i;
-
-	for (i = 0; i < frag->length; ++i) {
-		const double s = sin(k * (i + ph));
-		unsigned c;
-
-		for (c = 0; c < frag->n_channels; ++c)
-			frag->data[c][i] = s * levels[c];
-	}
-}
-
-static int splat_sine_signals(Fragment *frag, PyObject **levels,
-			      PyObject *freq, PyObject *phase, double origin)
-{
-	enum {
-		SIG_FREQ = 0,
-		SIG_PHASE,
-		SIG_AMP,
-	};
-	static const double k = 2 * M_PI;
-	struct splat_signal sig;
-	PyObject *signals[SIG_AMP + MAX_CHANNELS];
-	unsigned c;
-	size_t i;
-
-	signals[SIG_FREQ] = freq;
-	signals[SIG_PHASE] = phase;
-
-	for (c = 0; c < frag->n_channels; ++c)
-		signals[SIG_AMP + c] = levels[c];
-
-	if (splat_signal_init(&sig, frag->length, (origin * frag->rate),
-			      signals, (SIG_AMP + frag->n_channels),
-			      frag->rate))
-		return -1;
-
-	i = 0;
-
-	while (splat_signal_next(&sig) == SIGNAL_VECTOR_CONTINUE) {
-		size_t j;
-
-		for (j = 0; j < sig.len; ++i, ++j) {
-			const double t = (double)i / frag->rate;
-			const double f = sig.vectors[SIG_FREQ].data[j];
-			const double ph = sig.vectors[SIG_PHASE].data[j];
-			const double s = sin(k * f * (t + ph + origin));
-
-			for (c = 0; c < frag->n_channels; ++c) {
-				const double a =
-					sig.vectors[SIG_AMP + c].data[j];
-
-				frag->data[c][i] = s * dB2lin(a);
-			}
-		}
-	}
-
-	splat_signal_free(&sig);
-
-	return (sig.stat == SIGNAL_VECTOR_ERROR) ? -1 : 0;
-}
-
 PyDoc_STRVAR(splat_sine_doc,
 "sine(fragment, levels, frequency, phase=0.0, origin=0.0)\n"
 "\n"
@@ -2316,21 +1490,23 @@ PyDoc_STRVAR(splat_sine_doc,
 
 static PyObject *splat_sine(PyObject *self, PyObject *args)
 {
-	Fragment *frag;
+	Fragment *frag_obj;
 	PyObject *levels_obj;
 	PyObject *freq;
 	PyObject *phase = splat_zero;
 	double origin = 0.0;
 
+	struct splat_fragment *frag;
 	struct splat_levels levels;
 	int all_floats;
 
-
-	if (!PyArg_ParseTuple(args, "O!OO|Od", &splat_FragmentType, &frag,
+	if (!PyArg_ParseTuple(args, "O!OO|Od", &splat_FragmentType, &frag_obj,
 			      &levels_obj, &freq, &phase, &origin))
 		return NULL;
 
-	if (frag_get_levels(frag, &levels, levels_obj))
+	frag = &frag_obj->frag;
+
+	if (splat_levels_init(frag, &levels, levels_obj))
 		return NULL;
 
 	all_floats = levels.all_floats && splat_check_all_floats(freq, phase);
@@ -2344,98 +1520,6 @@ static PyObject *splat_sine(PyObject *self, PyObject *args)
 	Py_RETURN_NONE;
 }
 
-/* -- square source -- */
-
-static void splat_square_floats(Fragment *frag, const double *fl_pos,
-				double freq, double phase, double ratio)
-{
-	const double k = freq / frag->rate;
-	const double ph0 = freq * phase;
-	double fl_neg[MAX_CHANNELS];
-	unsigned c;
-	Py_ssize_t i;
-
-	ratio = min(ratio, 1.0);
-	ratio = max(ratio, 0.0);
-
-	for (c = 0; c < frag->n_channels; ++c)
-		fl_neg[c] = -fl_pos[c];
-
-	for (i = 0; i < frag->length; ++i) {
-		double n_periods;
-		const double t_rel = modf(((i * k) + ph0), &n_periods);
-		const double *levels;
-
-		if (t_rel < ratio)
-			levels = fl_pos;
-		else
-			levels = fl_neg;
-
-		for (c = 0; c < frag->n_channels; ++c)
-			frag->data[c][i] = levels[c];
-	}
-}
-
-static int splat_square_signals(Fragment *frag, PyObject **levels,
-				PyObject *freq, PyObject *phase,
-				PyObject *ratio, double origin)
-{
-	enum {
-		SIG_FREQ = 0,
-		SIG_PHASE,
-		SIG_RATIO,
-		SIG_AMP,
-	};
-	struct splat_signal sig;
-	PyObject *signals[SIG_AMP + MAX_CHANNELS];
-	unsigned c;
-	size_t i;
-
-	signals[SIG_FREQ] = freq;
-	signals[SIG_PHASE] = phase;
-	signals[SIG_RATIO] = ratio;
-
-	for (c = 0; c < frag->n_channels; ++c)
-		signals[SIG_AMP + c] = levels[c];
-
-	if (splat_signal_init(&sig, frag->length, (origin * frag->rate),
-			      signals, (SIG_AMP + frag->n_channels),
-			      frag->rate))
-		return -1;
-
-	i = 0;
-
-	while (splat_signal_next(&sig) == SIGNAL_VECTOR_CONTINUE) {
-		size_t j;
-
-		for (j = 0; j < sig.len; ++i, ++j) {
-			const double f = sig.vectors[SIG_FREQ].data[j];
-			const double ph = sig.vectors[SIG_PHASE].data[j];
-			const double t = (double)i / frag->rate;
-			const double tph = t + ph + origin;
-			double n_periods;
-			const double t_rel = modf((f * (tph)), &n_periods);
-			double ratio = sig.vectors[SIG_RATIO].data[j];
-			double s;
-
-			ratio = min(ratio, 1.0);
-			ratio = max(ratio, 0.0);
-			s = (t_rel < ratio) ? 1.0 : -1.0;
-
-			for (c = 0; c < frag->n_channels; ++c) {
-				const double a =
-					sig.vectors[SIG_AMP + c].data[j];
-
-				frag->data[c][i] = dB2lin(a) * s;
-			}
-		}
-	}
-
-	splat_signal_free(&sig);
-
-	return (sig.stat == SIGNAL_VECTOR_ERROR) ? -1 : 0;
-}
-
 PyDoc_STRVAR(splat_square_doc,
 "square(fragment, levels, frequency, phase=0.0, origin=0.0, ratio=0.5)\n"
 "\n"
@@ -2444,21 +1528,24 @@ PyDoc_STRVAR(splat_square_doc,
 
 static PyObject *splat_square(PyObject *self, PyObject *args)
 {
-	Fragment *frag;
+	Fragment *frag_obj;
 	PyObject *levels_obj;
 	PyObject *freq;
 	PyObject *phase = splat_zero;
 	double origin = 0.0;
 	PyObject *ratio = splat_init_source_ratio;
 
+	struct splat_fragment *frag;
 	struct splat_levels levels;
 	int all_floats;
 
-	if (!PyArg_ParseTuple(args, "O!OO|OdO", &splat_FragmentType, &frag,
+	if (!PyArg_ParseTuple(args, "O!OO|OdO", &splat_FragmentType, &frag_obj,
 			      &levels_obj, &freq, &phase, &origin, &ratio))
 		return NULL;
 
-	if (frag_get_levels(frag, &levels, levels_obj))
+	frag = &frag_obj->frag;
+
+	if (splat_levels_init(frag, &levels, levels_obj))
 		return NULL;
 
 	all_floats = levels.all_floats;
@@ -2475,116 +1562,6 @@ static PyObject *splat_square(PyObject *self, PyObject *args)
 	Py_RETURN_NONE;
 }
 
-/* -- triangle source -- */
-
-static void splat_triangle_floats(Fragment *frag, const double *lvls,
-				  double freq, double phase, double ratio)
-{
-	const double k = freq / frag->rate;
-	const double ph0 = freq * phase;
-	double a1[MAX_CHANNELS], b1[MAX_CHANNELS];
-	double a2[MAX_CHANNELS], b2[MAX_CHANNELS];
-	const double *a, *b;
-	unsigned c;
-	Py_ssize_t i;
-
-	ratio = min(ratio, 1.0);
-	ratio = max(ratio, 0.0);
-
-	for (c = 0; c < frag->n_channels; ++c) {
-		const double llin = lvls[c];
-
-		a1[c] = 2 * llin / ratio;
-		b1[c] = -llin;
-		a2[c] = -2 * llin / (1 - ratio);
-		b2[c] = llin - (a2[c] * ratio);
-	}
-
-	for (i = 0; i < frag->length; ++i) {
-		double n_periods;
-		const double t_rel = modf(((i * k) + ph0), &n_periods);
-
-		if (t_rel < ratio) {
-			a = a1;
-			b = b1;
-		} else {
-			a = a2;
-			b = b2;
-		}
-
-		for (c = 0; c < frag->n_channels; ++c)
-			frag->data[c][i] = (a[c] * t_rel) + b[c];
-	}
-}
-
-static int splat_triangle_signals(Fragment *frag, PyObject **levels,
-				  PyObject *freq, PyObject *phase,
-				  PyObject *ratio, double origin)
-{
-	enum {
-		SIG_FREQ = 0,
-		SIG_PHASE,
-		SIG_RATIO,
-		SIG_AMP,
-	};
-	struct splat_signal sig;
-	PyObject *signals[SIG_AMP + MAX_CHANNELS];
-	unsigned c;
-	size_t i;
-
-	signals[SIG_FREQ] = freq;
-	signals[SIG_PHASE] = phase;
-	signals[SIG_RATIO] = ratio;
-
-	for (c = 0; c < frag->n_channels; ++c)
-		signals[SIG_AMP + c] = levels[c];
-
-	if (splat_signal_init(&sig, frag->length, (origin * frag->rate),
-			      signals, (SIG_AMP + frag->n_channels),
-			      frag->rate))
-		return -1;
-
-	i = 0;
-
-	while (splat_signal_next(&sig) == SIGNAL_VECTOR_CONTINUE) {
-		size_t j;
-
-		for (j = 0; j < sig.len; ++i, ++j) {
-			const double f = sig.vectors[SIG_FREQ].data[j];
-			const double ph = sig.vectors[SIG_PHASE].data[j];
-			const double t = (double)i / frag->rate;
-			const double tph = t + ph + origin;
-			double n_periods;
-			const double t_rel = modf((f * (tph)), &n_periods);
-			double ratio = sig.vectors[SIG_RATIO].data[j];
-
-			ratio = min(ratio, 1.0);
-			ratio = max(ratio, 0.0);
-
-			for (c = 0; c < frag->n_channels; ++c) {
-				const double l_log =
-					sig.vectors[SIG_AMP + c].data[j];
-				const double l = dB2lin(l_log);
-				double a, b;
-
-				if (t_rel < ratio) {
-					a = 2 * l / ratio;
-					b = -l;
-				} else {
-					a = -2 * l / (1 - ratio);
-					b = l - (a * ratio);
-				}
-
-				frag->data[c][i] = (a * t_rel) + b;
-			}
-		}
-	}
-
-	splat_signal_free(&sig);
-
-	return (sig.stat == SIGNAL_VECTOR_ERROR) ? -1 : 0;
-}
-
 PyDoc_STRVAR(splat_triangle_doc,
 "triangle(fragment, levels, frequency, phase=0.0, origin=0.0, ratio=0.5)\n"
 "\n"
@@ -2593,21 +1570,24 @@ PyDoc_STRVAR(splat_triangle_doc,
 
 static PyObject *splat_triangle(PyObject *self, PyObject *args)
 {
-	Fragment *frag;
+	Fragment *frag_obj;
 	PyObject *levels_obj;
 	PyObject *freq;
 	PyObject *phase = splat_zero;
 	double origin = 0.0;
 	PyObject *ratio = splat_init_source_ratio;
 
+	struct splat_fragment *frag;
 	struct splat_levels levels;
 	int all_floats;
 
-	if (!PyArg_ParseTuple(args, "O!OO|OdO", &splat_FragmentType, &frag,
+	if (!PyArg_ParseTuple(args, "O!OO|OdO", &splat_FragmentType, &frag_obj,
 			      &levels_obj, &freq, &phase, &origin, &ratio))
 		return NULL;
 
-	if (frag_get_levels(frag, &levels, levels_obj))
+	frag = &frag_obj->frag;
+
+	if (splat_levels_init(frag, &levels, levels_obj))
 		return NULL;
 
 	all_floats = levels.all_floats;
@@ -2622,220 +1602,6 @@ static PyObject *splat_triangle(PyObject *self, PyObject *args)
 		return NULL;
 
 	Py_RETURN_NONE;
-}
-
-/* -- overtones source -- */
-
-struct overtone {
-	PyObject *ratio;
-	double fl_ratio;
-	PyObject *phase;
-	double fl_phase;
-	struct splat_levels levels;
-};
-
-static void splat_overtones_float(Fragment *frag, const double *levels,
-				  double freq, double phase,
-				  struct overtone *overtones, Py_ssize_t n)
-{
-	const double k = 2 * M_PI * freq;
-	const double max_ratio = (frag->rate / freq) / 2;
-	struct overtone *ot;
-	const struct overtone *ot_end = &overtones[n];
-	unsigned c;
-	size_t i;
-
-	/* Silence harmonics above (rate / 2) to avoid spectrum overlap
-	   and multiply each overtone levels with global levels. */
-	for (ot = overtones; ot != ot_end; ++ot) {
-		if (ot->fl_ratio >= max_ratio) {
-			for (c = 0; c < frag->n_channels; ++c)
-				ot->levels.fl[c] = 0.0f;
-		} else {
-			for (c = 0; c < frag->n_channels; ++c)
-				ot->levels.fl[c] *= levels[c];
-		}
-	}
-
-	for (i = 0; i < frag->length; ++i) {
-		const double t = phase + ((double)i / frag->rate);
-
-		for (ot = overtones; ot != ot_end; ++ot) {
-			const double s =
-				sin(k * ot->fl_ratio * (t + ot->fl_phase));
-
-			for (c = 0; c < frag->n_channels; ++c)
-				frag->data[c][i] += s * ot->levels.fl[c];
-		}
-	}
-}
-
-static int splat_overtones_mixed(Fragment *frag, PyObject **levels,
-				 PyObject *freq, PyObject *phase,
-				 struct overtone *overtones, Py_ssize_t n,
-				 double origin)
-{
-	enum {
-		SIG_FREQ = 0,
-		SIG_PHASE,
-		SIG_AMP,
-	};
-	const double k = 2 * M_PI;
-	const double half_rate = frag->rate / 2;
-	PyObject *signals[SIG_AMP + MAX_CHANNELS];
-	struct splat_signal sig;
-	struct overtone *ot;
-	const struct overtone *ot_end = &overtones[n];
-	unsigned c;
-	size_t i;
-
-	signals[SIG_FREQ] = freq;
-	signals[SIG_PHASE] = phase;
-
-	for (c = 0; c < frag->n_channels; ++c)
-		signals[SIG_AMP + c] = levels[c];
-
-	if (splat_signal_init(&sig, frag->length, (origin * frag->rate),
-			      signals, (SIG_AMP + frag->n_channels),
-			      frag->rate))
-		return -1;
-
-	i = 0;
-
-	while (splat_signal_next(&sig) == SIGNAL_VECTOR_CONTINUE) {
-		size_t j;
-
-		for (j = 0; j < sig.len; ++i, ++j) {
-			const double f = sig.vectors[SIG_FREQ].data[j];
-			const double max_ratio = half_rate / f;
-			const double m = k * f;
-			const double ph = sig.vectors[SIG_PHASE].data[j];
-			const double t = (double)i / frag->rate;
-			const double tph = t + ph + origin;
-
-			for (ot = overtones; ot != ot_end; ++ot) {
-				double s;
-
-				if (ot->fl_ratio >= max_ratio)
-					continue;
-
-				s = sin(m * ot->fl_ratio *
-					(tph + ot->fl_phase));
-
-				for (c = 0; c < frag->n_channels; ++c) {
-					double x;
-
-					x = sig.vectors[SIG_AMP + c].data[j];
-					x = dB2lin(x);
-					x *= ot->levels.fl[c];
-					frag->data[c][i] += s * x;
-				}
-			}
-		}
-	}
-
-	splat_signal_free(&sig);
-
-	return (sig.stat == SIGNAL_VECTOR_ERROR) ? -1 : 0;
-}
-
-static int splat_overtones_signal(Fragment *frag, PyObject **levels,
-				  PyObject *freq, PyObject *phase,
-				  struct overtone *overtones, Py_ssize_t n,
-				  double origin)
-{
-	enum {
-		SIG_FREQ = 0,
-		SIG_PHASE = 1,
-		SIG_AMP = 2,
-		SIG_OT = 2 + MAX_CHANNELS,
-	};
-	const double k = 2 * M_PI;
-	const double half_rate = frag->rate / 2;
-	PyObject **signals;
-	struct splat_signal sig;
-	struct overtone *ot;
-	const struct overtone *ot_end = &overtones[n];
-	static const size_t sig_freq = 0;
-	static const size_t sig_phase = 1;
-	static const size_t sig_amp = 2;
-	const size_t sig_ot = sig_amp + frag->n_channels;
-	/* for each overtone: ratio, phase and levels */
-	const size_t sig_n = sig_ot + (n * (2 + frag->n_channels));
-	unsigned c;
-	size_t i;
-
-	signals = PyMem_Malloc(sig_n * sizeof(PyObject *));
-
-	if (signals == NULL) {
-		PyErr_NoMemory();
-		return -1;
-	}
-
-	signals[sig_freq] = freq;
-	signals[sig_phase] = phase;
-
-	for (c = 0; c < frag->n_channels; ++c)
-		signals[sig_amp + c] = levels[c];
-
-	{
-		PyObject **sig_ot_it = &signals[sig_ot];
-
-		for (ot = overtones; ot != ot_end; ++ot) {
-			*sig_ot_it++ = ot->ratio;
-			*sig_ot_it++ = ot->phase;
-
-			for (c = 0; c < frag->n_channels; ++c)
-				*sig_ot_it++ = ot->levels.obj[c];
-		}
-	}
-
-	if (splat_signal_init(&sig, frag->length, (origin * frag->rate),
-			      signals, sig_n, frag->rate))
-		return -1;
-
-	i = 0;
-
-	while (splat_signal_next(&sig) == SIGNAL_VECTOR_CONTINUE) {
-		size_t j;
-
-		for (j = 0; j < sig.len; ++i, ++j) {
-			const double t = (double)i / frag->rate;
-			const double f = sig.vectors[sig_freq].data[j];
-			const double max_ratio = half_rate / f;
-			const double ph = sig.vectors[sig_phase].data[j];
-			const double m = k * f;
-			const double tph = t + ph + origin;
-			const struct signal_vector *otv = &sig.vectors[sig_ot];
-
-			for (ot = overtones; ot != ot_end; ++ot) {
-				const double ratio = (otv++)->data[j];
-				const double ot_ph = (otv++)->data[j];
-				double s;
-
-				if (ratio >= max_ratio) {
-					otv += frag->n_channels;
-					continue;
-				}
-
-				s = sin(m * ratio * (tph + ot_ph));
-
-				for (c = 0; c < frag->n_channels; ++c) {
-					double x, y;
-
-					x = sig.vectors[sig_amp + c].data[j];
-					y = (otv++)->data[j];
-					frag->data[c][i] +=
-						s * dB2lin(x) * dB2lin(y);
-				}
-			}
-		}
-	}
-
-	splat_signal_free(&sig);
-	PyMem_Free(signals);
-
-	return (sig.stat == SIGNAL_VECTOR_ERROR) ? -1 : 0;
 }
 
 PyDoc_STRVAR(splat_overtones_doc,
@@ -2858,32 +1624,35 @@ static PyObject *splat_overtones(PyObject *self, PyObject *args)
 		OT_PHASE,
 		OT_LEVELS,
 	};
-	Fragment *frag;
+	Fragment *frag_obj;
 	PyObject *levels_obj;
 	PyObject *freq;
 	PyObject *overtones_obj;
 	PyObject *phase = splat_zero;
 	double origin = 0.0;
 
+	struct splat_fragment *frag;
 	struct splat_levels levels;
-	struct overtone *overtones;
-	struct overtone *ot;
+	struct splat_overtone *overtones;
+	struct splat_overtone *ot;
 	Py_ssize_t n;
 	Py_ssize_t pos;
 	int all_floats;
 	int ot_all_floats;
 	int stat = 0;
 
-	if (!PyArg_ParseTuple(args, "O!OOO!|Od", &splat_FragmentType, &frag,
+	if (!PyArg_ParseTuple(args, "O!OOO!|Od", &splat_FragmentType, &frag_obj,
 			      &levels_obj, &freq, &PyList_Type, &overtones_obj,
 			      &phase, &origin))
 		return NULL;
 
-	if (frag_get_levels(frag, &levels, levels_obj))
+	frag = &frag_obj->frag;
+
+	if (splat_levels_init(frag, &levels, levels_obj))
 		return NULL;
 
 	n = PyList_GET_SIZE(overtones_obj);
-	overtones = PyMem_Malloc(n * sizeof(struct overtone));
+	overtones = PyMem_Malloc(n * sizeof(struct splat_overtone));
 
 	if (overtones == NULL)
 		return PyErr_NoMemory();
@@ -2918,7 +1687,7 @@ static PyObject *splat_overtones(PyObject *self, PyObject *args)
 
 		ot_levels = PyTuple_GET_ITEM(ot_params, OT_LEVELS);
 
-		if (frag_get_levels(frag, &ot->levels, ot_levels))
+		if (splat_levels_init(frag, &ot->levels, ot_levels))
 			goto free_overtones;
 
 		ot_all_floats = ot_all_floats && ot->levels.all_floats;
@@ -2962,13 +1731,11 @@ PyDoc_STRVAR(splat_dec_envelope_doc,
 
 static PyObject *splat_dec_envelope(PyObject *self, PyObject *args)
 {
-	Fragment *frag;
+	Fragment *frag_obj;
 	double k = 1.0;
 	double p = 1.0;
 
-	unsigned c;
-
-	if (!PyArg_ParseTuple(args, "O!|dd", &splat_FragmentType, &frag,
+	if (!PyArg_ParseTuple(args, "O!|dd", &splat_FragmentType, &frag_obj,
 			      &k, &p))
 		return NULL;
 
@@ -2977,14 +1744,7 @@ static PyObject *splat_dec_envelope(PyObject *self, PyObject *args)
 		return NULL;
 	}
 
-	for (c = 0; c < frag->n_channels; ++c) {
-		size_t i;
-
-		for (i = 0; i < frag->length; ++i) {
-			const double m = pow(1.0 + ((double)i / k), p);
-			frag->data[c][i] /= m;
-		}
-	}
+	splat_filter_dec_envelope(&frag_obj->frag, k, p);
 
 	Py_RETURN_NONE;
 }
@@ -2996,24 +1756,12 @@ PyDoc_STRVAR(splat_reverse_doc,
 
 static PyObject *splat_reverse(PyObject *self, PyObject *args)
 {
-	Fragment *frag;
+	Fragment *frag_obj;
 
-	unsigned c;
-
-	if (!PyArg_ParseTuple(args, "O!", &splat_FragmentType, &frag))
+	if (!PyArg_ParseTuple(args, "O!", &splat_FragmentType, &frag_obj))
 		return NULL;
 
-	for (c = 0; c < frag->n_channels; ++c) {
-		size_t i;
-		size_t j;
-
-		for (i = 0, j = (frag->length - 1); i < j; ++i, --j) {
-			const double s = frag->data[c][i];
-
-			frag->data[c][i] = frag->data[c][j];
-			frag->data[c][j] = s;
-		}
-	}
+	splat_filter_reverse(&frag_obj->frag);
 
 	Py_RETURN_NONE;
 }
@@ -3047,29 +1795,22 @@ PyDoc_STRVAR(splat_reverb_doc,
 
 static PyObject *splat_reverb(PyObject *self, PyObject *args)
 {
-	struct delay {
-		size_t time;
-		double gain;
-#if USE_V4SF
-		v4sf gain4;
-#endif
-	};
-
-	Fragment *frag;
+	Fragment *frag_obj;
 	PyObject *delays_list;
 	double time_factor = 0.2;
 	double gain_factor = 6.0;
 	unsigned int seed = 0;
 
-	struct delay *delays[MAX_CHANNELS];
+	struct splat_fragment *frag;
+	struct splat_delay *delays[SPLAT_MAX_CHANNELS];
 	Py_ssize_t n_delays;
+	size_t delays_size;
 	size_t max_delay;
 	size_t max_index;
 	size_t d;
 	unsigned c;
-	size_t i;
 
-	if (!PyArg_ParseTuple(args, "O!O!|ddI", &splat_FragmentType, &frag,
+	if (!PyArg_ParseTuple(args, "O!O!|ddI", &splat_FragmentType, &frag_obj,
 			      &PyList_Type, &delays_list, &time_factor,
 			      &gain_factor, &seed))
 		return NULL;
@@ -3079,10 +1820,12 @@ static PyObject *splat_reverb(PyObject *self, PyObject *args)
 
 	srand(seed);
 
+	frag = &frag_obj->frag;
 	n_delays = PyList_GET_SIZE(delays_list);
+	delays_size = n_delays * sizeof(struct splat_delay);
 
 	for (c = 0; c < frag->n_channels; ++c) {
-		delays[c] = PyMem_Malloc(n_delays * sizeof(struct delay));
+		delays[c] = PyMem_Malloc(delays_size);
 
 		if (delays[c] == NULL) {
 			while (--c)
@@ -3123,11 +1866,8 @@ static PyObject *splat_reverb(PyObject *self, PyObject *args)
 			const double c_time =
 				(time
 				 * (1.0 + (rand() * time_factor / RAND_MAX)));
-#if USE_V4SF
-			delays[c][d].time = c_time * frag->rate / 4;
-#else
+
 			delays[c][d].time = c_time * frag->rate;
-#endif
 
 			if (delays[c][d].time > max_delay)
 				max_delay = delays[c][d].time;
@@ -3139,68 +1879,17 @@ static PyObject *splat_reverb(PyObject *self, PyObject *args)
 			const double c_gain_dB =
 				(gain - gain_factor
 				 + (rand() * gain_factor * 2.0 / RAND_MAX));
-#if USE_V4SF
-			const double c_gain = dB2lin(c_gain_dB);
-			const v4sf gain4 = {c_gain, c_gain, c_gain, c_gain};
-			delays[c][d].gain4 = gain4;
-			delays[c][d].gain = c_gain;
-#else
+
 			delays[c][d].gain = dB2lin(c_gain_dB);
-#endif
 		}
 	}
 
-	max_index = frag->length - 1;
+	max_index = frag->length + 1;
 
-#if USE_V4SF
-	max_delay *= 4;
-#endif
-
-	if (frag_grow(frag, (frag->length + max_delay)))
+	if (splat_frag_grow(frag, (frag->length + max_delay)))
 		return NULL;
 
-	for (c = 0; c < frag->n_channels; ++c) {
-		const struct delay *c_delay = delays[c];
-#if USE_V4SF
-		v4sf *c_data = (v4sf *)frag->data[c];
-#else
-		sample_t *c_data = frag->data[c];
-#endif
-
-		i = max_index;
-
-#if USE_V4SF
-		while (i % 4) {
-			const double s = frag->data[c][i];
-
-			for (d = 0; d < n_delays; ++d) {
-				const double z = s * c_delay[d].gain;
-				frag->data[c][i + (c_delay[d].time * 4)] += z;
-			}
-
-			i--;
-		}
-
-		i /= 4;
-#endif
-
-		do {
-#if USE_V4SF
-			const v4sf s = c_data[i];
-#else
-			const double s = c_data[i];
-#endif
-
-			for (d = 0; d < n_delays; ++d) {
-#if USE_V4SF
-				const v4sf z = s * c_delay[d].gain4;
-#else
-				const double z = s * c_delay[d].gain;
-#endif
-				c_data[i + c_delay[d].time] += z;
-			}
-		} while (i--);
-	}
+	splat_filter_reverb(&frag_obj->frag, delays, n_delays, max_index);
 
 	for (c = 0; c < frag->n_channels; ++c)
 		PyMem_Free(delays[c]);
@@ -3229,7 +1918,7 @@ static PyObject *splat_spline_value(PyObject *self, PyObject *args)
 	if (!PyArg_ParseTuple(args, "O!d", &PyList_Type, &spline, &x))
 		return NULL;
 
-	poly = splat_find_spline_poly(spline, x, NULL);
+	poly = splat_spline_find_poly(spline, x, NULL);
 
 	if (poly == NULL)
 		return NULL;
