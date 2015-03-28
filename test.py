@@ -39,7 +39,7 @@ splat.check_version((1, 5))
 class SplatTest(unittest.TestCase):
 
     def setUp(self):
-        self._places = 12 if splat.SAMPLE_WIDTH == 64 else 4
+        self._places = 10 if splat.SAMPLE_WIDTH == 64 else 4
 
     def assert_md5(self, frags, hexdigest):
         if isinstance(frags, splat.data.Fragment):
@@ -418,24 +418,26 @@ class GeneratorTest(SplatTest):
     def test_sine(self):
         """sources.sine"""
         freq = 1237.9
+        ph = 0.123
         frag_float = splat.data.Fragment(duration=1.0)
-        splat.sources.sine(frag_float, -0.5, freq)
+        splat.sources.sine(frag_float, -0.5, freq, ph)
         frag_signal = splat.data.Fragment(duration=1.0)
-        splat.sources.sine(frag_signal, -0.5, freq, lambda x: 0.0)
+        splat.sources.sine(frag_signal, -0.5, freq, lambda x: ph)
         frag_freq = splat.data.Fragment(duration=1.0, channels=1)
         frag_freq.offset(freq)
         frag_frag = splat.data.Fragment(duration=1.0)
-        splat.sources.sine(frag_frag, -0.5, frag_freq)
+        splat.sources.sine(frag_frag, -0.5, frag_freq, ph)
         self.assert_md5([frag_float, frag_signal, frag_frag],
-                        '46a8962a759033371f45c4ade9f2bfbd')
+                        'ebd3117927861068cf77af5ed2e7c5d7')
 
     def test_sine_gen(self):
         """gen.SineGenerator"""
         gen = splat.gen.SineGenerator()
-        f = 1000.0
-        gen.run(0.0, 1.0, f)
+        freq = 1000.0
+        ph = 6.789
+        gen.run(0.0, 1.0, freq, ph)
         n = int(0.1234 * gen.frag.duration * gen.frag.rate)
-        s = math.sin(2 * math.pi * f * float(n) / gen.frag.rate)
+        s = math.sin(2 * math.pi * freq * (ph + float(n) / gen.frag.rate))
         self.assert_samples(gen.frag, {n: (s, s)})
         self.assert_md5(gen.frag, 'ec18389e198ee868d61c9439343a3337')
 
@@ -501,12 +503,12 @@ class GeneratorTest(SplatTest):
         """sources.overtones"""
         freq = 1237.5
         ot = [(1.3, 0.0, -2.5), (5.7, 10.0, -12.9)]
+        ot_sig = [(1.3, 0.0, -2.5), (5.7, lambda x: 10.0, -12.9)]
         frag_float = splat.data.Fragment(duration=1.0)
         splat.sources.overtones(frag_float, -0.5, freq, ot)
         frag_mixed = splat.data.Fragment(duration=1.0)
         splat.sources.overtones(frag_mixed, -0.5, freq, ot, lambda x: 0.0)
         frag_signal = splat.data.Fragment(duration=1.0)
-        ot_sig = [(1.3, 0.0, -2.5), (5.7, lambda x: 10.0, -12.9)]
         splat.sources.overtones(frag_signal, -0.5, freq, ot_sig, lambda x: 0.0)
         frag_freq = splat.data.Fragment(duration=1.0, channels=1)
         frag_freq.offset(1237.5)
@@ -519,7 +521,7 @@ class GeneratorTest(SplatTest):
         """gen.OvertonesGenerator"""
         gen = splat.gen.OvertonesGenerator()
         gen.ot_decexp(1.0)
-        gen.run(0.0, 1.0, 1000.0)
+        gen.run(0.0, 1.0, 1000.0, 0.1)
         self.assert_md5(gen.frag, 'ee045e012673ff7ed4ab9bd590b57368')
 
 
