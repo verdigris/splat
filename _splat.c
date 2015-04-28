@@ -1560,11 +1560,13 @@ static PyObject *splat_sine(PyObject *self, PyObject *args)
 
 	all_floats = levels.all_floats && splat_check_all_floats(freq, phase);
 
-	if (all_floats)
+	if (all_floats) {
+		origin = fmod(origin, 1 / PyFloat_AS_DOUBLE(freq));
 		splat_sine_floats(frag, levels.fl, PyFloat_AS_DOUBLE(freq),
 				  PyFloat_AS_DOUBLE(phase) + origin);
-	else if (splat_sine_signals(frag, levels.obj, freq, phase, origin))
+	} else if (splat_sine_signals(frag, levels.obj, freq, phase, origin)) {
 		return NULL;
+	}
 
 	Py_RETURN_NONE;
 }
@@ -1690,6 +1692,7 @@ static PyObject *splat_overtones(PyObject *self, PyObject *args)
 	Py_ssize_t pos;
 	int all_floats;
 	int ot_all_floats;
+	double fl_period;
 	int stat = 0;
 
 	if (!PyArg_ParseTuple(args, "O!OOO!|Od", &splat_FragmentType, &frag_obj,
@@ -1707,6 +1710,13 @@ static PyObject *splat_overtones(PyObject *self, PyObject *args)
 
 	if (overtones == NULL)
 		return PyErr_NoMemory();
+
+	if (PyFloat_Check(freq)) {
+		fl_period = 1.0 / PyFloat_AS_DOUBLE(freq);
+		origin = fmod(origin, fl_period);
+	} else {
+		fl_period = 0.0;
+	}
 
 	all_floats = levels.all_floats && splat_check_all_floats(freq, phase);
 	ot_all_floats = 1;
@@ -1739,6 +1749,11 @@ static PyObject *splat_overtones(PyObject *self, PyObject *args)
 
 		if (ot_all_floats && PyFloat_Check(ot->phase)) {
 			ot->fl_phase = PyFloat_AS_DOUBLE(ot->phase);
+
+			if (fl_period)
+				ot->fl_phase = fmod(ot->fl_phase,
+						    fl_period / ot->fl_ratio);
+
 #if defined(SPLAT_NEON)
 			ot->fl_phaseq = vdupq_n_f32(ot->fl_phase);
 #elif defined(SPLAT_SSE)
