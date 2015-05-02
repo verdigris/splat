@@ -77,8 +77,8 @@ struct splat_fragment {
 
 struct splat_peak {
 	double avg;
-	double pos;
-	double neg;
+	double max;
+	double min;
 	double peak;
 };
 

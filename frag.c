@@ -222,8 +222,8 @@ void splat_frag_get_peak(const struct splat_fragment *frag,
 	unsigned c;
 
 	frag_peak->avg = 0.0;
-	frag_peak->pos = -1.0;
-	frag_peak->neg = 1.0;
+	frag_peak->max = -1.0;
+	frag_peak->min = 1.0;
 	frag_peak->peak = 0.0;
 
 	for (c = 0; c < frag->n_channels; ++c) {
@@ -231,35 +231,35 @@ void splat_frag_get_peak(const struct splat_fragment *frag,
 		const sample_t * const end = &chan_data[frag->length];
 		const sample_t *it;
 		double avg = 0.0;
-		double pos = -1.0;
-		double neg = 1.0;
+		double max = -1.0;
+		double min = 1.0;
 
 		for (it = chan_data; it != end; ++it) {
 			if (do_avg)
 				avg += *it / frag->length;
 
-			if (*it > pos)
-				pos = *it;
-			else if (*it < neg)
-				neg = *it;
+			if (*it > max)
+				max = *it;
+			else if (*it < min)
+				min = *it;
 		}
 
 		chan_peak[c].avg = avg;
-		chan_peak[c].pos = pos;
-		chan_peak[c].neg = neg;
+		chan_peak[c].max = max;
+		chan_peak[c].min = min;
 
 		if (do_avg)
 			frag_peak->avg += avg / frag->n_channels;
 
-		if (pos > frag_peak->pos)
-			frag_peak->pos = pos;
+		if (max > frag_peak->max)
+			frag_peak->max = max;
 
-		if (neg < frag_peak->neg)
-			frag_peak->neg = neg;
+		if (min < frag_peak->min)
+			frag_peak->min = min;
 
-		neg = fabsf(neg);
-		pos = fabsf(pos);
-		chan_peak[c].peak = (neg > pos) ? neg : pos;
+		min = fabsf(min);
+		max = fabsf(max);
+		chan_peak[c].peak = (min > max) ? min : max;
 
 		if (frag_peak->peak < chan_peak[c].peak)
 			frag_peak->peak = chan_peak[c].peak;

@@ -492,8 +492,8 @@ static PyTypeObject splat_SignalType = {
 
 static PyObject *splat_frag_peak_as_dict(const struct splat_peak *peak)
 {
-	return Py_BuildValue("{sdsdsdsd}", "avg", peak->avg, "pos", peak->pos,
-			     "neg", peak->neg, "peak", peak->peak);
+	return Py_BuildValue("{sdsdsdsd}", "avg", peak->avg, "max", peak->max,
+			     "min", peak->min, "peak", peak->peak);
 }
 
 struct splat_fragment *splat_frag_from_obj(PyObject *obj)
@@ -1157,9 +1157,10 @@ PyDoc_STRVAR(Fragment_get_peak_doc,
 "Scan all the data and look for the peak maximum, minimum and absolute values "
 "as well as the average values for each channel and for the whole fragment. "
 "The results are returned as a 2-tuple, the first item being for the whole "
-"fragment and the second one a list with each channel.  Both results are "
-"contained in a dictionary with ``pos``, ``neg``, ``peak`` and ``avg`` values "
-"respectively for positive, negative, absolute peak and average values.\n");
+"fragment and the second one a list with results for each channel.  "
+"Each result is a dictionary with ``max``, ``min``, ``peak`` and ``avg`` "
+"values respectively for linear maximum, minimum, absolute peak and average "
+"values.\n");
 
 static PyObject *Fragment_get_peak(Fragment *self, PyObject *_)
 {
