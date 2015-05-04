@@ -25,6 +25,7 @@ import splat.data
 import splat.gen
 import splat.sources
 import splat.interpol
+from splat import dB2lin as dB
 
 class RefMixin(object):
 
@@ -46,7 +47,7 @@ class GenMixin(RefMixin):
         super(GenMixin, self).setUp()
         self.freq = 1234.0
         self.mod = splat.data.Fragment(duration=self.frag.duration, channels=1)
-        splat.sources.sine(self.mod, -9.0, 1.0)
+        splat.sources.sine(self.mod, dB(-9.0), 1.0)
         self.mod.offset(0.5)
 
     def test_source(self, *args):
