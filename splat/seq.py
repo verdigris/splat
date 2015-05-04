@@ -31,7 +31,7 @@ class SampleSet(object):
       ``weight``
         Weight when picking randomly a entry in the set
       ``gain``
-         Gain in dB to be applied to the sample using
+         Linear gain to be applied to the sample using
          :py:meth:`splat.data.Fragment.amp`
     """
 
@@ -108,8 +108,8 @@ class Pattern(object):
         """Pick a sample in a set and mix it into a fragment.
 
         Pick a sample in the :py:class:`splat.seq.SampleSet` object ``samples``
-        and mix it into the ``master`` fragment with an offset ``t`` in seconds
-        and optional ``levels`` in dB.
+        and mix it into the ``master`` fragment by calling
+        :py:meth:`splat.seq.Pattern.mix`.
         """
         self.mix(master, samples.pick(), *args, **kw)
 
@@ -135,8 +135,9 @@ class FuzzyPattern(Pattern):
     def mix(self, frag, sample, t, g=0.0):
         """Alternative mixing method implementation with random errors."""
         t += random.uniform(*self._te)
-        h = tuple(g + random.uniform(*self._ge) for i in range(frag.channels))
-        frag.mix(sample, t, 0.0, h)
+        l = tuple(g + random.uniform(*self._ge) for i in range(frag.channels))
+        l = tuple(_splat.dB2lin(c) for c in l)
+        frag.mix(sample, t, 0.0, l)
 
 
 class Silence(Pattern):

@@ -413,7 +413,7 @@ class GeneratorTest(SplatTest):
             gen = splat.gen.SineGenerator()
             gen.run(0.0, duration, freq, levels=levels)
             self.assert_md5([frag, gen.frag],
-                            '1d6c38f467b1bdb5a9c3e8d573e815f4')        
+                            '1d6c38f467b1bdb5a9c3e8d573e815f4')
 
     def test_sine(self):
         """sources.sine"""

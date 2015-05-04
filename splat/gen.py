@@ -229,7 +229,7 @@ class OvertonesGenerator(SourceGenerator):
            o[i] = exp\\left(\\frac{1 - i}{k}\\right)
 
         As a result, the fundamental frequency (overtone 1.0) always has an
-        amplitude of 1.0 (0 dB).
+        amplitude of 1.0.
 
         A higher ``k`` value means the function will decrease faster causing
         less high-frequency harmonics.
@@ -460,11 +460,11 @@ class ParticleGenerator(Generator):
 
     @gain_fuzz.setter
     def gain_fuzz(self, value):
-        """Set the level of gain fuzz which is the amount of randomness added
-        to the gain of each :py:class:`splat.gen.Particle` object.  The value
-        passed is a 2-tuple with the common gain fuzz applied to all channels
-        and the relative gain fuzz used to create a difference in between each
-        channel.  These values are in dB."""
+        """Set the level of gain fuzz which is the amount of randomness in dB
+        added to the gain of each :py:class:`splat.gen.Particle` object.  The
+        value passed is a 2-tuple with the common gain fuzz applied to all
+        channels and the relative gain fuzz used to create a difference in
+        between each channel.  These values are in dB."""
         self._gain_fuzz, self._relative_gain_fuzz = value
 
     def make_pool(self, min_len=0.05, max_len=0.1, n_slices=20, density=100):
@@ -515,6 +515,7 @@ class ParticleGenerator(Generator):
                                for g in range(self.frag.channels))
             else:
                 levels = tuple(g for i in range(self.frag.channels))
+            levels = tuple(_splat.dB2lin(g) for g in levels)
 
             if self._q:
                 p_freq = self.curve(freq[self.frag.s2n(p.start)][0], p.freq,

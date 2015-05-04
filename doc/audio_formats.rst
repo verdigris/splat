@@ -66,6 +66,7 @@ together as in this example::
 
   import splat.data
   import splat.gen
+  from splat import dB2lin as dB
 
   # Create a generator and generate a sound
   gen = splat.gen.SineGenerator()
@@ -85,7 +86,7 @@ together as in this example::
   master.mix(sample1, start=0.5, offset=1.5)
 
   # Mix the second sample at 1.8 with -0.5 dB gain
-  master.mix(sample2, start=1.8, levels=-0.5)
+  master.mix(sample2, start=1.8, levels=dB(-0.5))
 
   # Save result to output file as FLAC
   master.save('example.flac')

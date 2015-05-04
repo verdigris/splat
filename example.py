@@ -2,16 +2,17 @@ import splat.gen
 import splat.data
 import splat.filters
 import splat.interpol
+from splat import dB2lin as dB
 
 # Create a triangle wave generator and produce some simple sound with it
 triangle = splat.gen.TriangleGenerator()
 triangle.filters = [splat.filters.linear_fade]
-triangle.run(0.0, 2.8, 220.0, levels=-6.0)
+triangle.run(0.0, 2.8, 220.0, levels=dB(-6.0))
 
 # Create a spline to be used as an envelope (amplitude modulation) in dB
 envelope_pts = [(0.0, -100.0), (0.5, -12.0), (1.0, -0.5, 0.0),
                 (1.8, -6.0), (2.5, -100.0)]
-envelope = splat.interpol.Spline(envelope_pts)
+envelope = splat.interpol.spline(envelope_pts, dB2lin=True)
 
 # Create a sine wave generator and run it with the envelope
 sine = splat.gen.SineGenerator()

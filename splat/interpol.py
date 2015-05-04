@@ -56,8 +56,9 @@ class Polynomial(object):
         return Polynomial(coefs)
 
     def value(self, x, dB2lin=False):
-        """Return the value of the polynomial for the given ``x`` input
-        value."""
+        """Return the value of the polynomial for the given ``x`` input value.
+        If ``dB2lin`` is true then the value is converted from dB to linear
+        scale."""
         return _splat.poly_value(self.coefs, x, dB2lin)
 
 
@@ -149,7 +150,9 @@ class PolyList(object):
         """The list of polynomial is built using the sequence of 3-tuples
         ``pols``.  The ``scale`` argument is a convenient way to use the same
         input points and independently adjust the scale of the values, which
-        get multiplied by this scale coefficient (1.0 by default)."""
+        get multiplied by this scale coefficient (1.0 by default).  If
+        ``dB2lin`` is true then returned values are automatically converted
+        from dB to linear scale."""
         self._pols = pols
         self._pols_coefs = list((x0, x1, pol.coefs) for x0, x1, pol in pols)
         self._signal = _splat.Spline(self._pols_coefs, scale, dB2lin)
@@ -161,6 +164,7 @@ class PolyList(object):
 
     @property
     def pols(self):
+        """Return a list with a copy of all the polynomials."""
         return copy.copy(self._pols)
 
     @property
@@ -282,7 +286,9 @@ def spline(pts, scale=1.0, n=2, dB2lin=False):
     (or derivative value) at each point is either determined by the previous
     interpolation polynomial or constrained in the last value in 3-tuple input
     points.  The calculation is done using a
-    :py:class:`splat.interpol.PolyMatrix` object.
+    :py:class:`splat.interpol.PolyMatrix` object.  The ``dB2lin`` argument is
+    passed to :py:class:`splat.interpol.PolyList` and can be used to
+    interpolate in dB scale but return linear values.
     """
     pts = list(tuple(float(x) for x in pt) for pt in sorted(pts))
     m = PolyMatrix(pts[:(n + 1)])

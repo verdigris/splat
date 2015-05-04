@@ -1086,7 +1086,7 @@ PyDoc_STRVAR(Fragment_mix_doc,
 "the mixed data.\n"
 "\n"
 "The ``levels`` argument can be used to alter the amplitude of the incoming "
-"fragment as gain signals while mixing - this does not affect it directly.\n"
+"fragment while mixing - this does not affect the original fragment.\n"
 "\n"
 "Please note that the two fragments must use the same sample rate and have "
 "the same number of channels.\n");
@@ -1241,9 +1241,10 @@ static PyObject *Fragment_normalize(Fragment *self, PyObject *args)
 PyDoc_STRVAR(Fragment_amp_doc,
 "amp(gain)\n"
 "\n"
-"Amplify the fragment by the given ``gain`` in dB which can either be a "
-"single floating point value to apply to all channels or a tuple with a value "
-"for each individual channel.\n");
+"Amplify the fragment by the given linear ``gain`` which can either be a "
+"single signal  to apply to all channels or a tuple with a signal "
+"for each individual channel.  Please note that a negative value will "
+"invert the data in the fragment.\n");
 
 static PyObject *Fragment_amp(Fragment *self, PyObject *args)
 {
@@ -1266,7 +1267,7 @@ static PyObject *Fragment_amp(Fragment *self, PyObject *args)
 PyDoc_STRVAR(Fragment_lin2dB_doc,
 "lin2dB()\n"
 "\n"
-"Convert all the samples to dB.\n");
+"Convert all the sample values to dB.\n");
 
 static PyObject *Fragment_lin2dB(Fragment *self, PyObject *_)
 {
@@ -1278,7 +1279,7 @@ static PyObject *Fragment_lin2dB(Fragment *self, PyObject *_)
 PyDoc_STRVAR(Fragment_dB2lin_doc,
 "dB2lin()\n"
 "\n"
-"Convert all the samples in dB to linear scale.\n");
+"Convert all the sample values from dB to linear scale.\n");
 
 static PyObject *Fragment_dB2lin(Fragment *self, PyObject *_)
 {
@@ -1290,9 +1291,9 @@ static PyObject *Fragment_dB2lin(Fragment *self, PyObject *_)
 PyDoc_STRVAR(Fragment_offset_doc,
 "offset(value, start=0.0)\n"
 "\n"
-"Add an offset to the data already in the fragment starting at the ``start`` "
-"time in seconds.  This is especially useful when generating a modulation "
-"fragment.\n");
+"Add a linear offset to the data already in the fragment starting at the "
+"``start`` time in seconds.  This is especially useful when generating a "
+"modulation fragment.\n");
 
 static PyObject *Fragment_offset(Fragment *self, PyObject *args)
 {
@@ -1449,7 +1450,7 @@ PyDoc_STRVAR(splat_gen_ref_doc,
 "\n"
 "Generate a reference signal into a single channel fragment."
 "\n"
-"This is useful mainly for benchmarks and test purposes.\n");
+"This is useful mainly for benchmarks and testing purposes.\n");
 
 static PyObject *splat_gen_ref(PyObject *self, PyObject *args)
 {
@@ -1517,7 +1518,7 @@ PyDoc_STRVAR(splat_sine_doc,
 "sine(fragment, levels, frequency, phase=0.0, origin=0.0)\n"
 "\n"
 "Generate a sine wave for the given ``levels``, ``frequency`` and ``phase`` "
-"signals over the entire ``fragment`` with the give ``origin`` in time.\n");
+"signals over the entire ``fragment`` with the given ``origin`` in time.\n");
 
 static PyObject *splat_sine(PyObject *self, PyObject *args)
 {
@@ -1554,8 +1555,9 @@ static PyObject *splat_sine(PyObject *self, PyObject *args)
 PyDoc_STRVAR(splat_square_doc,
 "square(fragment, levels, frequency, phase=0.0, origin=0.0, ratio=0.5)\n"
 "\n"
-"Generate a square wave with the given ``ratio`` over the entire "
-"``fragment``.\n");
+"Generate a square wave with standard argments and the given ``ratio`` over "
+"the entire ``fragment``.  The ratio is between the duration of the high and "
+"low states.\n");
 
 static PyObject *splat_square(PyObject *self, PyObject *args)
 {
@@ -1597,7 +1599,8 @@ PyDoc_STRVAR(splat_triangle_doc,
 "triangle(fragment, levels, frequency, phase=0.0, origin=0.0, ratio=0.5)\n"
 "\n"
 "Generate a triangle wave with the given ``ratio`` over the entire "
-"``fragment``.\n");
+"``fragment``.  The ratio is between the duration of the high and "
+"low states.\n");
 
 static PyObject *splat_triangle(PyObject *self, PyObject *args)
 {
@@ -1639,12 +1642,12 @@ PyDoc_STRVAR(splat_overtones_doc,
 "overtones(fragment, levels, frequency, overtones, phase=0.0, origin=0.0)\n"
 "\n"
 "Generate a sum of overtones as pure sine waves with the given fundamental "
-"``frequency`` and ``levels`` in dB.\n"
+"``frequency`` and ``levels``.\n"
 "\n"
 "The ``overtones`` are described with a list of 3-tuples containing the "
 "ratio between the overtone and the fundamental frequency, the phase and "
-"levels: ``(ratio, phase, levels)``.  All these values can be signals, and "
-"the levels can either be a single value for all channels or individual "
+"linear levels: ``(ratio, phase, levels)``.  All these values can be signals, "
+"and the levels can either be a single value for all channels or individual "
 "values for each channel.  The generation is performed over the entire "
 "fragment.\n");
 
@@ -1752,8 +1755,9 @@ free_overtones:
 PyDoc_STRVAR(splat_dec_envelope_doc,
 "dec_envelope(fragment, k=1.0, p=1.0)\n"
 "\n"
-"This filter applies a decreasing envelope over the ``fragment`` with ``k`` "
-"and ``p`` arguments as follows, for a sound signal ``s`` at index ``i``:\n"
+"This filter applies a decreasing linear envelope over the ``fragment`` with "
+" ``k`` and ``p`` arguments as follows, for a sound signal ``s`` "
+"at index ``i``:\n"
 "\n"
 ".. math::\n"
 "\n"
@@ -1783,7 +1787,7 @@ static PyObject *splat_dec_envelope(PyObject *self, PyObject *args)
 PyDoc_STRVAR(splat_reverse_doc,
 "reverse(fragment)\n"
 "\n"
-"Reverse the order of all the ``fragment`` samples.\n");
+"Reverse the order of all the samples in ``fragment``.\n");
 
 static PyObject *splat_reverse(PyObject *self, PyObject *args)
 {
