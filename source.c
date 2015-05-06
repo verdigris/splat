@@ -20,10 +20,8 @@
 
 #include "_splat.h"
 
-#if defined(SPLAT_NEON)
-static float32x4_t splat_sine_neon(float32x4_t x);
-#elif defined(SPLAT_SSE)
-static __m128 splat_sine_sse(__m128 x);
+#ifdef SPLAT_FAST
+static sf_float_t splat_fast_sine(sf_float_t x);
 #endif
 
 /* -- sine source -- */
@@ -34,67 +32,35 @@ enum {
 	SIG_SINE_AMP,
 } splat_sine_signal;
 
-#if defined(SPLAT_NEON)
+#ifdef SPLAT_FAST
 void splat_sine_floats(struct splat_fragment *frag, const double *levels,
 		       double freq, double phase)
 {
-	const float32x4_t phrate = vdupq_n_f32(phase * frag->rate);
-	const float32x4_t k = vdupq_n_f32(2.0 * M_PI * freq / frag->rate);
-	float32x4_t levelsq[SPLAT_MAX_CHANNELS];
-	float32x4_t *out[SPLAT_MAX_CHANNELS];
+	const sf_float_t phrate = sf_set(phase * frag->rate);
+	const sf_float_t k = sf_set(2.0 * M_PI * freq / frag->rate);
+	sf_float_t levelsq[SPLAT_MAX_CHANNELS];
+	sf_float_t *out[SPLAT_MAX_CHANNELS];
 	unsigned c;
 	size_t i;
 
 	for (c = 0; c < frag->n_channels; ++c) {
-		levelsq[c] = vdupq_n_f32(levels[c]);
-		out[c] = (float32x4_t *)frag->data[c];
+		levelsq[c] = sf_set(levels[c]);
+		out[c] = (sf_float_t *)frag->data[c];
 	}
 
 	for (i = 0; i < frag->length; i += 4) {
-		uint32x4_t iq;
-		float32x4_t x;
-		float32x4_t y;
+		sf_float_t x;
+		sf_float_t y;
 
 		/* x = 2 * M_PI * freq * (phrate + i) / frag->rate) */
-		iq = vdupq_n_u32(i);
-		iq = vaddq_u32(iq, splat_neon_inc);
-		x = vcvtq_f32_u32(iq);
-		x = vaddq_f32(x, phrate);
-		x = vmulq_f32(x, k);
-		y = splat_sine_neon(x);
+		x = sf_set((float)i);
+		x = sf_add(x, splat_fast_inc);
+		x = sf_add(x, phrate);
+		x = sf_mul(x, k);
+		y = splat_fast_sine(x);
 
 		for (c = 0; c < frag->n_channels; ++c)
-			*out[c]++ = vmulq_f32(y, levelsq[c]);
-	}
-}
-#elif defined(SPLAT_SSE)
-void splat_sine_floats(struct splat_fragment *frag, const double *levels,
-		       double freq, double phase)
-{
-	const __m128 k = _mm_set1_ps(2.0 * M_PI * freq / frag->rate);
-	const __m128 phrate = _mm_set1_ps(phase * frag->rate);
-	__m128 levelsq[SPLAT_MAX_CHANNELS];
-	__m128 *out[SPLAT_MAX_CHANNELS];
-	unsigned c;
-	size_t i;
-
-	for (c = 0; c < frag->n_channels; ++c) {
-		levelsq[c] = _mm_set1_ps(levels[c]);
-		out[c] = (__m128 *)frag->data[c];
-	}
-
-	for (i = 0; i < frag->length; i += 4) {
-		__m128 x;
-		__m128 y;
-
-		x = _mm_set1_ps((float)i);
-		x = _mm_add_ps(x, splat_sse_inc);
-		x = _mm_add_ps(x, phrate);
-		x = _mm_mul_ps(x, k);
-		y = splat_sine_sse(x);
-
-		for (c = 0; c < frag->n_channels; ++c)
-			*out[c]++ = _mm_mul_ps(y, levelsq[c]);
+			*out[c]++ = sf_mul(y, levelsq[c]);
 	}
 }
 #else
@@ -115,92 +81,56 @@ void splat_sine_floats(struct splat_fragment *frag, const double *levels,
 }
 #endif
 
-#if defined(SPLAT_NEON)
+#ifdef SPLAT_FAST
 static void _splat_sine_signals(struct splat_fragment *frag,
 				struct splat_signal *sig, double origin)
 {
-	const float32x4_t k = vdupq_n_f32(2.0 * M_PI);
-	const float32x4_t rateq_inv = vdupq_n_f32(1.0 / frag->rate);
-	const float32x4_t originq = vdupq_n_f32(origin);
-	float32x4_t *out[SPLAT_MAX_CHANNELS];
+	const sf_float_t k = sf_set(2.0 * M_PI);
+#if defined(SPLAT_NEON)
+	const sf_float_t rateq_inv = sf_set(1.0 / frag->rate);
+#elif defined(SPLAT_SSE)
+	const sf_float_t rateq = sf_set(frag->rate);
+#endif
+	const sf_float_t originq = sf_set(origin);
+	sf_float_t *out[SPLAT_MAX_CHANNELS];
 	unsigned c;
 	size_t i = 0;
 
 	for (c = 0; c < frag->n_channels; ++c)
-		out[c] = (float32x4_t *)frag->data[c];
+		out[c] = (sf_float_t *)frag->data[c];
 
 	while (splat_signal_next(sig) == SPLAT_SIGNAL_CONTINUE) {
-		const float32x4_t *fq = (float32x4_t *)
+		const sf_float_t *fq = (sf_float_t *)
 			sig->vectors[SIG_SINE_FREQ].data;
-		const float32x4_t *phq= (float32x4_t *)
+		const sf_float_t *phq= (sf_float_t *)
 			sig->vectors[SIG_SINE_PHASE].data;
-		const float32x4_t *aq[SPLAT_MAX_CHANNELS];
+		const sf_float_t *aq[SPLAT_MAX_CHANNELS];
 		size_t j;
 
 		for (c = 0; c < frag->n_channels; ++c)
-			aq[c] = (float32x4_t *)
+			aq[c] = (sf_float_t *)
 				sig->vectors[SIG_SINE_AMP + c].data;
 
 		for (j = 0; j < sig->len; i += 4, j += 4) {
-			uint32x4_t iq;
-			float32x4_t x;
-			float32x4_t f;
-			float32x4_t y;
+			sf_float_t x;
+			sf_float_t f;
+			sf_float_t y;
 
-			iq = vdupq_n_u32(i);
-			iq = vaddq_u32(iq, splat_neon_inc);
-			x = vcvtq_f32_u32(iq);
+			x = sf_set((float)i);
+			x = sf_add(x, splat_fast_inc);
+#if defined(SPLAT_NEON)
 			x = vmulq_f32(x, rateq_inv);
-			x = vaddq_f32(x, *phq++);
-			x = vaddq_f32(x, originq);
-			f = vmulq_f32(*fq++, k);
-			x = vmulq_f32(x, f);
-			y = splat_sine_neon(x);
-
-			for (c = 0; c < frag->n_channels; ++c)
-				*out[c]++ = vmulq_f32(y, *aq[c]++);
-		}
-	}
-}
 #elif defined(SPLAT_SSE)
-static void _splat_sine_signals(struct splat_fragment *frag,
-				struct splat_signal *sig, double origin)
-{
-	const __m128 k = _mm_set1_ps(2.0 * M_PI);
-	const __m128 rateq = _mm_set1_ps(frag->rate);
-	const __m128 originq = _mm_set1_ps(origin);
-	__m128 *out[SPLAT_MAX_CHANNELS];
-	unsigned c;
-	size_t i = 0;
-
-	for (c = 0; c < frag->n_channels; ++c)
-		out[c] = (__m128 *)frag->data[c];
-
-	while (splat_signal_next(sig) == SPLAT_SIGNAL_CONTINUE) {
-		const __m128 *fq = (__m128 *)sig->vectors[SIG_SINE_FREQ].data;
-		const __m128 *phq = (__m128 *)sig->vectors[SIG_SINE_PHASE].data;
-		const __m128 *aq[SPLAT_MAX_CHANNELS];
-		size_t j;
-
-		for (c = 0; c < frag->n_channels; ++c)
-			aq[c] = (__m128 *)sig->vectors[SIG_SINE_AMP + c].data;
-
-		for (j = 0; j < sig->len; i += 4, j += 4) {
-			__m128 x;
-			__m128 f;
-			__m128 y;
-
-			x = _mm_set1_ps((float)i);
-			x = _mm_add_ps(x, splat_sse_inc);
 			x = _mm_div_ps(x, rateq);
-			x = _mm_add_ps(x, *phq++);
-			x = _mm_add_ps(x, originq);
-			f = _mm_mul_ps(*fq++, k);
-			x = _mm_mul_ps(x, f);
-			y = splat_sine_sse(x);
+#endif
+			x = sf_add(x, *phq++);
+			x = sf_add(x, originq);
+			f = sf_mul(*fq++, k);
+			x = sf_mul(x, f);
+			y = splat_fast_sine(x);
 
 			for (c = 0; c < frag->n_channels; ++c)
-				*out[c]++ = _mm_mul_ps(y, *aq[c]++);
+				*out[c]++ = sf_mul(y, *aq[c]++);
 		}
 	}
 }
@@ -462,102 +392,57 @@ enum {
 	SIG_OT_AMP = 2,
 };
 
-#if defined(SPLAT_NEON)
+#ifdef SPLAT_FAST
 static void _splat_overtones_float(struct splat_fragment *frag,
 				   double freq, double phase,
 				   const struct splat_overtone *overtones,
 				   const struct splat_overtone *ot_end)
 {
-	const float32x4_t k = vdupq_n_f32(2 * M_PI * freq);
-	const float32x4_t ph = vdupq_n_f32(phase);
-	const float32x4_t rate_inv = vdupq_n_f32(1.0 / frag->rate);
-	const float32x4_t max_ratio = vdupq_n_f32((frag->rate / 2.0) / freq);
-	float32x4_t *outq[SPLAT_MAX_CHANNELS];
+	const sf_float_t k = sf_set(2 * M_PI * freq);
+	const sf_float_t ph = sf_set(phase);
+#if defined(SPLAT_NEON)
+	const sf_float_t rate_inv = sf_set(1.0 / frag->rate);
+#elif defined(SPLAT_SSE)
+	const sf_float_t rateq = sf_set((float)frag->rate);
+#endif
+	const sf_float_t max_ratio = sf_set((frag->rate / 2.0) / freq);
+	sf_float_t *outq[SPLAT_MAX_CHANNELS];
 	unsigned c;
 	size_t i;
 
 	for (c = 0; c < frag->n_channels; ++c)
-		outq[c] = (float32x4_t *)frag->data[c];
+		outq[c] = (sf_float_t *)frag->data[c];
 
 	/* x = 2 * M_PI * freq * ratio * (ph + i/rate) */
 	for (i = 0; i < frag->length; i += 4) {
 		const struct splat_overtone *ot;
-		uint32x4_t iq;
-		float32x4_t x0;
+		sf_float_t x0;
 
-		iq = vdupq_n_u32(i);
-		iq = vaddq_u32(iq, splat_neon_inc);
-		x0 = vcvtq_f32_u32(iq);
+		x0 = sf_set((float)i);
+		x0 = sf_add(x0, splat_fast_inc);
+#if defined(SPLAT_NEON)
 		x0 = vmulq_f32(x0, rate_inv);
-		x0 = vaddq_f32(x0, ph);
-
-		for (ot = overtones; ot != ot_end; ++ot) {
-			const float32x4_t *lvlq = ot->levels.flq;
-			float32x4_t xr;
-			float32x4_t yr;
-			uint32x4_t clip;
-
-			clip = vcltq_f32(ot->fl_ratioq, max_ratio);
-			xr = vaddq_f32(x0, ot->fl_phaseq);
-			xr = vmulq_f32(xr, k);
-			xr = vmulq_f32(xr, ot->fl_ratioq);
-			yr = splat_sine_neon(xr);
-			yr = (float32x4_t)vandq_u32((uint32x4_t)yr, clip);
-
-			for (c = 0; c < frag->n_channels; ++c) {
-				const float32x4_t y = vmulq_f32(yr, lvlq[c]);
-				*outq[c] = vaddq_f32(*outq[c], y);
-			}
-		}
-
-		for (c = 0; c < frag->n_channels; ++c)
-			outq[c]++;
-	}
-}
 #elif defined(SPLAT_SSE)
-static void _splat_overtones_float(struct splat_fragment *frag,
-				   double freq, double phase,
-				   const struct splat_overtone *overtones,
-				   const struct splat_overtone *ot_end)
-{
-	const __m128 k = _mm_set1_ps(2.0 * M_PI * freq);
-	const __m128 ph = _mm_set1_ps(phase);
-	const __m128 rateq = _mm_set1_ps((float)frag->rate);
-	const __m128 max_ratio = _mm_set1_ps((frag->rate / 2.0) / freq);
-	__m128 *outq[SPLAT_MAX_CHANNELS];
-	unsigned c;
-	size_t i;
-
-	for (c = 0; c < frag->n_channels; ++c)
-		outq[c] = (__m128 *)frag->data[c];
-
-	/* x = (2 * M_PI * freq * ratio * (ph + i / frag->rate) */
-	for (i = 0; i < frag->length; i += 4) {
-		const struct splat_overtone *ot;
-		__m128 x0;
-
-		x0 = _mm_set1_ps((float)i);
-		x0 = _mm_add_ps(x0, splat_sse_inc);
 		x0 = _mm_div_ps(x0, rateq);
-		x0 = _mm_add_ps(x0, ph);
+#endif
+		x0 = sf_add(x0, ph);
 
 		for (ot = overtones; ot != ot_end; ++ot) {
-			const __m128 *lvlq = ot->levels.flq;
-			__m128 clip;
-			__m128 x;
-			__m128 yr;
+			const sf_float_t *lvlq = ot->levels.flq;
+			sf_float_t xr;
+			sf_float_t yr;
+			sf_mask_t clip;
 
-			clip = _mm_cmplt_ps(ot->fl_ratioq, max_ratio);
-			x = _mm_add_ps(x0, ot->fl_phaseq);
-			x = _mm_mul_ps(x, ot->fl_ratioq);
-			x = _mm_mul_ps(x, k);
-			yr = splat_sine_sse(x);
+			clip = sf_lt(ot->fl_ratioq, max_ratio);
+			xr = sf_add(x0, ot->fl_phaseq);
+			xr = sf_mul(xr, k);
+			xr = sf_mul(xr, ot->fl_ratioq);
+			yr = splat_fast_sine(xr);
+			yr = sf_and(yr, clip);
 
 			for (c = 0; c < frag->n_channels; ++c) {
-				const __m128 g = _mm_and_ps(clip, lvlq[c]);
-				const __m128 y = _mm_mul_ps(yr, g);
-
-				*outq[c] = _mm_add_ps(*outq[c], y);
+				const sf_float_t y = sf_mul(yr, lvlq[c]);
+				*outq[c] = sf_add(*outq[c], y);
 			}
 		}
 
@@ -610,165 +495,97 @@ void splat_overtones_float(struct splat_fragment *frag, const double *levels,
 				ot->levels.fl[c] *= levels[c];
 		}
 
-#if defined(SPLAT_NEON)
+#ifdef SPLAT_FAST
 		for (c = 0; c < frag->n_channels; ++c)
-			ot->levels.flq[c] = vdupq_n_f32(ot->levels.fl[c]);
-#elif defined(SPLAT_SSE)
-		for (c = 0; c < frag->n_channels; ++c)
-			ot->levels.flq[c] = _mm_set1_ps(ot->levels.fl[c]);
+			ot->levels.flq[c] = sf_set(ot->levels.fl[c]);
 #endif
 	}
 
 	_splat_overtones_float(frag, freq, phase, overtones, ot_end);
 }
 
-#if defined(SPLAT_NEON)
+#ifdef SPLAT_FAST
 static void _splat_overtones_mixed(struct splat_fragment *frag,
 				   struct splat_signal *sig,
 				   const struct splat_overtone *overtones,
 				   size_t n, double origin)
 {
-	const float32x4_t k = vdupq_n_f32(2.0 * M_PI);
-	const float32x4_t rateq_inv = vdupq_n_f32(1.0 / frag->rate);
-	const float32x4_t half_rate = vdupq_n_f32(frag->rate / 2.0);
-	const float32x4_t originq = vdupq_n_f32(origin);
+	const sf_float_t k = sf_set(2.0 * M_PI);
+#if defined(SPLAT_NEON)
+	const sf_float_t rateq_inv = sf_set(1.0 / frag->rate);
+#elif defined(SPLAT_SSE)
+	const sf_float_t rateq = sf_set((float)frag->rate);
+#endif
+	const sf_float_t half_rate = sf_set(frag->rate / 2.0);
+	const sf_float_t originq = sf_set(origin);
 	const struct splat_overtone * const ot_end = &overtones[n];
-	float32x4_t *out[SPLAT_MAX_CHANNELS];
+	sf_float_t *out[SPLAT_MAX_CHANNELS];
 	size_t i = 0;
 	unsigned c;
 
 	for (c = 0; c < frag->n_channels; ++c)
-		out[c] = (float32x4_t *)frag->data[c];
+		out[c] = (sf_float_t *)frag->data[c];
 
 	while (splat_signal_next(sig) == SPLAT_SIGNAL_CONTINUE) {
-		const float32x4_t *fq =
-			(float32x4_t *)sig->vectors[SIG_OT_FREQ].data;
-		const float32x4_t *phq =
-			(float32x4_t *)sig->vectors[SIG_OT_PHASE].data;
-		const float32x4_t *amq[SPLAT_MAX_CHANNELS];
+		const sf_float_t *fq = (sf_float_t *)
+			sig->vectors[SIG_OT_FREQ].data;
+		const sf_float_t *phq = (sf_float_t *)
+			sig->vectors[SIG_OT_PHASE].data;
+		const sf_float_t *amq[SPLAT_MAX_CHANNELS];
 		size_t j;
 
 		for (c = 0; c < frag->n_channels; ++c)
-			amq[c] = (float32x4_t *)
+			amq[c] = (sf_float_t *)
 				sig->vectors[SIG_OT_AMP + c].data;
 
 		for (j = 0; j < sig->len; i += 4, j += 4) {
 			const struct splat_overtone *ot;
-			const float32x4_t f = *fq++;
-			const float32x4_t max_ratio =
+			const sf_float_t f = *fq++;
+#if defined(SPLAT_NEON)
+			const sf_float_t max_ratio =
 				vmulq_f32(half_rate, vrecpeq_f32(f));
-			const float32x4_t fk = vmulq_f32(f, k);
-			const float32x4_t pho = vaddq_f32(*phq++, originq);
-			float32x4_t aq[SPLAT_MAX_CHANNELS];
-			float32x4_t y[SPLAT_MAX_CHANNELS];
-			uint32x4_t iq;
-			float32x4_t x0;
-
-			for (c = 0; c < frag->n_channels; ++c) {
-				aq[c] = *amq[c]++;
-				y[c] = vdupq_n_f32(0.0);
-			}
-
-			iq = vdupq_n_u32(i);
-			iq = vaddq_u32(iq, splat_neon_inc);
-			x0 = vcvtq_f32_u32(iq);
-			x0 = vmulq_f32(x0, rateq_inv);
-			x0 = vaddq_f32(x0, pho);
-
-			for (ot = overtones; ot != ot_end; ++ot) {
-				const float32x4_t *lvlq = ot->levels.flq;
-				float32x4_t x;
-				float32x4_t yr;
-				uint32x4_t clip;
-
-				clip = vcltq_f32(ot->fl_ratioq, max_ratio);
-				x = vaddq_f32(x0, ot->fl_phaseq);
-				x = vmulq_f32(x, ot->fl_ratioq);
-				x = vmulq_f32(x, fk);
-				yr = splat_sine_neon(x);
-
-				for (c = 0; c < frag->n_channels; ++c) {
-					float32x4_t y0;
-
-					y0 = vmulq_f32(yr, aq[c]);
-					y0 = vmulq_f32(y0, lvlq[c]);
-					y0 = (float32x4_t)
-						vandq_u32((uint32x4_t)y0,clip);
-					y[c] = vaddq_f32(y[c], y0);
-				}
-			}
-
-			for (c = 0; c < frag->n_channels; ++c)
-				*out[c]++ = y[c];
-		}
-	}
-}
 #elif defined(SPLAT_SSE)
-static void _splat_overtones_mixed(struct splat_fragment *frag,
-				   struct splat_signal *sig,
-				   const struct splat_overtone *overtones,
-				   size_t n, double origin)
-{
-	const __m128 k = _mm_set1_ps(2.0 * M_PI);
-	const __m128 rateq = _mm_set1_ps((float)frag->rate);
-	const __m128 half_rate = _mm_set1_ps(frag->rate / 2.0);
-	const __m128 originq = _mm_set1_ps(origin);
-	const struct splat_overtone * const ot_end = &overtones[n];
-	__m128 *out[SPLAT_MAX_CHANNELS];
-	size_t i = 0;
-	unsigned c;
-
-	for (c = 0; c < frag->n_channels; ++c)
-		out[c] = (__m128 *)frag->data[c];
-
-	while (splat_signal_next(sig) == SPLAT_SIGNAL_CONTINUE) {
-		const __m128 *fq = (__m128 *)sig->vectors[SIG_OT_FREQ].data;
-		const __m128 *phq = (__m128 *)sig->vectors[SIG_OT_PHASE].data;
-		const __m128 *amq[SPLAT_MAX_CHANNELS];
-		size_t j;
-
-		for (c = 0; c < frag->n_channels; ++c)
-			amq[c] = (__m128 *)sig->vectors[SIG_OT_AMP + c].data;
-
-		for (j = 0; j < sig->len; i +=4, j += 4) {
-			const struct splat_overtone *ot;
-			const __m128 f = *fq++;
-			const __m128 max_ratio = _mm_div_ps(half_rate, f);
-			const __m128 fk = _mm_mul_ps(f, k);
-			const __m128 pho = _mm_add_ps(*phq++, originq);
-			__m128 aq[SPLAT_MAX_CHANNELS];
-			__m128 y[SPLAT_MAX_CHANNELS];
-			__m128 x0;
+			const sf_float_t max_ratio = _mm_div_ps(half_rate, f);
+#endif
+			const sf_float_t fk = sf_mul(f, k);
+			const sf_float_t pho = sf_add(*phq++, originq);
+			sf_float_t aq[SPLAT_MAX_CHANNELS];
+			sf_float_t y[SPLAT_MAX_CHANNELS];
+			sf_float_t x0;
 
 			for (c = 0; c < frag->n_channels; ++c) {
 				aq[c] = *amq[c]++;
-				y[c] = _mm_setzero_ps();
+				y[c] = sf_zero();
 			}
 
-			x0 = _mm_set1_ps((float)i);
-			x0 = _mm_add_ps(x0, splat_sse_inc);
+			x0 = sf_set((float)i);
+			x0 = sf_add(x0, splat_fast_inc);
+#if defined(SPLAT_NEON)
+			x0 = vmulq_f32(x0, rateq_inv);
+#elif defined(SPLAT_SSE)
 			x0 = _mm_div_ps(x0, rateq);
-			x0 = _mm_add_ps(x0, pho);
+#endif
+			x0 = sf_add(x0, pho);
 
 			for (ot = overtones; ot != ot_end; ++ot) {
-				const __m128 *lvlq = ot->levels.flq;
-				__m128 x;
-				__m128 yr;
-				__m128 clip;
+				const sf_float_t *lvlq = ot->levels.flq;
+				sf_float_t x;
+				sf_float_t yr;
+				sf_mask_t clip;
 
-				clip = _mm_cmplt_ps(ot->fl_ratioq, max_ratio);
-				x = _mm_add_ps(x0, ot->fl_phaseq);
-				x = _mm_mul_ps(x, ot->fl_ratioq);
-				x = _mm_mul_ps(x, fk);
-				yr = splat_sine_sse(x);
+				clip = sf_lt(ot->fl_ratioq, max_ratio);
+				x = sf_add(x0, ot->fl_phaseq);
+				x = sf_mul(x, ot->fl_ratioq);
+				x = sf_mul(x, fk);
+				yr = splat_fast_sine(x);
 
 				for (c = 0; c < frag->n_channels; ++c) {
-					__m128 y0;
+					sf_float_t y0;
 
-					y0 = _mm_mul_ps(yr, aq[c]);
-					y0 = _mm_mul_ps(y0, lvlq[c]);
-					y0 = _mm_and_ps(y0, clip);
-					y[c] = _mm_add_ps(y[c], y0);
+					y0 = sf_mul(yr, aq[c]);
+					y0 = sf_mul(y0, lvlq[c]);
+					y0 = sf_and(y0, clip);
+					y[c] = sf_add(y[c], y0);
 				}
 			}
 
@@ -848,165 +665,96 @@ int splat_overtones_mixed(struct splat_fragment *frag, PyObject **levels,
 	return (sig.stat == SPLAT_SIGNAL_ERROR) ? -1 : 0;
 }
 
-#if defined(SPLAT_NEON)
+#ifdef SPLAT_FAST
 static void _splat_overtones_signal(struct splat_fragment *frag,
 				    struct splat_signal *sig,
 				    const struct splat_overtone *overtones,
 				    size_t n, double origin)
 {
-	const float32x4_t k = vdupq_n_f32(2.0 * M_PI);
-	const float32x4_t rateq_inv = vdupq_n_f32(1.0 / frag->rate);
-	const float32x4_t half_rate = vdupq_n_f32(frag->rate / 2.0);
-	const float32x4_t originq = vdupq_n_f32(origin);
+	const sf_float_t k = sf_set(2.0 * M_PI);
+#if defined(SPLAT_NEON)
+	const sf_float_t rateq_inv = sf_set(1.0 / frag->rate);
+#elif defined(SPLAT_SSE)
+	const sf_float_t rateq = sf_set((float)frag->rate);
+#endif
+	const sf_float_t half_rate = sf_set(frag->rate / 2.0);
+	const sf_float_t originq = sf_set(origin);
 	const struct splat_overtone * const ot_end = &overtones[n];
 	const size_t sig_ot = SIG_OT_AMP + frag->n_channels;
-	float32x4_t *out[SPLAT_MAX_CHANNELS];
+	sf_float_t *out[SPLAT_MAX_CHANNELS];
 	size_t i = 0;
 	unsigned c;
 
 	for (c = 0; c < frag->n_channels; ++c)
-		out[c] = (float32x4_t *)frag->data[c];
+		out[c] = (sf_float_t *)frag->data[c];
 
 	while (splat_signal_next(sig) == SPLAT_SIGNAL_CONTINUE) {
-		const float32x4_t *fq = (float32x4_t *)
+		const sf_float_t *fq = (sf_float_t *)
 			sig->vectors[SIG_OT_FREQ].data;
-		const float32x4_t *phq = (float32x4_t *)
+		const sf_float_t *phq = (sf_float_t *)
 			sig->vectors[SIG_OT_PHASE].data;
-		const float32x4_t *amq[SPLAT_MAX_CHANNELS];
+		const sf_float_t *amq[SPLAT_MAX_CHANNELS];
 		size_t j;
 
 		for (c = 0; c < frag->n_channels; ++c)
-			amq[c] = (float32x4_t *)
+			amq[c] = (sf_float_t *)
 				sig->vectors[SIG_OT_AMP + c].data;
 
 		for (j = 0; j < sig->len; i += 4, j += 4) {
 			const struct splat_vector *otv = &sig->vectors[sig_ot];
 			const struct splat_overtone *ot;
-			const float32x4_t f = *fq++;
-			const float32x4_t max_ratio =
+			const sf_float_t f = *fq++;
+#if defined(SPLAT_NEON)
+			const sf_float_t max_ratio =
 				vmulq_f32(half_rate, vrecpeq_f32(f));
-			const float32x4_t fk = vmulq_f32(f, k);
-			const float32x4_t pho = vaddq_f32(*phq++, originq);
-			float32x4_t aq[SPLAT_MAX_CHANNELS];
-			float32x4_t y[SPLAT_MAX_CHANNELS];
-			float32x4_t x0;
-			uint32x4_t iq;
-
-			for (c = 0; c < frag->n_channels; ++c) {
-				aq[c] = *amq[c]++;
-				y[c] = vdupq_n_f32(0.0);
-			}
-
-			iq = vdupq_n_u32(i);
-			iq = vaddq_u32(iq, splat_neon_inc);
-			x0 = vcvtq_f32_u32(iq);
-			x0 = vmulq_f32(x0, rateq_inv);
-			x0 = vaddq_f32(x0, pho);
-
-			for (ot = overtones; ot != ot_end; ++ot) {
-				const float32x4_t ot_r =
-					*((float32x4_t *)&(otv++)->data[j]);
-				const float32x4_t ot_ph =
-					*((float32x4_t *)&(otv++)->data[j]);
-				uint32x4_t clip;
-				float32x4_t x;
-				float32x4_t yr;
-
-				clip = vcltq_f32(ot_r, max_ratio);
-				x = vaddq_f32(x0, ot_ph);
-				x = vmulq_f32(x, ot_r);
-				x = vmulq_f32(x, fk);
-				yr = splat_sine_neon(x);
-
-				for (c = 0; c < frag->n_channels; ++c) {
-					float32x4_t g;
-					float32x4_t y0;
-
-					g = *((float32x4_t*)&(otv++)->data[j]);
-					y0 = vmulq_f32(yr, aq[0]);
-					y0 = vmulq_f32(y0, g);
-					y0 = (float32x4_t)
-						vandq_u32((uint32x4_t)y0,clip);
-					y[c] = vaddq_f32(y[c], y0);
-				}
-			}
-
-			for (c = 0; c < frag->n_channels; ++c)
-				*out[c]++ = y[c];
-		}
-	}
-}
 #elif defined(SPLAT_SSE)
-static void _splat_overtones_signal(struct splat_fragment *frag,
-				    struct splat_signal *sig,
-				    const struct splat_overtone *overtones,
-				    size_t n, double origin)
-{
-	const __m128 k = _mm_set1_ps(2.0 * M_PI);
-	const __m128 rateq = _mm_set1_ps(frag->rate);
-	const __m128 half_rate = _mm_set1_ps(frag->rate / 2.0);
-	const __m128 originq = _mm_set1_ps(origin);
-	const struct splat_overtone * const ot_end = &overtones[n];
-	const size_t sig_ot = SIG_OT_AMP + frag->n_channels;
-	__m128 *out[SPLAT_MAX_CHANNELS];
-	size_t i = 0;
-	unsigned c;
-
-	for (c = 0; c < frag->n_channels; ++c)
-		out[c] = (__m128 *)frag->data[c];
-
-	while (splat_signal_next(sig) == SPLAT_SIGNAL_CONTINUE) {
-		const __m128 *fq = (__m128 *)sig->vectors[SIG_OT_FREQ].data;
-		const __m128 *phq = (__m128 *)sig->vectors[SIG_OT_PHASE].data;
-		const __m128 *amq[SPLAT_MAX_CHANNELS];
-		size_t j;
-
-		for (c = 0; c < frag->n_channels; ++c)
-			amq[c] = (__m128 *)sig->vectors[SIG_OT_AMP + c].data;
-
-		for (j = 0; j < sig->len; i +=4, j += 4) {
-			const struct splat_vector *otv = &sig->vectors[sig_ot];
-			const struct splat_overtone *ot;
-			const __m128 f = *fq++;
-			const __m128 max_ratio = _mm_div_ps(half_rate, f);
-			const __m128 fk = _mm_mul_ps(f, k);
-			const __m128 pho = _mm_add_ps(*phq++, originq);
-			__m128 aq[SPLAT_MAX_CHANNELS];
-			__m128 y[SPLAT_MAX_CHANNELS];
-			__m128 x0;
+			const sf_float_t max_ratio =
+				_mm_div_ps(half_rate, f);
+#endif
+			const sf_float_t fk = sf_mul(f, k);
+			const sf_float_t pho = sf_add(*phq++, originq);
+			sf_float_t aq[SPLAT_MAX_CHANNELS];
+			sf_float_t y[SPLAT_MAX_CHANNELS];
+			sf_float_t x0;
 
 			for (c = 0; c < frag->n_channels; ++c) {
 				aq[c] = *amq[c]++;
-				y[c] = _mm_setzero_ps();
+				y[c] = sf_zero();
 			}
 
-			x0 = _mm_set1_ps((float)i);
-			x0 = _mm_add_ps(x0, splat_sse_inc);
+			x0 = sf_set((float)i);
+			x0 = sf_add(x0, splat_fast_inc);
+#if defined(SPLAT_NEON)
+			x0 = vmulq_f32(x0, rateq_inv);
+#elif defined(SPLAT_SSE)
 			x0 = _mm_div_ps(x0, rateq);
-			x0 = _mm_add_ps(x0, pho);
+#endif
+			x0 = sf_add(x0, pho);
 
 			for (ot = overtones; ot != ot_end; ++ot) {
-				__m128 ot_r = _mm_load_ps(&(otv++)->data[j]);
-				__m128 ot_ph = _mm_load_ps(&(otv++)->data[j]);
-				__m128 clip;
-				__m128 x;
-				__m128 yr;
+				const sf_float_t ot_r =
+					*((sf_float_t *)&(otv++)->data[j]);
+				const sf_float_t ot_ph =
+					*((sf_float_t *)&(otv++)->data[j]);
+				sf_mask_t clip;
+				sf_float_t x;
+				sf_float_t yr;
 
-				clip = _mm_cmplt_ps(ot_r, max_ratio);
-				x = _mm_add_ps(x0, ot_ph);
-				x = _mm_mul_ps(x, ot_r);
-				x = _mm_mul_ps(x, fk);
-				yr = splat_sine_sse(x);
+				clip = sf_lt(ot_r, max_ratio);
+				x = sf_add(x0, ot_ph);
+				x = sf_mul(x, ot_r);
+				x = sf_mul(x, fk);
+				yr = splat_fast_sine(x);
 
 				for (c = 0; c < frag->n_channels; ++c) {
-					__m128 g;
-					__m128 y0;
+					sf_float_t g;
+					sf_float_t y0;
 
-					g = _mm_load_ps(&(otv++)->data[j]);
-					y0 = _mm_mul_ps(yr, aq[c]);
-					y0 = _mm_mul_ps(y0, g);
-					y0 = _mm_and_ps(y0, clip);
-					y[c] = _mm_add_ps(y[c], y0);
+					g = *((sf_float_t*)&(otv++)->data[j]);
+					y0 = sf_mul(yr, aq[0]);
+					y0 = sf_mul(y0, g);
+					y0 = sf_and(y0, clip);
+					y[c] = sf_add(y[c], y0);
 				}
 			}
 
@@ -1116,7 +864,7 @@ int splat_overtones_signal(struct splat_fragment *frag, PyObject **levels,
 /* -- Fast functions -- */
 
 #if defined(SPLAT_NEON)
-static float32x4_t splat_sine_neon(float32x4_t x)
+static float32x4_t splat_fast_sine(float32x4_t x)
 {
 	const float32x4_t *sine_tableq = (float32x4_t *)splat_sine_table;
 	const float32x4_t pi = vdupq_n_f32(M_PI);
@@ -1139,7 +887,7 @@ static float32x4_t splat_sine_neon(float32x4_t x)
 	a = vaddq_f32(a, (float32x4_t)neg);
 
 	/* m = int(a * table_len / M_PI) */
-	m = vcvtq_u32_f32(vmulq_f32(a, splat_neon_sine_step));
+	m = vcvtq_u32_f32(vmulq_f32(a, splat_sine_step));
 
 	/* polyq1..4 = transpose(table[m]) */
 	/* y = p0 + (x * p1) + (x^2 * p2) + (x^3 * p3) */
@@ -1176,7 +924,7 @@ static float32x4_t splat_sine_neon(float32x4_t x)
 	return vmulq_f32(y, b);
 }
 #elif defined(SPLAT_SSE)
-static __m128 splat_sine_sse(__m128 x)
+static __m128 splat_fast_sine(__m128 x)
 {
 	__m128 xpi;
 	__m128 a;
@@ -1205,7 +953,7 @@ static __m128 splat_sine_sse(__m128 x)
 	a = _mm_sub_ps(a, neg);
 
 	/* m = int(a * table_len / M_PI) */
-	m = _mm_cvttps_epi32(_mm_mul_ps(a, splat_sse_sine_step));
+	m = _mm_cvttps_epi32(_mm_mul_ps(a, splat_sine_step));
 
 	/* poly1..4 = transpose(table[m]) */
 	y = _mm_load_ps(splat_sine_table[mf[0]].coef);

@@ -75,17 +75,18 @@ static PyObject *splat_sample_types;
 /* A Python float with the value of 0.0 */
 static PyObject *splat_zero;
 
-#if defined(SPLAT_NEON)
-const uint32x4_t splat_neon_inc = { 0, 1, 2, 3 };
-float32x4_t splat_neon_sine_step;
-#elif defined(SPLAT_SSE)
+#ifdef SPLAT_FAST
+sf_float_t splat_sine_step;
+const sf_float_t splat_fast_inc = { 0.0, 1.0, 2.0, 3.0 };
+#endif
+
+#if defined(SPLAT_SSE)
 const __m128 splat_sse_zero = SPLAT_QUAD(0.0);
 const __m128 splat_sse_one = SPLAT_QUAD(1.0);
 const __m128 splat_sse_two = SPLAT_QUAD(2.0);
 const __m128 splat_sse_pi = SPLAT_QUAD(M_PI);
 const __m128 splat_sse_pi2 = SPLAT_QUAD(M_PI * 2.0);
 const __m128 splat_sse_inc = { 0.0, 1.0, 2.0, 3.0 };
-__m128 splat_sse_sine_step;
 #endif
 
 int splat_obj2double(PyObject *obj, double *out)
@@ -121,10 +122,8 @@ static void splat_levels_init_float(const struct splat_fragment *frag,
 	for (c = 0; c < frag->n_channels; ++c) {
 		levels->obj[c] = levels_obj;
 		levels->fl[c] = gain;
-#if defined(SPLAT_NEON)
-		levels->flq[c] = vdupq_n_f32(gain);
-#elif defined(SPLAT_SSE)
-		levels->flq[c] = _mm_set1_ps(gain);
+#ifdef SPLAT_FAST
+		levels->flq[c] = sf_set(gain);
 #endif
 	}
 }
@@ -1736,10 +1735,8 @@ static PyObject *splat_overtones(PyObject *self, PyObject *args)
 
 		if (ot_all_floats && PyFloat_Check(ot->ratio)) {
 			ot->fl_ratio = PyFloat_AS_DOUBLE(ot->ratio);
-#if defined(SPLAT_NEON)
-			ot->fl_ratioq = vdupq_n_f32(ot->fl_ratio);
-#elif defined(SPLAT_SSE)
-			ot->fl_ratioq = _mm_set1_ps(ot->fl_ratio);
+#ifdef SPLAT_FAST
+			ot->fl_ratioq = sf_set(ot->fl_ratio);
 #endif
 		} else {
 			ot_all_floats = 0;
@@ -1754,10 +1751,8 @@ static PyObject *splat_overtones(PyObject *self, PyObject *args)
 				ot->fl_phase = fmod(ot->fl_phase,
 						    fl_period / ot->fl_ratio);
 
-#if defined(SPLAT_NEON)
-			ot->fl_phaseq = vdupq_n_f32(ot->fl_phase);
-#elif defined(SPLAT_SSE)
-			ot->fl_phaseq = _mm_set1_ps(ot->fl_phase);
+#ifdef SPLAT_FAST
+			ot->fl_phaseq = sf_set(ot->fl_phase);
 #endif
 		} else {
 			ot_all_floats = 0;
@@ -2098,9 +2093,7 @@ PyMODINIT_FUNC init_splat(void)
 	PyModule_AddStringConstant(m, "SAMPLE_TYPE", SPLAT_NATIVE_SAMPLE_TYPE);
 	PyModule_AddIntConstant(m, "SAMPLE_WIDTH", SPLAT_NATIVE_SAMPLE_WIDTH);
 
-#if defined(SPLAT_NEON)
-	splat_neon_sine_step = vdupq_n_f32((float)splat_sine_table_len / M_PI);
-#elif defined(SPLAT_SSE)
-	splat_sse_sine_step = _mm_set1_ps((float)splat_sine_table_len / M_PI);
+#ifdef SPLAT_FAST
+	splat_sine_step = sf_set((float)splat_sine_table_len / M_PI);
 #endif
 }
