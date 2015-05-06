@@ -115,7 +115,54 @@ void splat_sine_floats(struct splat_fragment *frag, const double *levels,
 }
 #endif
 
-#if defined(SPLAT_SSE)
+#if defined(SPLAT_NEON)
+static void _splat_sine_signals(struct splat_fragment *frag,
+				struct splat_signal *sig, double origin)
+{
+	const float32x4_t k = vdupq_n_f32(2.0 * M_PI);
+	const float32x4_t rateq_inv = vdupq_n_f32(1.0 / frag->rate);
+	const float32x4_t originq = vdupq_n_f32(origin);
+	float32x4_t *out[SPLAT_MAX_CHANNELS];
+	unsigned c;
+	size_t i = 0;
+
+	for (c = 0; c < frag->n_channels; ++c)
+		out[c] = (float32x4_t *)frag->data[c];
+
+	while (splat_signal_next(sig) == SPLAT_SIGNAL_CONTINUE) {
+		const float32x4_t *fq = (float32x4_t *)
+			sig->vectors[SIG_SINE_FREQ].data;
+		const float32x4_t *phq= (float32x4_t *)
+			sig->vectors[SIG_SINE_PHASE].data;
+		const float32x4_t *aq[SPLAT_MAX_CHANNELS];
+		size_t j;
+
+		for (c = 0; c < frag->n_channels; ++c)
+			aq[c] = (float32x4_t *)
+				sig->vectors[SIG_SINE_AMP + c].data;
+
+		for (j = 0; j < sig->len; i += 4, j += 4) {
+			uint32x4_t iq;
+			float32x4_t x;
+			float32x4_t f;
+			float32x4_t y;
+
+			iq = vdupq_n_u32(i);
+			iq = vaddq_u32(iq, splat_neon_inc);
+			x = vcvtq_f32_u32(iq);
+			x = vmulq_f32(x, rateq_inv);
+			x = vaddq_f32(x, *phq++);
+			x = vaddq_f32(x, originq);
+			f = vmulq_f32(*fq++, k);
+			x = vmulq_f32(x, f);
+			y = splat_sine_neon(x);
+
+			for (c = 0; c < frag->n_channels; ++c)
+				*out[c]++ = vmulq_f32(y, *aq[c]++);
+		}
+	}
+}
+#elif defined(SPLAT_SSE)
 static void _splat_sine_signals(struct splat_fragment *frag,
 				struct splat_signal *sig, double origin)
 {
