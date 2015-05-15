@@ -149,7 +149,7 @@ int splat_frag_resize(struct splat_fragment *frag, size_t length)
 	return 0;
 }
 
-#if defined(SPLAT_NEON)
+#ifdef SPLAT_FAST
 static void splat_frag_mix_floats(struct splat_fragment *frag,
 				  const struct splat_fragment *in,
 				  size_t offset, size_t start, size_t length,
@@ -162,55 +162,27 @@ static void splat_frag_mix_floats(struct splat_fragment *frag,
 	length /= 4;
 
 	for (c = 0; c < frag->n_channels; ++c) {
-		const float32x4_t *src = (float32x4_t *)&in->data[c][start];
-		float32x4_t *dst = (float32x4_t *)&frag->data[c][offset];
+		const sf_float_t *src = (sf_float_t *)&in->data[c][start];
+		sf_float_t *dst = (sf_float_t *)&frag->data[c][offset];
 		size_t i = length;
 
 		if (zero_dB) {
 			while (i--) {
-				*dst = vaddq_f32(*dst, *src++);
+				*dst = sf_add(*dst, *src++);
 				dst++;
 			}
 		} else {
-			const float32x4_t gain = vdupq_n_f32(levels[c]);
+			const sf_float_t gain = sf_set(levels[c]);
 
 			while (i--) {
+#if defined(SPLAT_NEON)
 				*dst = vmlaq_f32(*dst, *src++, gain);
-				dst++;
-			}
-		}
-	}
-}
-#elif defined(SPLAT_SSE)
-static void splat_frag_mix_floats(struct splat_fragment *frag,
-				  const struct splat_fragment *incoming,
-				  size_t offset, size_t start, size_t length,
-				  const double *levels, int zero_dB)
-{
-	unsigned c;
+#else
+				sf_float_t s = *src++;
 
-	start = splat_mask4(start);
-	offset = splat_mask4(offset);
-	length /= 4;
-
-	for (c = 0; c < frag->n_channels; ++c) {
-		const __m128 *src = (__m128 *)&incoming->data[c][start];
-		__m128 *dst = (__m128 *)&frag->data[c][offset];
-		size_t i = length;
-
-		if (zero_dB) {
-			while (i--) {
-				*dst = _mm_add_ps(*dst, *src++);
-				dst++;
-			}
-		} else {
-			const __m128 gain = _mm_set1_ps(levels[c]);
-
-			while (i-- ) {
-				__m128 s = *src++;
-
-				s = _mm_mul_ps(s, gain);
-				*dst = _mm_add_ps(*dst, s);
+				s = sf_mul(s, gain);
+				*dst = sf_add(*dst, s);
+#endif
 				dst++;
 			}
 		}
