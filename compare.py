@@ -1,4 +1,4 @@
-# Splat - dew_drop.py
+# Splat - compare.py
 #
 # Copyright (C) 2015 Guillaume Tucker <guillaume@mangoz.org>
 #
@@ -20,27 +20,30 @@ import argparse
 import splat
 import splat.data
 
-def frag_diff(f1, f2):
+def frag_delta(f1, f2):
     delta = f2.dup()
     delta.amp(-1)
     delta.mix(f1)
     return delta
 
+def file_peak_delta_dB(f1_path, f2_path, save_path=None):
+    f1 = splat.data.Fragment.open(f1_path)
+    f2 = splat.data.Fragment.open(f2_path)
+    delta = frag_delta(f1, f2)
+    if save_path:
+        delta.save(save_path, normalize=False)
+    return splat.lin2dB(delta.get_peak()[0]['peak'])
+
 def main(argv):
     parser = argparse.ArgumentParser(
-        "Compute the difference between sound files")
+        "Compare sound files and show the peak signal difference")
     parser.add_argument('f1', help="path to first sound file")
     parser.add_argument('f2', help="path to second sound file")
     parser.add_argument('--save', help="path to save the difference")
     args = parser.parse_args(argv[1:])
 
-    f1 = splat.data.Fragment.open(args.f1)
-    f2 = splat.data.Fragment.open(args.f2)
-    delta = frag_diff(f1, f2)
-    print("Peak error: {:.3f} dB".format(
-            splat.lin2dB(delta.get_peak()[0]['peak'])))
-    if args.save:
-        delta.save(args.save, normalize=False)
+    peak_delta = file_peak_delta_dB(args.f1, args.f2, args.save)
+    print("Peak delta: {:.3f} dB".format(peak_delta))
     return True
 
 if __name__ == '__main__':
