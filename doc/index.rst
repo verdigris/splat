@@ -38,3 +38,5 @@ Splat manual
    intro
    audio_formats
    splat
+   fast
+   web

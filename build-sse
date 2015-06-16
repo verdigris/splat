@@ -1,0 +1,1 @@
+CFLAGS="-DSPLAT_FAST -msse2 -O3" python setup.py build

@@ -24,6 +24,44 @@
 #include <Python.h>
 #include <math.h>
 
+/* Enable for speed using SIMD and 32-bit samples instead of 64-bit */
+#ifdef SPLAT_FAST
+#if defined(__ARM_NEON__)
+#include <arm_neon.h>
+#define SPLAT_NEON
+typedef float32x4_t sf_float_t;
+typedef uint32x4_t sf_uint_t;
+typedef uint32x4_t sf_mask_t;
+#define sf_set(x) vdupq_n_f32((x))
+#define sf_zero() vdupq_n_f32(0.0)
+#define sf_add(x, y) vaddq_f32((x), (y))
+#define sf_mul(x, y) vmulq_f32((x), (y))
+#define sf_and(x, y) (sf_float_t)vandq_u32((sf_uint_t)(x), (sf_uint_t)(y))
+#define sf_lt(x, y) vcltq_f32((x), (y))
+#elif defined(__SSE__)
+#include <x86intrin.h>
+#define SPLAT_SSE
+typedef __m128 sf_float_t;
+typedef __m128i sf_uint_t;
+typedef __m128 sf_mask_t;
+#define sf_set(x) _mm_set1_ps((x))
+#define sf_zero() _mm_setzero_ps()
+#define sf_add(x, y) _mm_add_ps((x), (y))
+#define sf_mul(x, y) _mm_mul_ps((x), (y))
+#define sf_and(x, y) _mm_and_ps((x), (y))
+#define sf_lt(x, y) _mm_cmplt_ps((x), (y))
+#endif
+#endif
+
+/* Sample type */
+#ifdef SPLAT_FAST
+typedef float sample_t;
+#define SPLAT_NATIVE_SAMPLE_TYPE SPLAT_FLOAT_32
+#else
+typedef double sample_t;
+#define SPLAT_NATIVE_SAMPLE_TYPE SPLAT_FLOAT_64
+#endif
+
 /* Maximum number of channels */
 #define SPLAT_MAX_CHANNELS 16
 
@@ -31,26 +69,28 @@
 #define lin2dB(level) (20 * log10(level))
 #define dB2lin(dB) (pow10((dB) / 20))
 
+/* Round to the next multiple of 4, used in fast mode for 4x float vectors */
+#ifdef SPLAT_FAST
+#define splat_round4(_len) ((_len) % 4 ? ((((_len) / 4) + 1) * 4) : (_len))
+#define splat_mask4(_x) (_x & 0xFFFFFFFFFFFFFFFC)
+#endif
+
 #ifndef min
-# define min(_a, _b) (((_a) < (_b)) ? (_a) : (_b))
+#define min(_a, _b) (((_a) < (_b)) ? (_a) : (_b))
 #endif
 
 #ifndef max
-# define max(_a, _b) (((_a) > (_b)) ? (_a) : (_b))
+#define max(_a, _b) (((_a) > (_b)) ? (_a) : (_b))
 #endif
 
 #ifndef minmax
-# define minmax(_val, _min, _max) \
+#define minmax(_val, _min, _max) \
 	((_val) < (_min) ? (_min) : ((_val) > (_max) ? (_max) : (_val)))
 #endif
 
 #ifndef ARRAY_SIZE
-# define ARRAY_SIZE(_array) (sizeof(_array) / sizeof(_array[0]))
+#define ARRAY_SIZE(_array) (sizeof(_array) / sizeof(_array[0]))
 #endif
-
-/* Sample type */
-typedef double sample_t;
-#define SPLAT_NATIVE_SAMPLE_TYPE SPLAT_FLOAT_64
 
 /* Convert any number type to a double or return -1 */
 extern int splat_obj2double(PyObject *obj, double *out);
@@ -61,7 +101,33 @@ struct splat_levels {
 	PyObject *obj[SPLAT_MAX_CHANNELS];
 	double fl[SPLAT_MAX_CHANNELS]; /* levels converted to linear scale */
 	int all_floats;
+#ifdef SPLAT_FAST
+	sf_float_t flq[SPLAT_MAX_CHANNELS];
+#endif
 };
+
+/* Fast sine function interpolation table */
+struct splat_sine_poly {
+	float coef[4];
+};
+
+extern const struct splat_sine_poly *splat_sine_table;
+extern const size_t splat_sine_table_len;
+
+#ifdef SPLAT_FAST
+#define SPLAT_QUAD(_x) { (_x), (_x), (_x), (_x) }
+extern sf_float_t splat_sine_step;
+extern const sf_float_t splat_fast_inc;
+#endif
+
+#if defined(SPLAT_SSE)
+extern const __m128 splat_sse_zero;
+extern const __m128 splat_sse_one;
+extern const __m128 splat_sse_two;
+extern const __m128 splat_sse_pi;
+extern const __m128 splat_sse_pi2;
+extern const __m128 splat_sse_inc;
+#endif
 
 /* ----------------------------------------------------------------------------
  * Fragment
@@ -181,6 +247,10 @@ struct splat_overtone {
 	PyObject *phase;
 	double fl_phase;
 	struct splat_levels levels;
+#ifdef SPLAT_FAST
+	sf_float_t fl_ratioq;
+	sf_float_t fl_phaseq;
+#endif
 };
 
 extern void splat_sine_floats(struct splat_fragment *frag,

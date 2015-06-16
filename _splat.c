@@ -75,6 +75,20 @@ static PyObject *splat_sample_types;
 /* A Python float with the value of 0.0 */
 static PyObject *splat_zero;
 
+#ifdef SPLAT_FAST
+sf_float_t splat_sine_step;
+const sf_float_t splat_fast_inc = { 0.0, 1.0, 2.0, 3.0 };
+#endif
+
+#if defined(SPLAT_SSE)
+const __m128 splat_sse_zero = SPLAT_QUAD(0.0);
+const __m128 splat_sse_one = SPLAT_QUAD(1.0);
+const __m128 splat_sse_two = SPLAT_QUAD(2.0);
+const __m128 splat_sse_pi = SPLAT_QUAD(M_PI);
+const __m128 splat_sse_pi2 = SPLAT_QUAD(M_PI * 2.0);
+const __m128 splat_sse_inc = { 0.0, 1.0, 2.0, 3.0 };
+#endif
+
 int splat_obj2double(PyObject *obj, double *out)
 {
 	double value;
@@ -108,6 +122,9 @@ static void splat_levels_init_float(const struct splat_fragment *frag,
 	for (c = 0; c < frag->n_channels; ++c) {
 		levels->obj[c] = levels_obj;
 		levels->fl[c] = gain;
+#ifdef SPLAT_FAST
+		levels->flq[c] = sf_set(gain);
+#endif
 	}
 }
 
@@ -1458,7 +1475,6 @@ static PyObject *splat_gen_ref(PyObject *self, PyObject *args)
 	struct splat_fragment *frag;
 	sample_t *data;
 	size_t n;
-	size_t i;
 
 	if (!PyArg_ParseTuple(args, "O!", &splat_FragmentType, &frag_obj))
 		return NULL;
@@ -1480,8 +1496,8 @@ static PyObject *splat_gen_ref(PyObject *self, PyObject *args)
 	data = frag->data[0];
 	n = frag->length;
 
-	for (i = 0; i < n; ++i)
-		*data++ = i / n;
+	while (n--)
+		*data++ = n;
 
 	Py_RETURN_NONE;
 }
@@ -1543,11 +1559,13 @@ static PyObject *splat_sine(PyObject *self, PyObject *args)
 
 	all_floats = levels.all_floats && splat_check_all_floats(freq, phase);
 
-	if (all_floats)
+	if (all_floats) {
+		origin = fmod(origin, 1 / PyFloat_AS_DOUBLE(freq));
 		splat_sine_floats(frag, levels.fl, PyFloat_AS_DOUBLE(freq),
 				  PyFloat_AS_DOUBLE(phase) + origin);
-	else if (splat_sine_signals(frag, levels.obj, freq, phase, origin))
+	} else if (splat_sine_signals(frag, levels.obj, freq, phase, origin)) {
 		return NULL;
+	}
 
 	Py_RETURN_NONE;
 }
@@ -1673,6 +1691,7 @@ static PyObject *splat_overtones(PyObject *self, PyObject *args)
 	Py_ssize_t pos;
 	int all_floats;
 	int ot_all_floats;
+	double fl_period;
 	int stat = 0;
 
 	if (!PyArg_ParseTuple(args, "O!OOO!|Od", &splat_FragmentType, &frag_obj,
@@ -1691,6 +1710,13 @@ static PyObject *splat_overtones(PyObject *self, PyObject *args)
 	if (overtones == NULL)
 		return PyErr_NoMemory();
 
+	if (PyFloat_Check(freq)) {
+		fl_period = 1.0 / PyFloat_AS_DOUBLE(freq);
+		origin = fmod(origin, fl_period);
+	} else {
+		fl_period = 0.0;
+	}
+
 	all_floats = levels.all_floats && splat_check_all_floats(freq, phase);
 	ot_all_floats = 1;
 
@@ -1707,17 +1733,30 @@ static PyObject *splat_overtones(PyObject *self, PyObject *args)
 
 		ot->ratio = PyTuple_GET_ITEM(ot_params, OT_RATIO);
 
-		if (ot_all_floats && PyFloat_Check(ot->ratio))
+		if (ot_all_floats && PyFloat_Check(ot->ratio)) {
 			ot->fl_ratio = PyFloat_AS_DOUBLE(ot->ratio);
-		else
+#ifdef SPLAT_FAST
+			ot->fl_ratioq = sf_set(ot->fl_ratio);
+#endif
+		} else {
 			ot_all_floats = 0;
+		}
 
 		ot->phase = PyTuple_GET_ITEM(ot_params, OT_PHASE);
 
-		if (ot_all_floats && PyFloat_Check(ot->phase))
+		if (ot_all_floats && PyFloat_Check(ot->phase)) {
 			ot->fl_phase = PyFloat_AS_DOUBLE(ot->phase);
-		else
+
+			if (fl_period)
+				ot->fl_phase = fmod(ot->fl_phase,
+						    fl_period / ot->fl_ratio);
+
+#ifdef SPLAT_FAST
+			ot->fl_phaseq = sf_set(ot->fl_phase);
+#endif
+		} else {
 			ot_all_floats = 0;
+		}
 
 		ot_levels = PyTuple_GET_ITEM(ot_params, OT_LEVELS);
 
@@ -2053,4 +2092,8 @@ PyMODINIT_FUNC init_splat(void)
 
 	PyModule_AddStringConstant(m, "SAMPLE_TYPE", SPLAT_NATIVE_SAMPLE_TYPE);
 	PyModule_AddIntConstant(m, "SAMPLE_WIDTH", SPLAT_NATIVE_SAMPLE_WIDTH);
+
+#ifdef SPLAT_FAST
+	splat_sine_step = sf_set((float)splat_sine_table_len / M_PI);
+#endif
 }
