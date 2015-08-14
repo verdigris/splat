@@ -156,7 +156,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser("Standard Splat benchmark.")
     parser.add_argument('--iterations', type=int, default=15,
                         help="number of iterations")
+    parser.add_argument('--format', default='reST',
+                        choices=['reST', 'csv', 'comma', 'markdown'],
+                        help="output format")
+
     args = parser.parse_args(sys.argv[1:])
-    benchmark.main(format="reST", numberFormat="%.4g", each=args.iterations,
-                   prefix='run_test_')
+    benchmark.main(format=args.format, numberFormat="%.4g",
+                   each=args.iterations, prefix='run_test_')
     sys.exit(0)
