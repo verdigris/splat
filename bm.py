@@ -150,10 +150,10 @@ class Spline(benchmark.Benchmark, RefMixin):
         self.frag.offset(amp)
 
     def test_offset_spline(self):
-        self.frag.offset(splat.interpol.spline(self.pts).signal)
-
-    def test_offset_spline_value(self):
         self.frag.offset(splat.interpol.spline(self.pts).value)
+
+    def test_offset_spline_signal(self):
+        self.frag.offset(splat.interpol.spline(self.pts).signal)
 
 
 def run_no_report(iterations=DEFAULT_ITERATIONS):
