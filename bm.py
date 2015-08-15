@@ -19,6 +19,7 @@ import sys
 import argparse
 import benchmark
 import copy
+import cPickle
 import _splat
 import splat
 import splat.data
@@ -26,6 +27,9 @@ import splat.gen
 import splat.sources
 import splat.interpol
 from splat import dB2lin as dB
+
+DEFAULT_ITERATIONS = 15
+PREFIX = 'run_test_'
 
 class RefMixin(object):
 
@@ -152,15 +156,42 @@ class Spline(benchmark.Benchmark, RefMixin):
         self.frag.offset(splat.interpol.spline(self.pts).value)
 
 
+def run_no_report(iterations=DEFAULT_ITERATIONS):
+    """
+    Run the benchmark but return the result objects and do not print a report.
+    """
+    bms = []
+    obj = None
+    for obj in globals().itervalues():
+        if isinstance(obj, type) and issubclass(obj, benchmark.Benchmark):
+            bms.append(obj)
+
+    runs = 0
+    results = []
+    for bm_cls in bms:
+        bm = bm_cls(each=iterations, prefix=PREFIX)
+        bm.run()
+        results.append(bm)
+        runs += bm.getTotalRuns()
+    return {res.__class__.__name__: res.table for res in results}
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("Standard Splat benchmark.")
-    parser.add_argument('--iterations', type=int, default=15,
+    parser.add_argument('--iterations', type=int, default=DEFAULT_ITERATIONS,
                         help="number of iterations")
     parser.add_argument('--format', default='reST',
                         choices=['reST', 'csv', 'comma', 'markdown'],
-                        help="output format")
-
+                        help="report output format")
+    parser.add_argument('--pickle',
+                        help="do not generate report but pickle the results")
     args = parser.parse_args(sys.argv[1:])
-    benchmark.main(format=args.format, numberFormat="%.4g",
-                   each=args.iterations, prefix='run_test_')
+
+    if args.pickle:
+        results = run_no_report(iterations=args.iterations)
+        cPickle.dump(results, open(args.pickle, 'w'))
+    else:
+        benchmark.main(format=args.format, numberFormat="%.4g",
+                       each=args.iterations, prefix=PREFIX)
+
     sys.exit(0)
