@@ -20,7 +20,7 @@ import os
 import os.path
 import struct
 import wave
-import md5
+import hashlib
 try:
     # For extra standard audio formats
     import audiotools
@@ -188,7 +188,7 @@ def save_saf(saf_file, frag, start, end):
         raw_bytes = frag.export_bytes(start=start, end=end)
         frame_size = frag.channels * splat.SAMPLE_WIDTH / 8
         length = len(raw_bytes) / frame_size
-        md5sum = md5.new(raw_bytes).hexdigest()
+        md5sum = hashlib.md5(raw_bytes).hexdigest()
         attrs.update({
             'format': SAF_FORMAT_FLAT,
             'md5': md5sum,
@@ -379,7 +379,7 @@ class Fragment(_splat.Fragment):
         and ``sample_width`` in bytes.  Then the MD5 checksum is returned as a
         string unless ``as_md5_obj`` is set to True in which case an ``md5``
         object is returned instead."""
-        md5sum = md5.new(self.export_bytes(sample_type))
+        md5sum = hashlib.md5(self.export_bytes(sample_type))
         return md5sum if as_md5_obj is True else md5sum.hexdigest()
 
     def n2s(self, n):

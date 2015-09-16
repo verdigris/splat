@@ -16,7 +16,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import sys
-import md5
+import hashlib
 import math
 import unittest
 try:
@@ -78,7 +78,7 @@ class FragmentTest(SplatTest):
         frag = splat.data.Fragment()
         splat.gen.SineGenerator(frag=frag).run(0.0, 0.345, 123.0)
         for sample_type in splat.sample_types.iterkeys():
-            md5sum = md5.new(frag.export_bytes(sample_type)).hexdigest()
+            md5sum = hashlib.md5(frag.export_bytes(sample_type)).hexdigest()
             self.assertEqual(md5sum, frag.md5(sample_type))
 
     def test_frag_offset(self):
@@ -186,11 +186,11 @@ class FragmentTest(SplatTest):
         splat.gen.SineGenerator(frag).run(0.1, 2.7, 3456.7)
         for sample_type, sample_width in splat.sample_types.iteritems():
             ref_bytes = frag.export_bytes(sample_type)
-            ref_md5 = md5.new(ref_bytes).hexdigest()
+            ref_md5 = hashlib.md5(ref_bytes).hexdigest()
             imp = splat.data.Fragment()
             imp.import_bytes(ref_bytes, frag.rate, frag.channels, sample_type)
             exp_bytes = imp.export_bytes(sample_type)
-            exp_md5 = md5.new(exp_bytes).hexdigest()
+            exp_md5 = hashlib.md5(exp_bytes).hexdigest()
             self.assertEqual(ref_md5, exp_md5,
                              "Import/export MD5 mismatch (type={}, width={})"
                              .format(sample_type, sample_width))
