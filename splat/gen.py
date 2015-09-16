@@ -17,10 +17,10 @@
 
 import math
 import random
-import sources
-import interpol
-from data import Fragment
-from filters import FilterChain
+from . import sources
+from . import interpol
+from .data import Fragment
+from .filters import FilterChain
 import _splat
 
 class Generator(object):

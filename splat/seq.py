@@ -18,7 +18,7 @@
 import os
 import random
 import _splat
-from data import Fragment
+from .data import Fragment
 
 class SampleSet(object):
     """Set of samples
