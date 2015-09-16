@@ -167,7 +167,7 @@ def build_dep_tree(mod, name, dep_tree, clean_list):
     frags = getattr(mod, 'SPLAT_FRAGS', None)
     if frags is not None:
         if isinstance(frags, dict):
-            frag_seq = frags.iterkeys()
+            frag_seq = frags.keys()
         else:
             frag_seq = frags
         for frag in frag_seq:
@@ -208,7 +208,7 @@ endif
     main_mod = __import__(main)
     build_dep_tree(main_mod, main_mix, dep_tree, clean_list)
     mk += '\nall: {}\n\n'.format(main_mix)
-    for target, deps in dep_tree.iteritems():
+    for target, deps in dep_tree.items():
         if deps:
             mk += target + ':'
             for dep in deps:
@@ -276,7 +276,7 @@ def main_mixer(argv, fragments, master=None, filters=None):
     f_out = argv[1]
     if master is None:
         master = splat.data.Fragment()
-    for frag, (ofst, ml) in fragments.iteritems():
+    for frag, (ofst, ml) in fragments.items():
         fname = '.'.join([frag, 'saf'])
         master.mix(splat.data.Fragment.open(fname), offset=ofst, levels=ml)
     if filters is not None:
