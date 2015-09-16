@@ -111,8 +111,6 @@ int splat_obj2double(PyObject *obj, double *out)
 		value = PyFloat_AsDouble(obj);
 	else if (PyLong_Check(obj))
 		value = PyLong_AsDouble(obj);
-	else if (PyInt_Check(obj))
-		value = (double)PyInt_AsLong(obj);
 	else
 		return -1;
 
@@ -121,6 +119,19 @@ int splat_obj2double(PyObject *obj, double *out)
 
 	return 0;
 }
+
+char *splat_utf8_str(PyObject *str)
+{
+       PyObject *utf8;
+
+       utf8 = PyUnicode_AsUTF8String(str);
+
+       if (utf8 == NULL)
+               return NULL;
+
+       return PyBytes_AS_STRING(utf8);
+}
+
 
 /* Levels */
 
@@ -210,7 +221,7 @@ static int splat_levels_init(const struct splat_fragment *frag,
 /* Fragment class declaration */
 
 struct Fragment_object {
-	PyObject_HEAD;
+	PyObject_HEAD
 	int init;
 	struct splat_fragment frag;
 };
@@ -223,7 +234,7 @@ static PyTypeObject splat_FragmentType;
  */
 
 struct Spline_object {
-	PyObject_HEAD;
+	PyObject_HEAD
 	int init;
 	struct splat_spline spline;
 };
@@ -287,8 +298,7 @@ static PyObject *Spline_new(PyTypeObject *type, PyObject *args, PyObject *kw)
 }
 
 static PyTypeObject splat_SplineType = {
-	PyObject_HEAD_INIT(NULL)
-	0,                                 /* ob_size */
+	PyVarObject_HEAD_INIT(NULL, 0)
 	"_splat.Spline",                   /* tp_name */
 	sizeof(Spline),                    /* tp_basicsize */
 	0,                                 /* tp_itemsize */
@@ -296,7 +306,7 @@ static PyTypeObject splat_SplineType = {
 	0,                                 /* tp_print */
 	0,                                 /* tp_getattr */
 	0,                                 /* tp_setattr */
-	0,                                 /* tp_compare */
+	0,                                 /* tp_as_async */
 	0,                                 /* tp_repr */
 	0,                                 /* tp_as_number */
 	0,                                 /* tp_as_sequence */
@@ -308,7 +318,7 @@ static PyTypeObject splat_SplineType = {
 	0,                                 /* tp_setattro */
 	0,                                 /* tp_as_buffer */
 	BASE_TYPE_FLAGS,                   /* tp_flags */
-	0,                                 /* tp_doc */
+	"Interpolation spline",            /* tp_doc */
 	0,                                 /* tp_traverse */
 	0,                                 /* tp_clear */
 	0,                                 /* tp_richcompare */
@@ -331,7 +341,7 @@ static PyTypeObject splat_SplineType = {
 /* -- Signal class -- */
 
 struct Signal_object {
-	PyObject_HEAD;
+	PyObject_HEAD
 	int init;
 	PyObject **signals;
 	struct splat_signal sig;
@@ -359,7 +369,7 @@ static void Signal_dealloc(Signal *self)
 		self->init = 0;
 	}
 
-	self->ob_type->tp_free((PyObject *)self);
+	self->ob_base.ob_type->tp_free((PyObject *)self);
 }
 
 static int Signal_init(Signal *self, PyObject *args)
@@ -476,8 +486,7 @@ static PySequenceMethods Signal_as_sequence = {
 };
 
 static PyTypeObject splat_SignalType = {
-	PyObject_HEAD_INIT(NULL)
-	0,                                 /* ob_size */
+	PyVarObject_HEAD_INIT(NULL, 0)
 	"_splat.Signal",                   /* tp_name */
 	sizeof(Signal),                    /* tp_basicsize */
 	0,                                 /* tp_itemsize */
@@ -485,7 +494,7 @@ static PyTypeObject splat_SignalType = {
 	0,                                 /* tp_print */
 	0,                                 /* tp_getattr */
 	0,                                 /* tp_setattr */
-	0,                                 /* tp_compare */
+	0,                                 /* tp_as_async */
 	0,                                 /* tp_repr */
 	0,                                 /* tp_as_number */
 	&Signal_as_sequence,               /* tp_as_sequence */
@@ -497,7 +506,7 @@ static PyTypeObject splat_SignalType = {
 	0,                                 /* tp_setattro */
 	0,                                 /* tp_as_buffer */
 	BASE_TYPE_FLAGS,                   /* tp_flags */
-	0,                                 /* tp_doc */
+	"Arbitrary signal",                /* tp_doc */
 	0,                                 /* tp_traverse */
 	0,                                 /* tp_clear */
 	0,                                 /* tp_richcompare */
@@ -542,7 +551,7 @@ static void Fragment_dealloc(Fragment *self)
 		self->init = 0;
 	}
 
-	self->ob_type->tp_free((PyObject *)self);
+	self->ob_base.ob_type->tp_free((PyObject *)self);
 }
 
 static int splat_frag_mmap(struct splat_fragment *frag, unsigned n_channels,
@@ -555,9 +564,15 @@ static int splat_frag_mmap(struct splat_fragment *frag, unsigned n_channels,
 	if (obj == Py_True) {
 		new_path = NULL;
 		open_paths[0] = NULL;
-	} else if ((obj != NULL) && PyString_Check(obj)) {
-		new_path = PyString_AsString(obj);
+	} else if ((obj != NULL) && PyUnicode_Check(obj)) {
+		new_path = splat_utf8_str(obj);
 		open_paths[0] = NULL;
+
+		if (new_path == NULL) {
+			PyErr_SetString(PyExc_ValueError,
+					"failed to decode mmap path as UTF-8");
+			return -1;
+		}
 	} else if ((obj != NULL) && PyList_Check(obj)) {
 		unsigned c;
 
@@ -570,13 +585,18 @@ static int splat_frag_mmap(struct splat_fragment *frag, unsigned n_channels,
 		for (c = 0; c < n_channels; ++c) {
 			PyObject *str = PyList_GetItem(obj, c);
 
-			if ((str == NULL) || !PyString_Check(str)) {
+			if ((str == NULL) || !PyUnicode_Check(str)) {
 				PyErr_SetString(PyExc_ValueError,
 						"invalid mmap paths list");
 				return -1;
 			}
 
-			open_paths[c] = PyString_AsString(str);
+			open_paths[c] = splat_utf8_str(str);
+
+			if (open_paths[c] == NULL) {
+				PyErr_SetString(PyExc_ValueError,
+					"failed to decode mmap path as UTF-8");
+			}
 		}
 
 		new_path = NULL;
@@ -801,12 +821,12 @@ static PyObject *Fragment_get_info(Fragment *self, void *_)
 		}
 
 		if (PyDict_SetItemString(dict, "length",
-					 PyInt_FromSize_t(chan->length))) {
+					 PyLong_FromSize_t(chan->length))) {
 			goto error_clean_up;
 		}
 
 		if (frag->uses_mmap) {
-			mmap_obj = PyString_FromString(chan->mmap.path);
+			mmap_obj = PyUnicode_FromString(chan->mmap.path);
 
 			if (mmap_obj == NULL)
 				goto error_clean_up;
@@ -840,18 +860,28 @@ static PyObject *Fragment_get_name(Fragment *self, void *_)
 	if (self->frag.name == NULL)
 		Py_RETURN_NONE;
 
-	return PyString_FromString(self->frag.name);
+	return PyUnicode_FromString(self->frag.name);
 }
 
 static int Fragment_set_name(Fragment *self, PyObject *value, void *_)
 {
-	if (!PyString_Check(value)) {
+	const char *name;
+
+	if (!PyUnicode_Check(value)) {
 		PyErr_SetString(PyExc_TypeError,
 				"Fragment name must be a string");
 		return -1;
 	}
 
-	return splat_frag_set_name(&self->frag, PyString_AS_STRING(value));
+	name = splat_utf8_str(value);
+
+	if (name == NULL) {
+		PyErr_SetString(PyExc_ValueError,
+				"failed to decode fragment name as UTF-8");
+		return -1;
+	}
+
+	return splat_frag_set_name(&self->frag, name);
 }
 
 static PyGetSetDef Fragment_getsetters[] = {
@@ -1551,34 +1581,33 @@ static PyObject *Fragment_resample(Fragment *self, PyObject *args, PyObject *kw)
 }
 
 static PyMethodDef Fragment_methods[] = {
-	{ "import_bytes", (PyCFunction)Fragment_import_bytes, METH_KEYWORDS,
-	  Fragment_import_bytes_doc },
-	{ "export_bytes", (PyCFunction)Fragment_export_bytes, METH_KEYWORDS,
-	  Fragment_export_bytes_doc },
-	{ "mix", (PyCFunction)Fragment_mix, METH_KEYWORDS,
-	  Fragment_mix_doc },
-	{ "get_peak", (PyCFunction)Fragment_get_peak, METH_NOARGS,
-	  Fragment_get_peak_doc },
-	{ "normalize", (PyCFunction)Fragment_normalize, METH_VARARGS,
-	  Fragment_normalize_doc },
-	{ "amp", (PyCFunction)Fragment_amp, METH_VARARGS,
-	  Fragment_amp_doc },
-	{ "lin2dB", (PyCFunction)Fragment_lin2dB, METH_NOARGS,
-	  Fragment_lin2dB_doc },
-	{ "dB2lin", (PyCFunction)Fragment_dB2lin, METH_NOARGS,
-	  Fragment_dB2lin_doc },
-	{ "offset", (PyCFunction)Fragment_offset, METH_VARARGS,
-	  Fragment_offset_doc },
-	{ "resize", (PyCFunction)Fragment_resize, METH_KEYWORDS,
-	  Fragment_resize_doc },
-	{ "resample", (PyCFunction)Fragment_resample, METH_KEYWORDS,
-	  Fragment_resample_doc },
+	{ "import_bytes", (PyCFunction)Fragment_import_bytes,
+	  METH_VARARGS | METH_KEYWORDS, Fragment_import_bytes_doc },
+	{ "export_bytes", (PyCFunction)Fragment_export_bytes,
+	  METH_VARARGS | METH_KEYWORDS, Fragment_export_bytes_doc },
+	{ "mix", (PyCFunction)Fragment_mix,
+	  METH_VARARGS | METH_KEYWORDS, Fragment_mix_doc },
+	{ "get_peak", (PyCFunction)Fragment_get_peak,
+	  METH_NOARGS, Fragment_get_peak_doc },
+	{ "normalize", (PyCFunction)Fragment_normalize,
+	  METH_VARARGS, Fragment_normalize_doc },
+	{ "amp", (PyCFunction)Fragment_amp,
+	  METH_VARARGS, Fragment_amp_doc },
+	{ "lin2dB", (PyCFunction)Fragment_lin2dB,
+	  METH_NOARGS, Fragment_lin2dB_doc },
+	{ "dB2lin", (PyCFunction)Fragment_dB2lin,
+	  METH_NOARGS, Fragment_dB2lin_doc },
+	{ "offset", (PyCFunction)Fragment_offset,
+	  METH_VARARGS, Fragment_offset_doc },
+	{ "resize", (PyCFunction)Fragment_resize,
+	  METH_VARARGS | METH_KEYWORDS, Fragment_resize_doc },
+	{ "resample", (PyCFunction)Fragment_resample,
+	  METH_VARARGS | METH_KEYWORDS, Fragment_resample_doc },
 	{ NULL }
 };
 
 static PyTypeObject splat_FragmentType = {
-	PyObject_HEAD_INIT(NULL)
-	0,                                 /* ob_size */
+	PyVarObject_HEAD_INIT(NULL, 0)
 	"_splat.Fragment",                 /* tp_name */
 	sizeof(Fragment),                  /* tp_basicsize */
 	0,                                 /* tp_itemsize */
@@ -1586,7 +1615,7 @@ static PyTypeObject splat_FragmentType = {
 	0,                                 /* tp_print */
 	0,                                 /* tp_getattr */
 	0,                                 /* tp_setattr */
-	0,                                 /* tp_compare */
+	0,                                 /* tp_as_async */
 	0,                                 /* tp_repr */
 	0,                                 /* tp_as_number */
 	&Fragment_as_sequence,             /* tp_as_sequence */
@@ -2232,7 +2261,7 @@ PyDoc_STRVAR(splat_get_mmap_temp_px_doc,
 "Get the path prefix used to create temporary mmap files.\n");
 static PyObject *splat_get_mmap_temp_px(PyObject *self, PyObject *args)
 {
-	return PyString_FromString(splat_mmap_get_temp_px());
+	return PyUnicode_FromString(splat_mmap_get_temp_px());
 }
 
 PyDoc_STRVAR(splat_set_mmap_temp_px_doc,
@@ -2289,6 +2318,14 @@ static PyMethodDef splat_methods[] = {
 	{ NULL, NULL, 0, NULL }
 };
 
+static struct PyModuleDef splat_module = {
+	PyModuleDef_HEAD_INIT,
+	"_splat",
+	NULL,
+	-1,
+	splat_methods,
+};
+
 static void splat_init_sample_types(PyObject *m, const char *name,
 				    PyObject *obj)
 {
@@ -2299,7 +2336,7 @@ static void splat_init_sample_types(PyObject *m, const char *name,
 	for (i = 0; i < ARRAY_SIZE(splat_raw_io_table); ++i) {
 		const struct splat_raw_io *io = &splat_raw_io_table[i];
 
-		PyDict_SetItem(obj, PyString_FromString(io->sample_type),
+		PyDict_SetItem(obj, PyUnicode_FromString(io->sample_type),
 			       PyLong_FromLong(io->sample_width));
 	}
 
@@ -2326,7 +2363,7 @@ static void splat_init_page_size(PyObject *m)
 	PyModule_AddObject(m, "_zero_page_frag", (PyObject *)zero_frag);
 }
 
-PyMODINIT_FUNC init_splat(void)
+PyMODINIT_FUNC PyInit__splat(void)
 {
 	struct splat_type {
 		PyTypeObject *type;
@@ -2346,10 +2383,13 @@ PyMODINIT_FUNC init_splat(void)
 			it->type->tp_new = PyType_GenericNew;
 
 		if (PyType_Ready(it->type))
-			return;
+			return NULL;
 	}
 
-	m = Py_InitModule("_splat", splat_methods);
+	m = PyModule_Create(&splat_module);
+
+	if (m == NULL)
+		return NULL;
 
 	for (it = splat_types; it->type != NULL; ++it) {
 		Py_INCREF((PyObject *)it->type);
@@ -2376,4 +2416,6 @@ PyMODINIT_FUNC init_splat(void)
 #if defined(SPLAT_NEON)
 	splat_fast_sine_mask = vdupq_n_u32(splat_sine_table_mask);
 #endif
+
+	return m;
 }
