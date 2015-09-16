@@ -25,10 +25,7 @@ try:
     # For extra standard audio formats
     import audiotools
     has_audiotools = True
-    try:
-        from cStringIO import StringIO
-    except ImportError:
-        from StringIO import StringIO
+    from io import StringIO
 except ImportError:
     has_audiotools = False
 try:

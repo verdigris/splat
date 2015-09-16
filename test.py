@@ -19,10 +19,7 @@ import sys
 import hashlib
 import math
 import unittest
-try:
-    from cStringIO import StringIO
-except ImportError:
-    from StringIO import StringIO
+import io
 import splat
 import splat.data
 import splat.gen
@@ -253,9 +250,9 @@ class FragmentTest(SplatTest):
         for i in range(length):
             frag[i] = (float(i) * 0.9 / length,)
         for fmt in ['wav', 'saf']:
-            f = StringIO()
+            f = io.BytesIO()
             frag.save(f, fmt)
-            f.reset()
+            f.seek(0)
             frag2 = splat.data.Fragment.open(f, fmt)
             if fmt == 'saf':
                 self.assertEqual(frag.md5(), frag2.md5())
