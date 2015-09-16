@@ -177,7 +177,7 @@ def save_saf(saf_file, frag, start, end):
     f = open(saf_file, 'w') if is_str else saf_file
 
     def write_saf_header(f, attrs):
-        h = ' '.join('='.join(str(x) for x in kv) for kv in attrs.iteritems())
+        h = ' '.join('='.join(str(x) for x in kv) for kv in attrs.items())
         f.write(SAF_MAGIC + '\n')
         f.write(h + '\n')
 
@@ -255,7 +255,7 @@ if has_audiotools is True:
         'flac': audiotools.FlacAudio,
         'mp3': audiotools.MP3Audio,
         }
-    for fmt, cls in fmt_cls.iteritems():
+    for fmt, cls in fmt_cls.items():
         audio_file_savers[fmt] = lambda *a, **k: save_audiotools(cls, *a, **k)
 
 # -----------------------------------------------------------------------------

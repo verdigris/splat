@@ -51,7 +51,7 @@ class SplatTest(unittest.TestCase):
     def assert_samples(self, frag, samples, places=None):
         if places is None:
             places = self._places
-        for n, s in samples.iteritems():
+        for n, s in samples.items():
             for c, d in zip(frag[n], s):
                 self.assertAlmostEqual(
                     c, d, places,
@@ -74,7 +74,7 @@ class FragmentTest(SplatTest):
         """Fragment.md5"""
         frag = splat.data.Fragment()
         splat.gen.SineGenerator(frag=frag).run(0.0, 0.345, 123.0)
-        for sample_type in splat.sample_types.iterkeys():
+        for sample_type in splat.sample_types.keys():
             md5sum = hashlib.md5(frag.export_bytes(sample_type)).hexdigest()
             self.assertEqual(md5sum, frag.md5(sample_type))
 
@@ -181,7 +181,7 @@ class FragmentTest(SplatTest):
         """Fragment.import_bytes"""
         frag = splat.data.Fragment()
         splat.gen.SineGenerator(frag).run(0.1, 2.7, 3456.7)
-        for sample_type, sample_width in splat.sample_types.iteritems():
+        for sample_type, sample_width in splat.sample_types.items():
             ref_bytes = frag.export_bytes(sample_type)
             ref_md5 = hashlib.md5(ref_bytes).hexdigest()
             imp = splat.data.Fragment()
