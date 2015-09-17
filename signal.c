@@ -210,7 +210,6 @@ int splat_signal_init(struct splat_signal *s, size_t length,
 
 void splat_signal_free(struct splat_signal *s)
 {
-	Py_DECREF(s->py_float);
 	Py_DECREF(s->py_args);
 	PyMem_Free(s->vectors);
 }
