@@ -263,7 +263,7 @@ class Particle(object):
         self.f_log = f_log
 
     def __repr__(self):
-        return u"[{0}, {1}] {2}".format(self.start, self.end, self.freq)
+        return "[{0}, {1}] {2}".format(self.start, self.end, self.freq)
 
     @property
     def start(self):
