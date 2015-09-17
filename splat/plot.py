@@ -15,7 +15,7 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from Tkinter import *
+from tkinter import *
 
 def spline(spline, n=100, w=400, h=400):
     if (n < 2) or (w < 2) or (h < 2):
