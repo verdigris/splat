@@ -556,7 +556,7 @@ static int Fragment_init(Fragment *self, PyObject *args, PyObject *kw)
 	}
 
 	if (!rate) {
-		PyErr_SetString(PyExc_ValueError, "rate cannot be 0Hz");
+		PyErr_SetString(PyExc_ValueError, "rate cannot be 0 Hz");
 		return -1;
 	}
 
@@ -1365,6 +1365,67 @@ static PyObject *Fragment_resize(Fragment *self, PyObject *args, PyObject *kw)
 	Py_RETURN_NONE;
 }
 
+PyDoc_STRVAR(Fragment_resample_doc,
+"resample(rate=None, ratio=1.0)\n"
+"\n"
+"Resample the fragment with a new sample ``rate`` and stretch the "
+"fragment duration by the given ``ratio``.  When no ``rate`` is "
+"provided, the current sample rate is preserved.  By default, "
+"``ratio`` equals to 1.0 so the fragment duration remains unchanged "
+"when only resampling with a different rate.\n"
+"\n"
+"It is also worth noting that no filter is being applied by "
+"this function, so down-sampling to a lower rate or using a ``ratio`` "
+"smaller than 1.0 may cause spectrum overlap if the input signal contains "
+"frequencies higher than half of the new rate (Nyquist theorem).\n");
+
+static PyObject *Fragment_resample(Fragment *self, PyObject *args, PyObject *kw)
+{
+	struct splat_fragment *frag = &self->frag;
+
+	static char *kwlist[] = { "rate", "ratio", NULL };
+	unsigned rate = frag->rate;
+	double ratio = 1.0;
+
+	struct splat_fragment old_frag;
+	unsigned c;
+	int res;
+
+	if (!PyArg_ParseTupleAndKeywords(args, kw, "|Id", kwlist,
+					 &rate, &ratio))
+		return NULL;
+
+	if (!rate) {
+		PyErr_SetString(PyExc_ValueError, "rate cannot be 0 Hz");
+		return NULL;
+	}
+
+	if (frag->length < 3) {
+		PyErr_SetString(PyExc_ValueError, "fragment is too short");
+		return NULL;
+	}
+
+	if (splat_frag_init(&old_frag, frag->n_channels, frag->rate,
+			    frag->length, NULL))
+		return NULL;
+
+	for (c = 0; c < frag->n_channels; ++c) {
+		sample_t *mv;
+
+		mv = old_frag.data[c];
+		old_frag.data[c] = frag->data[c];
+		frag->data[c] = mv;
+	}
+
+	res = splat_frag_resample(frag, &old_frag, rate, ratio);
+	splat_frag_free(&old_frag);
+
+	if (res)
+		return NULL;
+
+	Py_RETURN_NONE;
+}
+
 static PyMethodDef Fragment_methods[] = {
 	{ "import_bytes", (PyCFunction)Fragment_import_bytes, METH_KEYWORDS,
 	  Fragment_import_bytes_doc },
@@ -1386,6 +1447,8 @@ static PyMethodDef Fragment_methods[] = {
 	  Fragment_offset_doc },
 	{ "resize", (PyCFunction)Fragment_resize, METH_KEYWORDS,
 	  Fragment_resize_doc },
+	{ "resample", (PyCFunction)Fragment_resample, METH_KEYWORDS,
+	  Fragment_resample_doc },
 	{ NULL }
 };
 

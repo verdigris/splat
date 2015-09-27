@@ -530,3 +530,114 @@ int splat_frag_offset(struct splat_fragment *frag, PyObject *offset_obj,
 
 	return 0;
 }
+
+/*
+  This resampling method uses quadratic interpolation.  The k coefficients are:
+
+  y = k0 + k1 * x + k2 * x * x
+
+  (1.1) y0 = k0 + k1 * x0 + k2 * x0 * x0
+  (1.2) y1 = k0 + k1 * x1 + k2 * x1 * x1
+  (1.3) y2 = k0 + k1 * x2 + k2 * x2 * x2
+
+  x0 = x1 - 1
+  x2 = x1 + 1
+
+  (2.1) y0 = k0 + k1 * (x1 - 1) + k2 * (x1 * x1 - 2 * x1 + 1)
+  (2.2) y1 = k0 + k1 *  x1      + k2 *  x1 * x1
+  (2.3) y2 = k0 + k1 * (x1 + 1) + k2 * (x1 * x1 + 2 * x1 + 1)
+
+  (4.2): (2.2)
+    k0 = y1 - k1 * x1 - k2 * x1 * x1
+
+  (4.1): (2.1), (4.2)
+    y0 = y1 - k1 * x1 - k2 * x1 * x1 +
+         k1 * (x1 - 1) + k2 * (x1 * x1 - 2 * x1 + 1)
+       = y1 + k1 * (-x1 + x1 - 1) + k2 * (-x1 * x1 + x1 * x1 - 2 * x1 + 1)
+       = y1 + k1 * (-1) + k2 * (-2 * x1 + 1)
+       = y1 - k1 + k2 * (1 - 2 * x1)
+   -y0 = -y1 + k1 - k2 * (1 - 2 * x1)
+    k1 = y1 - y0 + k2 * (1 - 2 * x1)
+    --------------------------------
+
+  (5.1): (4.1), (4.2)
+    k0 = y1 - (y1 - y0 + k2 * (1 - 2 * x1)) * x1 - k2 * x1 * x1
+       = y1 - x1 * (y1 - y0) - k2 * (1 - 2 * x1) * x1 - k2 * x1 * x1
+       = y1 - x1 * (y1 - y0) + k2 * (-x1 + 2 * x1 * x1 - x1 * x1)
+    k0 = y1 + x1 * (y0 - y1) + k2 * (x1 * x1 - x1)
+    ----------------------------------------------
+
+  (5.3): (5.1), (4.2), (2.3)
+    y2 = y1 - k1 * x1 - k2 * x1 * x1 +
+         (y1 - y0 + k2 * (1 - 2 * x1)) * (x1 + 1) +
+         k2 * (x1 * x1 + 2 * x1 + 1)
+       = y1 - (y1 - y0 + k2 * (1 - 2 * x1)) * x1 - k2 * x1 * x1 +
+         (y1 - y0 + k2 * (1 - 2 * x1)) * (x1 + 1) +
+         k2 * (x1 * x1 + 2 * x1 + 1)
+       = y1 + x1 * (y0 - y1) + k2 * (x1 * (2 * x1 - 1) - x1 * x1) +
+         (x1 + 1) * (y1 - y0) + k2 * (1 - 2 * x1) * (x1 + 1) +
+         k2 * (x1 * x1 + 2 * x1 + 1)
+       = y1 + x1 * (y0 - y1) + (x1 + 1) * (y1 - y0) +
+         k2 * (x1 * (2 * x1 - 1) - x1 * x1 +
+         (1 - 2 * x1) * (x1 + 1) +
+         (x1 * x1 + 2 * x1 + 1))
+       = y1 * 2 - y0 +
+         k2 * (x1 * x1 - x1 +
+         1 - 2 * x1 + x1 - 2 * x1 * x1 +
+         x1 * x1 + 2 * x1 + 1)
+       = y1 * 2 - y0 +
+         k2 * (2 + x1 * (-1 + 1 + 2 - 2) + (x1 * x1) * (1 - 2 + 1))
+       = y1 * 2 - y0 + k2 * 2
+    k2 = (y2 + y0 - 2 * y1) / 2
+    ---------------------------
+*/
+
+int splat_frag_resample(struct splat_fragment *frag,
+			const struct splat_fragment *old_frag,
+			unsigned rate, double time_ratio)
+{
+	const double ratio = time_ratio * (double)rate / frag->rate;
+	const size_t max_j = old_frag->length - 2;
+	unsigned c;
+
+	if (time_ratio <= 0.0) {
+		PyErr_SetString(PyExc_ValueError,
+				"resample time ratio must be positive");
+		return -1;
+	}
+
+	if (splat_frag_resize(frag, frag->length * ratio))
+		return -1;
+
+	frag->rate = rate;
+
+	if (!frag->length || !ratio)
+		return 0;
+
+	for (c = 0; c < frag->n_channels; ++c) {
+		sample_t *to = frag->data[c];
+		size_t i;
+
+		*to++ = old_frag->data[c][0];
+
+		for (i = 1; i < frag->length; ++i) {
+			const double x = i / ratio;
+			size_t j = x + 0.5;
+			double x1;
+			double y0, y1, y2;
+			double k0, k1, k2;
+
+			j = minmax(j, 1, max_j);
+			x1 = j;
+			y0 = old_frag->data[c][j - 1];
+			y1 = old_frag->data[c][j++];
+			y2 = old_frag->data[c][j];
+			k2 = (y2 + y0 - 2 * y1) / 2;
+			k1 = y1 - y0 + k2 * (1 - 2 * x1);
+			k0 = y1 + x1 * (y0 - y1) + k2 * (x1 * x1 - x1);
+			*to++ = k0 + x * k1 + x * x * k2;
+		}
+	}
+
+	return 0;
+}
