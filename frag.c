@@ -125,6 +125,9 @@ int splat_frag_resize(struct splat_fragment *frag, size_t length)
 	ssize_t extra;
 	unsigned c;
 
+	if (length == frag->length)
+		return 0;
+
 	start = frag->length * sizeof(sample_t);
 #if SPLAT_FAST
 	length = splat_round4(length);
