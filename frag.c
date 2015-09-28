@@ -592,12 +592,26 @@ int splat_frag_offset(struct splat_fragment *frag, PyObject *offset_obj,
     ---------------------------
 */
 
-int splat_frag_resample(struct splat_fragment *frag,
-			const struct splat_fragment *old_frag,
-			unsigned rate, double time_ratio)
+static sample_t splat_resample_quad(double x1, const sample_t *y, double x)
+{
+	const double y0 = y[0];
+	const double y1 = y[1];
+	const double y2 = y[2];
+	double k0, k1, k2;
+
+	k2 = (y2 + y0 - 2.0 * y1) / 2.0;
+	k1 = y1 - y0 + k2 * (1.0 - 2.0 * x1);
+	k0 = y1 + x1 * (y0 - y1) + k2 * (x1 * x1 - x1);
+
+	return k0 + x * k1 + x * x * k2;
+}
+
+int splat_frag_resample_float(struct splat_fragment *frag,
+			      const struct splat_fragment *old_frag,
+			      unsigned rate, double time_ratio)
 {
 	const double ratio = time_ratio * (double)rate / frag->rate;
-	const size_t max_j = old_frag->length - 2;
+	const size_t max_x0 = old_frag->length - 2;
 	unsigned c;
 
 	if (time_ratio <= 0.0) {
@@ -622,22 +636,96 @@ int splat_frag_resample(struct splat_fragment *frag,
 
 		for (i = 1; i < frag->length; ++i) {
 			const double x = i / ratio;
-			size_t j = x + 0.5;
-			double x1;
-			double y0, y1, y2;
-			double k0, k1, k2;
+			const size_t x0 = minmax(x + 0.5, 1, max_x0);
+			const sample_t *y = &old_frag->data[c][x0 - 1];
 
-			j = minmax(j, 1, max_j);
-			x1 = j;
-			y0 = old_frag->data[c][j - 1];
-			y1 = old_frag->data[c][j++];
-			y2 = old_frag->data[c][j];
-			k2 = (y2 + y0 - 2 * y1) / 2;
-			k1 = y1 - y0 + k2 * (1 - 2 * x1);
-			k0 = y1 + x1 * (y0 - y1) + k2 * (x1 * x1 - x1);
-			*to++ = k0 + x * k1 + x * x * k2;
+			*to++ = splat_resample_quad(x0, y, x);
 		}
 	}
 
 	return 0;
+}
+
+static int splat_frag_resample_signals(struct splat_fragment *frag,
+                                       const struct splat_fragment *old_frag,
+                                       unsigned rate, PyObject *ratio)
+{
+	const double rate_ratio = (double)rate / frag->rate;
+	const size_t max_x0 = old_frag->length - 2;
+	struct splat_signal sig;
+	size_t i;
+	double x;
+	size_t new_length;
+	unsigned c;
+	int stop;
+
+	if (splat_signal_init(&sig, frag->length, 0.0, &ratio, 1, rate))
+		return -1;
+
+	frag->rate = rate;
+	new_length = sig.length;
+	stop = 0;
+
+	for (c = 0; c < frag->n_channels; ++c)
+		frag->data[c][0] = old_frag->data[c][0];
+
+	i = 1;
+	x = 0.0;
+
+	while (!stop && (splat_signal_next(&sig) == SPLAT_SIGNAL_CONTINUE)) {
+		size_t j;
+
+		for (j = 0; j < sig.len; ++j, ++i) {
+			const double r = sig.vectors[0].data[j] * rate_ratio;
+			size_t x0;
+
+			if (r <= 0.0) {
+				PyErr_SetString(PyExc_ValueError,
+				       "resample time ratio must be positive");
+				goto error_free_sig;
+			}
+
+			x += 1.0 / r;
+
+			if (i >= frag->length)
+				if (splat_frag_resize(frag, frag->length * 1.5))
+					goto error_free_sig;
+
+			x0 = minmax(x, 1, max_x0);
+
+			for (c = 0; c < frag->n_channels; ++c) {
+				const sample_t *y = &old_frag->data[c][x0 - 1];
+
+				frag->data[c][i] =
+					splat_resample_quad(x0, y, x);
+			}
+
+			if (x0 == max_x0) {
+				stop = 1;
+				new_length = i;
+				break;
+			}
+		}
+	}
+
+	splat_frag_resize(frag, new_length);
+	splat_signal_free(&sig);
+
+	return (sig.stat == SPLAT_SIGNAL_ERROR) ? -1 : 0;
+
+error_free_sig:
+	splat_signal_free(&sig);
+
+	return -1;
+}
+
+int splat_frag_resample(struct splat_fragment *frag,
+                        const struct splat_fragment *old_frag,
+                        unsigned rate, PyObject *ratio)
+{
+	if (PyFloat_Check(ratio))
+		return splat_frag_resample_float(frag, old_frag, rate,
+						 PyFloat_AsDouble(ratio));
+	else
+		return splat_frag_resample_signals(frag, old_frag, rate,ratio);
 }

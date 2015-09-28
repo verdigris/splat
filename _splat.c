@@ -1372,7 +1372,9 @@ PyDoc_STRVAR(Fragment_resample_doc,
 "fragment duration by the given ``ratio``.  When no ``rate`` is "
 "provided, the current sample rate is preserved.  By default, "
 "``ratio`` equals to 1.0 so the fragment duration remains unchanged "
-"when only resampling with a different rate.\n"
+"when only resampling with a different rate.  While ``rate`` needs to "
+"be an integer as a fragment's sample rate is fixed, ``ratio`` can be "
+"a signal to create modulations and effects.\n"
 "\n"
 "It is also worth noting that no filter is being applied by "
 "this function, so down-sampling to a lower rate or using a ``ratio`` "
@@ -1385,13 +1387,13 @@ static PyObject *Fragment_resample(Fragment *self, PyObject *args, PyObject *kw)
 
 	static char *kwlist[] = { "rate", "ratio", NULL };
 	unsigned rate = frag->rate;
-	double ratio = 1.0;
+	PyObject *ratio = splat_one;
 
 	struct splat_fragment old_frag;
 	unsigned c;
 	int res;
 
-	if (!PyArg_ParseTupleAndKeywords(args, kw, "|Id", kwlist,
+	if (!PyArg_ParseTupleAndKeywords(args, kw, "|IO", kwlist,
 					 &rate, &ratio))
 		return NULL;
 

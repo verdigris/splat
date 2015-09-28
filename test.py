@@ -271,21 +271,29 @@ class FragmentTest(SplatTest):
         def run_resample_test(source, duration, ratio, freq, rate, thr):
             frag1 = splat.data.Fragment(duration=duration, channels=1)
             source(frag1, 1.0, freq)
-            frag2 = frag1.dup()
-            frag2.resample(ratio=ratio, rate=rate)
-            new_length = int(len(frag1) * ratio * rate / frag1.rate)
-            self.assertEqual(len(frag2), new_length,
-                             "Incorrect resampled fragment length")
-            new_duration = float(new_length) / frag2.rate
-            self.assertAlmostEqual(frag2.duration, new_duration, self._places,
-                                   "Incorrect resampled fragment duration")
-            ref = splat.data.Fragment(length=len(frag2), channels=1,
-                                      rate=rate)
-            source(ref, 1.0, (freq / ratio))
-            delta = compare.frag_delta(ref, frag2)
-            err = splat.lin2dB(delta.get_peak()[0]['peak'])
-            self.assertLess(err, thr,
-                            "Interpolation error: {:.1f} dB".format(err))
+            for ratio_value in (ratio, lambda x: ratio):
+                frag2 = frag1.dup()
+                frag2.resample(ratio=ratio_value, rate=rate)
+                new_length = int(len(frag1) * ratio * rate / frag1.rate)
+                if isinstance(ratio_value, float):
+                    self.assertEqual(len(frag2), new_length,
+                                     "Incorrect resampled fragment length")
+                    new_duration = float(new_length) / frag2.rate
+                    self.assertAlmostEqual(frag2.duration, new_duration,
+                                           self._places,
+                                       "Incorrect resampled fragment duration")
+                else:
+                    new_length = min(len(frag1), new_length)
+                    delta = abs(len(frag2) - new_length)
+                    self.assertLessEqual(delta, 1,
+                                  "Incorrect signal resampled fragment length")
+                ref = splat.data.Fragment(length=len(frag2), channels=1,
+                                          rate=rate)
+                source(ref, 1.0, (freq / ratio))
+                delta = compare.frag_delta(ref, frag2)
+                err = splat.lin2dB(delta.get_peak()[0]['peak'])
+                self.assertLess(err, thr,
+                                "Interpolation error: {:.1f} dB".format(err))
 
         for src, thr in [(splat.sources.sine, -60.0),
                          (splat.sources.triangle, -27.0)]:
