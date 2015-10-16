@@ -18,6 +18,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import sys
+import os
 
 def print_help():
     print("splat CMD")
@@ -33,7 +34,12 @@ def cmd_help(argv):
 
 def cmd_compare(argv):
     import splat.tools.compare
-    splat.tools.compare.main(argv)
+    return splat.tools.compare.main(argv)
+
+def cmd_make(argv):
+    import splat.tools.make
+    sys.path.append(os.getcwd())
+    return splat.tools.make.main(argv)
 
 def find_commands():
     commands = {}
@@ -56,8 +62,7 @@ def main(argv):
         print_help()
         return False
     else:
-        cmd_func(argv[1:])
-        return True
+        return cmd_func(argv[1:])
 
 if __name__ == '__main__':
     res = main(sys.argv)
