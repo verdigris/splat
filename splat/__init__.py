@@ -19,6 +19,8 @@ import _splat
 from _splat import lin2dB, dB2lin
 from _splat import sample_types, SAMPLE_TYPE, SAMPLE_WIDTH
 
+dB = dB2lin
+
 __all__ = ['gen', 'data', 'filters', 'sources', 'scales', 'interpol', 'seq']
 
 VERSION = (1, 5)
