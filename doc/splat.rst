@@ -322,6 +322,9 @@ Conversion functions
 .. autofunction:: splat.lin2dB
 .. autofunction:: splat.dB2lin
 
+There is also a shorthand :py:meth:`splat.dB` alias for
+:py:meth:`splat.dB2lin`.
+
 
 Signal objects
 --------------
