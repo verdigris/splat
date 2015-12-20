@@ -28,6 +28,16 @@ def build_dep_tree(mod, name, dep_tree, clean_list):
     # Generic files this module directly depends on
     deps = getattr(mod, 'SPLAT_DEPS', list())
 
+    # Any Python modules this module depends on
+    mods = getattr(mod, 'SPLAT_MODS', None)
+    if mods is not None:
+        for m in mods:
+            target = '.'.join([m, 'py'])
+            deps.append(target)
+            if target not in dep_tree:
+                m_mod = __import__(m)
+                build_dep_tree(m_mod, target, dep_tree, clean_list)
+
     # Splat fragment modules this module depends on
     frags = getattr(mod, 'SPLAT_FRAGS', None)
     if frags is not None:
