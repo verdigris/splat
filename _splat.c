@@ -75,6 +75,9 @@ static PyObject *splat_sample_types;
 /* A Python float with the value of 0.0 */
 static PyObject *splat_zero;
 
+/* A Python float with the value of 1.0 */
+static PyObject *splat_one;
+
 #ifdef SPLAT_FAST
 sf_float_t splat_sine_step;
 const sf_float_t splat_fast_inc = { 0.0, 1.0, 2.0, 3.0 };
@@ -2088,6 +2091,8 @@ PyMODINIT_FUNC init_splat(void)
 	PyModule_AddObject(m, "_init_source_ratio", splat_init_source_ratio);
 	splat_zero = PyFloat_FromDouble(0.0);
 	PyModule_AddObject(m, "_zero", splat_zero);
+	splat_one = PyFloat_FromDouble(1.0);
+	PyModule_AddObject(m, "_one", splat_one);
 	splat_init_sample_types(m, "sample_types", splat_sample_types);
 
 	PyModule_AddStringConstant(m, "SAMPLE_TYPE", SPLAT_NATIVE_SAMPLE_TYPE);
