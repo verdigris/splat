@@ -272,7 +272,7 @@ class InterpolTest(SplatTest):
         """interpol.Polynomial"""
         k0, k1, k2, k3 = coefs = (2.345, 3.6, 6.5, 100)
         p = splat.interpol.Polynomial(coefs)
-        self.assertEqual(coefs, p.coefs,"Polynomial coefs mismatch")
+        self.assertEqual(coefs, p.coefs, "Polynomial coefs mismatch")
         d = p.derivative()
         dcoefs = (k1, (k2 * 2), (k3 * 3))
         self.assertEqual(
@@ -374,7 +374,7 @@ class SignalTest(SplatTest):
                 x, y, self._places,
                 "Incorrect function signal value[{}]: {} {}".format(i, x, y))
         frag2 = splat.data.Fragment(duration=duration, channels=1)
-        splat.sources.sine(frag2, 0.0, 456.789)
+        splat.sources.sine(frag2, 1.0, 456.789)
         for i, (x, y) in enumerate(zip(frag2, splat.Signal(frag, frag2))):
             self.assertEqual(
                 x, y, "Incorrect fragment signal value[{}]: {} {}".format(
