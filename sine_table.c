@@ -1,4 +1,4 @@
-/* Automatically generate file - read the manual */
+/* Automatically generated file - read the manual */
 
 #include "_splat.h"
 

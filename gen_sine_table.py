@@ -36,7 +36,7 @@ def main(argv):
     args = parser.parse_args(argv[1:])
 
     spline = make_spline(args.n, args.m)
-    print("/* Automatically generate file - read the manual */")
+    print("/* Automatically generated file - read the manual */")
     print()
     print("#include \"_splat.h\"")
     print()
