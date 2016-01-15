@@ -76,3 +76,62 @@ def qwirky(tempo, rate, wobble=5, brush=5, bells=5):
     g.filters = gen_filters
 
     return g
+
+def groovy(tempo, rate, fade=0.03, body=5, buzz=5, rattle=5):
+    """``splat.genlib.groovy`` is good for punchy bass lines
+
+    fade
+      time used in the ``linear_fade`` filter, to round the corners
+
+    body
+      overall thickness
+
+    buzz
+      presence in the higher frequencies
+
+    rattle
+      texture in the medium frequencies
+    """
+    T = 60.0 / tempo
+    duration = T*6.0
+    envelope_spline = interpol.spline([
+            (0.0, dB(0.0)), (T/4, dB(2.5), 0.0),
+            (T/2, dB(-2.0), 0.0), (duration, dB(-100.0))])
+    envelope_frag = data.Fragment(rate=rate, channels=1, duration=duration)
+    envelope_frag.offset(1.0)
+    envelope_frag.amp(envelope_spline.signal)
+    gen_filters = [(filters.linear_fade, (fade,)),
+                   (lambda frag, e: frag.amp(e), (envelope_frag,))]
+
+    gen_tri = gen.TriangleGenerator()
+    gen_tri.filters = gen_filters
+    tri_dB = (-4.0 + (buzz - 5) * 4) if buzz > 0 else None
+
+    gen_ot = gen.OvertonesGenerator()
+    gen_ot.overtones = list()
+    if body > 0:
+        gen_ot.ot_decexp(1.3 + (float(body) - 5) / 6, 24)
+    if rattle > 0:
+        dB0 = -18.0 + (rattle - 5) * 0.5
+        dBx = 1.15 - (rattle - 5) * 0.2
+        gen_ot.overtones += \
+            ((n * 1.01, 0.0, dB(dB0 - (n * dBx))) for n in range(18, 48))
+    gen_ot.filters = gen_filters
+
+    class GroovyGen(gen.Generator):
+
+        def __init__(self, gen_tri, gen_ot, tri_dB, *args, **kw):
+            super(GroovyGen, self).__init__(*args, **kw)
+            self._gen_tri = gen_tri
+            self._gen_ot = gen_ot
+            self._tri_dB = tri_dB
+
+        def run(self, start, end, freq, levels):
+            self._gen_ot.frag = self.frag
+            self._gen_ot.run(start, end, freq, levels=levels)
+            self._gen_tri.frag = self.frag
+            if self._tri_dB is not None:
+                lvl = dB(levels + self._tri_dB)
+                self._gen_tri.run(start, end, freq*2, levels=lvl)
+
+    return GroovyGen(gen_tri, gen_ot, tri_dB)
