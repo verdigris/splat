@@ -136,6 +136,29 @@ def run_tests(freq=123.45, duration=30.0, phase=23.456, pts=None,
               normalize=False)
     cases.append('overtones-signal')
 
+    frag = splat.data.Fragment()
+    gen = splat.gen.SineGenerator(frag=frag)
+    gen.run(0.0, 5.678, 1234.56, levels=dB(-3))
+    ratio = 1.987
+    new_len = int(len(frag) * ratio)
+    rem = new_len % 4
+    if rem:
+        new_len -= rem
+    else:
+        new_len -= 4
+    frag.resample(ratio=ratio)
+    frag.resize(length=new_len)
+    frag.save('resample-float-{}.wav'.format(splat.SAMPLE_WIDTH))
+    cases.append('resample-float')
+
+    frag = splat.data.Fragment()
+    gen = splat.gen.SineGenerator(frag=frag)
+    gen.run(0.0, 5.678, 1234.56, levels=dB(-3))
+    ratio = 1.987
+    frag.resample(ratio=lambda x: ratio)
+    frag.save('resample-signal-{}.wav'.format(splat.SAMPLE_WIDTH))
+    cases.append('resample-signal')
+
     return cases
 
 def compare_all(cases, thr_dB=-40.0):
