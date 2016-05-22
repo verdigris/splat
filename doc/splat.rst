@@ -1,3 +1,28 @@
+.. _utilities:
+
+Common utilities
+================
+
+This section describes common utility functions and classes that are
+mentioned and used in examples throughout this manual.
+
+Conversion functions
+--------------------
+
+.. autofunction:: splat.lin2dB
+.. autofunction:: splat.dB2lin
+
+There is also a shorthand :py:meth:`splat.dB` alias for
+:py:meth:`splat.dB2lin`.
+
+
+Signal objects
+--------------
+
+.. autoclass:: splat.Signal
+   :members:
+
+
 .. _fragments:
 
 Fragment objects
@@ -308,26 +333,3 @@ Example using a spline to create a continuous frequency modulation::
     gen = splat.gen.SineGenerator()
     gen.run(fmod.start, fmod.end, fmod.f0, fmod.signal)
     gen.frag.save("freqmod.wav")
-
-
-.. _utilities:
-
-Utilities
-=========
-
-
-Conversion functions
---------------------
-
-.. autofunction:: splat.lin2dB
-.. autofunction:: splat.dB2lin
-
-There is also a shorthand :py:meth:`splat.dB` alias for
-:py:meth:`splat.dB2lin`.
-
-
-Signal objects
---------------
-
-.. autoclass:: splat.Signal
-   :members:
