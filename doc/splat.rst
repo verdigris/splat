@@ -130,6 +130,48 @@ Particle generators
    :members:
 
 
+.. _genlib:
+
+Library of generators
+---------------------
+
+In addition to the main Generator suite of classes, a library of more advanced
+generators is also available in ``splat.genlib``.  They make use of an
+arbitrary number of internal components (sound sources, filters, splines,
+standard sound generators, particule generators...) but only expose a simple
+interface with a few parameters each on a scale of 10.  The library of
+generators is composed of functions which take these parameters and return a
+standard :py:class:`splat.gen.Generator` object.  They all follow the same rule
+for their arguments::
+
+  splat.genlib.func(tempo, rate, **parameters)
+
+``tempo``
+  is simply the tempo of the piece, in beats per minute, which can be
+  completely arbitrary and potentially dynamic with a signal if the function
+  supports it.  It is useful when the generator has some time-based effects
+  that need to vary proportionally with the tempo, such as delays, arpeggio
+  etc...
+
+``rate``
+  is the sample rate to use in fragments with the generator, an integer number
+  of samples per second.  Generators may need to create internal modulation
+  fragments which need to have the same sample rate as the generator's main
+  sound fragment.
+
+``**parameters``
+  is to be defined by each function.  Typically this will be a list of keyword
+  arguments with default values set to 5 as the parameters are on a numerical
+  scale of 10.
+
+This is the only convention, new generators can be created in separate modules
+outside of Splat and shared between different compositions.  The following
+built-in generators are available in the standard Splat library:
+
+.. autofunction:: splat.genlib.qwirky
+.. autofunction:: splat.genlib.groovy
+
+
 .. _scales:
 
 Scales
