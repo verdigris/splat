@@ -1,4 +1,4 @@
-# Splat - splat/generator.py
+# Splat - splat/gen.py
 #
 # Copyright (C) 2012, 2013, 2014, 2015 Guillaume Tucker <guillaume@mangoz.org>
 #
