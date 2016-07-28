@@ -18,9 +18,9 @@ then run::
 
     python setup.py install
 
-Then to generate the included piece called "Dew Drop" with an optional reverb::
+Then to generate the included piece called "Dew Drop"::
 
-    python dew_drop.py reverb
+    python dew_drop.py
 
 This creates ``dew_drop.wav`` which you can now play with your favourite
 player.
