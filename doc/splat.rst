@@ -333,3 +333,24 @@ Example using a spline to create a continuous frequency modulation::
     gen = splat.gen.SineGenerator()
     gen.run(fmod.start, fmod.end, fmod.f0, fmod.signal)
     gen.frag.save("freqmod.wav")
+
+
+.. _commands:
+
+Tools and commands
+==================
+
+In addition to the Splat python modules to be used in your own
+scripts, some command line utilities and tools are also available.
+They are automatically installed and can be called with ``splat``.
+Each command is described below.
+
+``splat compare``
+-----------------
+
+.. automodule:: splat.tools.compare
+
+``splat make``
+--------------
+
+.. automodule:: splat.tools.make
