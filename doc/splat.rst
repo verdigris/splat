@@ -43,6 +43,7 @@ Fragment objects
    .. automethod:: splat.data.Fragment.dB2lin
    .. automethod:: splat.data.Fragment.offset
    .. automethod:: splat.data.Fragment.resize
+   .. automethod:: splat.data.Fragment.resample
    .. autoattribute:: splat.data.Fragment.rate
    .. autoattribute:: splat.data.Fragment.duration
    .. autoattribute:: splat.data.Fragment.channels
