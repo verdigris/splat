@@ -1,7 +1,7 @@
 /*
     Splat - _splat.c
 
-    Copyright (C) 2012, 2013, 2014, 2015, 2016
+    Copyright (C) 2012, 2013, 2014, 2015, 2016, 2017
     Guillaume Tucker <guillaume@mangoz.org>
 
     This program is free software; you can redistribute it and/or modify it

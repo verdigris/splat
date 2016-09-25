@@ -1,7 +1,7 @@
 /*
-    Splat - _splat.h.c
+    Splat - _splat.h
 
-    Copyright (C) 2015, 2016
+    Copyright (C) 2015, 2016, 2017
     Guillaume Tucker <guillaume@mangoz.org>
 
     This program is free software; you can redistribute it and/or modify it
@@ -132,6 +132,22 @@ extern const __m128 splat_sse_pi;
 extern const __m128 splat_sse_pi2;
 extern const __m128 splat_sse_inc;
 #endif
+
+/* ----------------------------------------------------------------------------
+ * mmap
+ */
+
+struct splat_mmap {
+	char *path;
+	int fd;
+	void *ptr;
+	size_t size;
+	int persist;
+};
+
+extern int splat_mmap_init(struct splat_mmap *m, const char *path);
+extern void splat_mmap_free(struct splat_mmap *m);
+extern int splat_mmap_remap(struct splat_mmap *m, size_t length);
 
 /* ----------------------------------------------------------------------------
  * Fragment
