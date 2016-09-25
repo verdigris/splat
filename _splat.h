@@ -1,7 +1,7 @@
 /*
     Splat - _splat.h.c
 
-    Copyright (C) 2015
+    Copyright (C) 2015, 2016
     Guillaume Tucker <guillaume@mangoz.org>
 
     This program is free software; you can redistribute it and/or modify it
@@ -91,6 +91,10 @@ typedef double sample_t;
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(_array) (sizeof(_array) / sizeof(_array[0]))
 #endif
+
+/* Page utilities */
+extern size_t splat_page_size;
+extern const void *splat_zero_page;
 
 /* Convert any number type to a double or return -1 */
 extern int splat_obj2double(PyObject *obj, double *out);

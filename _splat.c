@@ -1,7 +1,7 @@
 /*
     Splat - _splat.c
 
-    Copyright (C) 2012, 2013, 2014, 2015
+    Copyright (C) 2012, 2013, 2014, 2015, 2016
     Guillaume Tucker <guillaume@mangoz.org>
 
     This program is free software; you can redistribute it and/or modify it
@@ -77,6 +77,10 @@ static PyObject *splat_zero;
 
 /* A Python float with the value of 1.0 */
 static PyObject *splat_one;
+
+/* Page utilities */
+size_t splat_page_size;
+const void *splat_zero_page;
 
 #ifdef SPLAT_FAST
 sf_float_t splat_sine_step;
@@ -2122,6 +2126,26 @@ static void splat_init_sample_types(PyObject *m, const char *name,
 	PyModule_AddObject(m, name, obj);
 }
 
+static void splat_init_page_size(PyObject *m)
+{
+	Fragment *zero_frag;
+
+	zero_frag = (Fragment *)Fragment_new(&splat_FragmentType, NULL, NULL);
+
+	if (zero_frag == NULL) {
+		PyErr_NoMemory();
+		return;
+	}
+
+	splat_page_size = sysconf(_SC_PAGESIZE);
+	if (splat_frag_init(&zero_frag->frag, 1, 8000,
+			    splat_page_size / sizeof(sample_t), NULL))
+		return;
+
+	splat_zero_page = zero_frag->frag.data[0];
+	PyModule_AddObject(m, "_zero_page_frag", (PyObject *)zero_frag);
+}
+
 PyMODINIT_FUNC init_splat(void)
 {
 	struct splat_type {
@@ -2159,6 +2183,7 @@ PyMODINIT_FUNC init_splat(void)
 	splat_one = PyFloat_FromDouble(1.0);
 	PyModule_AddObject(m, "_one", splat_one);
 	splat_init_sample_types(m, "sample_types", splat_sample_types);
+	splat_init_page_size(m);
 
 	PyModule_AddStringConstant(m, "SAMPLE_TYPE", SPLAT_NATIVE_SAMPLE_TYPE);
 	PyModule_AddIntConstant(m, "SAMPLE_WIDTH", SPLAT_NATIVE_SAMPLE_WIDTH);
