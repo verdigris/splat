@@ -111,6 +111,9 @@ static void _splat_sine_signals(struct splat_fragment *frag,
 			aq[c] = (sf_float_t *)
 				sig->vectors[SIG_SINE_AMP + c].data;
 
+		for (; c < SPLAT_MAX_CHANNELS; ++c)
+			aq[c] = NULL;
+
 		for (j = 0; j < sig->len; i += 4, j += 4) {
 			sf_float_t x;
 			sf_float_t f;
@@ -538,6 +541,9 @@ static void _splat_overtones_mixed(struct splat_fragment *frag,
 			amq[c] = (sf_float_t *)
 				sig->vectors[SIG_OT_AMP + c].data;
 
+		for (; c < SPLAT_MAX_CHANNELS; ++c)
+			amq[c] = NULL;
+
 		for (j = 0; j < sig->len; i += 4, j += 4) {
 			const struct splat_overtone *ot;
 			const sf_float_t f = *fq++;
@@ -555,6 +561,11 @@ static void _splat_overtones_mixed(struct splat_fragment *frag,
 
 			for (c = 0; c < frag->n_channels; ++c) {
 				aq[c] = *amq[c]++;
+				y[c] = sf_zero();
+			}
+
+			for (; c < SPLAT_MAX_CHANNELS; ++c) {
+				aq[c] = sf_zero();
 				y[c] = sf_zero();
 			}
 
@@ -700,6 +711,9 @@ static void _splat_overtones_signal(struct splat_fragment *frag,
 			amq[c] = (sf_float_t *)
 				sig->vectors[SIG_OT_AMP + c].data;
 
+		for (; c < SPLAT_MAX_CHANNELS; ++c)
+			amq[c] = NULL;
+
 		for (j = 0; j < sig->len; i += 4, j += 4) {
 			const struct splat_vector *otv = &sig->vectors[sig_ot];
 			const struct splat_overtone *ot;
@@ -719,6 +733,11 @@ static void _splat_overtones_signal(struct splat_fragment *frag,
 
 			for (c = 0; c < frag->n_channels; ++c) {
 				aq[c] = *amq[c]++;
+				y[c] = sf_zero();
+			}
+
+			for (; c < SPLAT_MAX_CHANNELS; ++c) {
+				aq[c] = sf_zero();
 				y[c] = sf_zero();
 			}
 
