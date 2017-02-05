@@ -1,7 +1,7 @@
 /*
     Splat - source.c
 
-    Copyright (C) 2015
+    Copyright (C) 2015, 2017
     Guillaume Tucker <guillaume@mangoz.org>
 
     This program is free software; you can redistribute it and/or modify it
@@ -45,7 +45,7 @@ void splat_sine_floats(struct splat_fragment *frag, const double *levels,
 
 	for (c = 0; c < frag->n_channels; ++c) {
 		levelsq[c] = sf_set(levels[c]);
-		out[c] = (sf_float_t *)frag->data[c];
+		out[c] = (sf_float_t *)frag->channels[c].data;
 	}
 
 	for (i = 0; i < frag->length; i += 4) {
@@ -76,7 +76,7 @@ void splat_sine_floats(struct splat_fragment *frag, const double *levels,
 		unsigned c;
 
 		for (c = 0; c < frag->n_channels; ++c)
-			frag->data[c][i] = s * levels[c];
+			frag->channels[c].data[i] = s * levels[c];
 	}
 }
 #endif
@@ -97,7 +97,7 @@ static void _splat_sine_signals(struct splat_fragment *frag,
 	size_t i = 0;
 
 	for (c = 0; c < frag->n_channels; ++c)
-		out[c] = (sf_float_t *)frag->data[c];
+		out[c] = (sf_float_t *)frag->channels[c].data;
 
 	while (splat_signal_next(sig) == SPLAT_SIGNAL_CONTINUE) {
 		const sf_float_t *fq = (sf_float_t *)
@@ -155,7 +155,7 @@ static void _splat_sine_signals(struct splat_fragment *frag,
 				const double a =
 					sig->vectors[SIG_SINE_AMP + c].data[j];
 
-				frag->data[c][i] = s * a;
+				frag->channels[c].data[i] = s * a;
 			}
 		}
 	}
@@ -214,7 +214,7 @@ void splat_square_floats(struct splat_fragment *frag, const double *fl_pos,
 			levels = fl_neg;
 
 		for (c = 0; c < frag->n_channels; ++c)
-			frag->data[c][i] = levels[c];
+			frag->channels[c].data[i] = levels[c];
 	}
 }
 
@@ -267,7 +267,7 @@ int splat_square_signals(struct splat_fragment *frag, PyObject **levels,
 				const double a =
 					sig.vectors[SIG_AMP + c].data[j];
 
-				frag->data[c][i] = a * s;
+				frag->channels[c].data[i] = a * s;
 			}
 		}
 	}
@@ -314,7 +314,7 @@ void splat_triangle_floats(struct splat_fragment *frag, const double *lvls,
 		}
 
 		for (c = 0; c < frag->n_channels; ++c)
-			frag->data[c][i] = (a[c] * t_rel) + b[c];
+			frag->channels[c].data[i] = (a[c] * t_rel) + b[c];
 	}
 }
 
@@ -374,7 +374,7 @@ int splat_triangle_signals(struct splat_fragment *frag, PyObject **levels,
 					b = l - (a * ratio);
 				}
 
-				frag->data[c][i] = (a * t_rel) + b;
+				frag->channels[c].data[i] = (a * t_rel) + b;
 			}
 		}
 	}
@@ -411,7 +411,7 @@ static void _splat_overtones_float(struct splat_fragment *frag,
 	size_t i;
 
 	for (c = 0; c < frag->n_channels; ++c)
-		outq[c] = (sf_float_t *)frag->data[c];
+		outq[c] = (sf_float_t *)frag->channels[c].data;
 
 	/* x = 2 * M_PI * freq * ratio * (ph + i/rate) */
 	for (i = 0; i < frag->length; i += 4) {
@@ -469,7 +469,8 @@ static void _splat_overtones_float(struct splat_fragment *frag,
 			unsigned c;
 
 			for (c = 0; c < frag->n_channels; ++c)
-				frag->data[c][i] += s * ot->levels.fl[c];
+				frag->channels[c].data[i] +=
+					s * ot->levels.fl[c];
 		}
 	}
 }
@@ -524,7 +525,7 @@ static void _splat_overtones_mixed(struct splat_fragment *frag,
 	unsigned c;
 
 	for (c = 0; c < frag->n_channels; ++c)
-		out[c] = (sf_float_t *)frag->data[c];
+		out[c] = (sf_float_t *)frag->channels[c].data;
 
 	while (splat_signal_next(sig) == SPLAT_SIGNAL_CONTINUE) {
 		const sf_float_t *fq = (sf_float_t *)
@@ -630,7 +631,7 @@ static void _splat_overtones_mixed(struct splat_fragment *frag,
 
 					x = sig->vectors[SIG_OT_AMP+c].data[j];
 					x *= ot->levels.fl[c];
-					frag->data[c][i] += s * x;
+					frag->channels[c].data[i] += s * x;
 				}
 			}
 		}
@@ -686,7 +687,7 @@ static void _splat_overtones_signal(struct splat_fragment *frag,
 	unsigned c;
 
 	for (c = 0; c < frag->n_channels; ++c)
-		out[c] = (sf_float_t *)frag->data[c];
+		out[c] = (sf_float_t *)frag->channels[c].data;
 
 	while (splat_signal_next(sig) == SPLAT_SIGNAL_CONTINUE) {
 		const sf_float_t *fq = (sf_float_t *)
@@ -805,7 +806,7 @@ static void _splat_overtones_signal(struct splat_fragment *frag,
 
 					g = sig->vectors[SIG_OT_AMP+c].data[j];
 					g *= (otv++)->data[j];
-					frag->data[c][i] += s * g;
+					frag->channels[c].data[i] += s * g;
 				}
 			}
 		}

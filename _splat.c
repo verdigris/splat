@@ -622,7 +622,7 @@ static PyObject *Fragment_sq_item(Fragment *self, Py_ssize_t i)
 		return NULL;
 
 	for (c = 0; c < self->frag.n_channels; ++c) {
-		const sample_t s = self->frag.data[c][i];
+		const sample_t s = self->frag.channels[c].data[i];
 		PyTuple_SET_ITEM(sample, c, PyFloat_FromDouble(s));
 	}
 
@@ -657,7 +657,8 @@ static int Fragment_sq_ass_item(Fragment *self, Py_ssize_t i, PyObject *v)
 			return -1;
 		}
 
-		self->frag.data[c][i] = (sample_t)PyFloat_AS_DOUBLE(s);
+		self->frag.channels[c].data[i] =
+			(sample_t)PyFloat_AS_DOUBLE(s);
 	}
 
 	return 0;
@@ -1013,7 +1014,7 @@ static PyObject *Fragment_import_bytes(Fragment *self, PyObject *args,
 	for (c = 0; c < self->frag.n_channels; ++c) {
 		const char *in =
 			bytes + (start * frame_size) + (c * sample_size);
-		sample_t *out = &self->frag.data[c][offset];
+		sample_t *out = &self->frag.channels[c].data[offset];
 
 		io->import(out, in, length, frame_size);
 	}
@@ -1087,7 +1088,7 @@ static PyObject *Fragment_export_bytes(Fragment *self, PyObject *args,
 	out = PyByteArray_AS_STRING(bytes_obj);
 
 	for (c = 0; c < frag->n_channels; ++c)
-		in[c] = &frag->data[c][start];
+		in[c] = &frag->channels[c].data[start];
 
 	io->export(out, in, frag->n_channels, length);
 
@@ -1418,9 +1419,9 @@ static PyObject *Fragment_resample(Fragment *self, PyObject *args, PyObject *kw)
 	for (c = 0; c < frag->n_channels; ++c) {
 		sample_t *mv;
 
-		mv = old_frag.data[c];
-		old_frag.data[c] = frag->data[c];
-		frag->data[c] = mv;
+		mv = old_frag.channels[c].data;
+		old_frag.channels[c].data = frag->channels[c].data;
+		frag->channels[c].data = mv;
 	}
 
 	res = splat_frag_resample(frag, &old_frag, rate, ratio);
@@ -1565,7 +1566,7 @@ static PyObject *splat_gen_ref(PyObject *self, PyObject *args)
 		return NULL;
 	}
 
-	data = frag->data[0];
+	data = frag->channels[0].data;
 	n = frag->length;
 
 	while (n--)
@@ -2142,7 +2143,7 @@ static void splat_init_page_size(PyObject *m)
 			    splat_page_size / sizeof(sample_t), NULL))
 		return;
 
-	splat_zero_page = zero_frag->frag.data[0];
+	splat_zero_page = zero_frag->frag.channels[0].data;
 	PyModule_AddObject(m, "_zero_page_frag", (PyObject *)zero_frag);
 }
 

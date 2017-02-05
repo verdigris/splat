@@ -153,11 +153,16 @@ extern int splat_mmap_remap(struct splat_mmap *m, size_t length);
  * Fragment
  */
 
-struct splat_fragment {
-	unsigned n_channels;
-	unsigned rate;
+struct splat_channel {
+	sample_t *data;
 	size_t length;
-	sample_t *data[SPLAT_MAX_CHANNELS];
+};
+
+struct splat_fragment {
+	size_t length;
+	unsigned rate;
+	struct splat_channel channels[SPLAT_MAX_CHANNELS];
+	unsigned n_channels;
 	char *name;
 };
 

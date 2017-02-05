@@ -1,7 +1,7 @@
 /*
     Splat - signal.c
 
-    Copyright (C) 2015
+    Copyright (C) 2015, 2017
     Guillaume Tucker <guillaume@mangoz.org>
 
     This program is free software; you can redistribute it and/or modify it
@@ -51,7 +51,8 @@ static int splat_signal_frag(struct splat_signal *s, struct splat_vector *v)
 {
 	struct splat_fragment *frag = splat_frag_from_obj(v->obj);
 
-	memcpy(v->data, &frag->data[0][s->cur], (s->len * sizeof(sample_t)));
+	memcpy(v->data, &frag->channels[0].data[s->cur],
+	       (s->len * sizeof(sample_t)));
 
 	return 0;
 }
