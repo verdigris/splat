@@ -156,6 +156,9 @@ extern int splat_mmap_remap(struct splat_mmap *m, size_t length);
 struct splat_channel {
 	sample_t *data;
 	size_t length;
+	struct splat_mmap mmap;
+	void (*free)(struct splat_channel *chan);
+	int (*resize)(struct splat_channel *chan, size_t length);
 };
 
 struct splat_fragment {
@@ -164,6 +167,8 @@ struct splat_fragment {
 	struct splat_channel channels[SPLAT_MAX_CHANNELS];
 	unsigned n_channels;
 	char *name;
+	int uses_mmap;
+	int temp_mmap;
 };
 
 struct splat_peak {
@@ -178,6 +183,10 @@ struct splat_levels;
 extern struct splat_fragment *splat_frag_from_obj(PyObject *obj);
 extern int splat_frag_init(struct splat_fragment *frag, unsigned n_channels,
 			   unsigned rate, size_t length, const char *name);
+extern int splat_frag_init_mmap(struct splat_fragment *frag,
+				unsigned n_channels, unsigned rate,
+				size_t length, const char *name,
+				const char *new_path);
 extern void splat_frag_free(struct splat_fragment *frag);
 extern int splat_frag_set_name(struct splat_fragment *frag, const char *name);
 extern int splat_frag_resize(struct splat_fragment *frag, size_t length);

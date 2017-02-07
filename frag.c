@@ -43,21 +43,53 @@ static void *splat_channel_realloc(void *data, size_t cur_size,
 	return new_data;
 }
 
-static int splat_channel_init(struct splat_channel *chan, size_t length)
+static int splat_channel_resize_mem(struct splat_channel *chan, size_t length)
+{
+	const size_t start = chan->length * sizeof(sample_t);
+	const size_t size = length * sizeof(sample_t);
+	const ssize_t extra = size - start;
+
+	chan->data = splat_channel_realloc(chan->data, start, size);
+
+	if (chan->data == NULL) {
+		PyErr_NoMemory();
+		return -1;
+	}
+
+	if (extra > 0)
+		memset(&chan->data[chan->length], 0, extra);
+
+	chan->length = length;
+
+	return 0;
+}
+
+static void splat_channel_free_mem(struct splat_channel *chan)
+{
+#ifdef SPLAT_FAST
+	free(chan->data);
+#else
+	PyMem_Free(chan->data);
+#endif
+}
+
+static int splat_channel_init_mem(struct splat_channel *chan, size_t length)
 {
 	size_t data_size;
 #ifdef SPLAT_FAST
 	void *data;
 #endif
 
+	chan->length = length;
+	chan->free = splat_channel_free_mem;
+	chan->resize = splat_channel_resize_mem;
+	chan->mmap.ptr = NULL;
+
 	if (!length) {
 		chan->data = NULL;
 		return 0;
 	}
 
-#ifdef SPLAT_FAST
-	length = splat_round4(length);
-#endif
 	data_size = length * sizeof(sample_t);
 
 #ifdef SPLAT_FAST
@@ -75,57 +107,54 @@ static int splat_channel_init(struct splat_channel *chan, size_t length)
 	}
 
 	memset(chan->data, 0, data_size);
-	chan->length = length;
 
 	return 0;
 }
 
-static void splat_channel_free(struct splat_channel *chan)
+static int splat_channel_resize_mmap(struct splat_channel *chan, size_t length)
 {
-#ifdef SPLAT_FAST
-	free(chan->data);
-#else
-	PyMem_Free(chan->data);
-#endif
-}
+	const size_t size = length * sizeof(sample_t);
 
-static int splat_channel_resize(struct splat_channel *chan, size_t length)
-{
-	size_t start;
-	size_t size;
-	ssize_t extra;
-
-	start = chan->length * sizeof(sample_t);
-#if SPLAT_FAST
-	length = splat_round4(length);
-#endif
-	size = length * sizeof(sample_t);
-	extra = size - start;
-
-	chan->data = splat_channel_realloc(chan->data, start, size);
-
-	if (chan->data == NULL) {
-		PyErr_NoMemory();
+	if (splat_mmap_remap(&chan->mmap, size)) {
+		PyErr_SetString(PyExc_SystemError, "mmap failed");
 		return -1;
 	}
 
-	if (extra > 0)
-		memset(&chan->data[chan->length], 0, extra);
-
+	chan->data = chan->mmap.ptr;
 	chan->length = length;
 
 	return 0;
 }
 
-int splat_frag_init(struct splat_fragment *frag, unsigned n_channels,
-		    unsigned rate, size_t length, const char *name)
+static void splat_channel_free_mmap(struct splat_channel *chan)
 {
-	unsigned c;
+	splat_mmap_free(&chan->mmap);
+}
 
-	for (c = 0; c < n_channels; ++c)
-		if (splat_channel_init(&frag->channels[c], length))
-			return -1;
+static int splat_channel_init_mmap(struct splat_channel *chan, size_t length,
+				   const char *mmap_path, int temp_mmap)
+{
+	chan->free = splat_channel_free_mmap;
+	chan->resize = splat_channel_resize_mmap;
 
+	if (splat_mmap_init(&chan->mmap, mmap_path)) {
+		PyErr_SetString(PyExc_SystemError, "mmap init error");
+		return -1;
+	}
+
+	if (chan->resize(chan, length))
+		return -1;
+
+	chan->mmap.persist = temp_mmap ? 0 : 1;
+	chan->data = chan->mmap.ptr;
+
+	return 0;
+}
+
+static int splat_frag_init_common(struct splat_fragment *frag,
+				  unsigned n_channels, unsigned rate,
+				  size_t length, const char *name)
+{
 	if (name == NULL)
 		frag->name = NULL;
 	else if (splat_frag_set_name(frag, name))
@@ -138,12 +167,86 @@ int splat_frag_init(struct splat_fragment *frag, unsigned n_channels,
 	return 0;
 }
 
-void splat_frag_free(struct splat_fragment *frag)
+int splat_frag_init(struct splat_fragment *frag, unsigned n_channels,
+		    unsigned rate, size_t length, const char *name)
 {
 	unsigned c;
 
-	for (c = 0; c < frag->n_channels; ++c)
-		splat_channel_free(&frag->channels[c]);
+#if SPLAT_FAST
+	length = splat_round4(length);
+#endif
+
+	for (c = 0; c < n_channels; ++c) {
+
+		if (splat_channel_init_mem(&frag->channels[c], length))
+			return -1;
+	}
+
+	frag->uses_mmap = 0;
+
+	return splat_frag_init_common(frag, n_channels, rate, length, name);
+}
+
+int splat_frag_init_mmap(struct splat_fragment *frag, unsigned n_channels,
+			 unsigned rate, size_t length, const char *name,
+			 const char *new_path)
+{
+	char tmp_path[L_tmpnam];
+	char *mmap_chan_path;
+	size_t mmap_chan_path_len;
+	unsigned c;
+
+	frag->uses_mmap = 1;
+	frag->temp_mmap = 0;
+
+	if (new_path == NULL) {
+		/* ToDo: use mkstemp instead */
+		if (tmpnam_r(tmp_path) == NULL) {
+			PyErr_SetString(PyExc_SystemError,
+					"failed to create temp file");
+			return -1;
+		}
+		new_path = tmp_path;
+		frag->temp_mmap = 1;
+	}
+
+	mmap_chan_path_len = strlen(new_path) + 8;
+	mmap_chan_path = PyMem_Malloc(mmap_chan_path_len);
+
+	if (mmap_chan_path == NULL) {
+		PyErr_NoMemory();
+		return -1;
+	}
+
+	for (c = 0; c < n_channels; ++c) {
+		int ret;
+
+		ret = snprintf(mmap_chan_path, mmap_chan_path_len,
+			       "%s.mmap%u", new_path, c);
+
+		if (ret == mmap_chan_path_len) {
+			PyErr_SetString(PyExc_SystemError,
+					"failed to create mmap path");
+			return -1;
+		}
+
+		if (splat_channel_init_mmap(&frag->channels[c], length,
+					    mmap_chan_path, frag->temp_mmap))
+			return -1;
+	}
+
+	PyMem_Free(mmap_chan_path);
+
+	return splat_frag_init_common(frag, n_channels, rate, length, name);
+}
+
+void splat_frag_free(struct splat_fragment *frag)
+{
+	unsigned c;
+	struct splat_channel *chan;
+
+	for (c = 0, chan = frag->channels; c < frag->n_channels; ++c, ++chan)
+		chan->free(chan);
 
 	if (frag->name != NULL)
 		free(frag->name);
@@ -167,12 +270,17 @@ int splat_frag_set_name(struct splat_fragment *frag, const char *name)
 int splat_frag_resize(struct splat_fragment *frag, size_t length)
 {
 	unsigned c;
+	struct splat_channel *chan;
 
 	if (length == frag->length)
 		return 0;
 
-	for (c = 0; c < frag->n_channels; ++c)
-		if (splat_channel_resize(&frag->channels[c], length))
+#if SPLAT_FAST
+	length = splat_round4(length);
+#endif
+
+	for (c = 0, chan = frag->channels; c < frag->n_channels; ++c, ++chan)
+		if (chan->resize(chan, length))
 			return -1;
 
 	frag->length = length;
