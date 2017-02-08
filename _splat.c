@@ -731,6 +731,76 @@ static PyObject *Fragment_get_channels(Fragment *self, void *_)
 	return Py_BuildValue("I", self->frag.n_channels);
 }
 
+PyDoc_STRVAR(info_doc,
+"Get a list of dictionaries with information specific to each channel.\n"
+"\n"
+"The dictionary for each channel contains the following keys:\n"
+"\n"
+" ``length``\n"
+"   The number of samples in the channel.\n"
+"\n"
+" ``mmap``\n"
+"   ``None`` if not using mmap or the path to the file being used\n"
+"\n"
+" ``mmap_temp``\n"
+"   ``True`` if the mmap file is temporary, ``False`` if the file is "
+"   persistent or ``None`` if mmap is not being used.\n");
+
+static PyObject *Fragment_get_info(Fragment *self, void *_)
+{
+	struct splat_fragment *frag = &self->frag;
+	PyObject *list = PyList_New(frag->n_channels);
+	struct splat_channel *chan;
+	unsigned c;
+
+	if (list == NULL)
+		return PyErr_NoMemory();
+
+	for (c = 0, chan = frag->channels; c < frag->n_channels; ++c, ++chan) {
+		PyObject *dict = PyDict_New();
+		PyObject *mmap_obj;
+
+		if (dict == NULL)
+			goto error_clean_up;
+
+		if (PyList_SetItem(list, c, dict)) {
+			Py_DECREF(dict);
+			goto error_clean_up;
+		}
+
+		if (PyDict_SetItemString(dict, "length",
+					 PyInt_FromSize_t(chan->length))) {
+			goto error_clean_up;
+		}
+
+		if (frag->uses_mmap) {
+			mmap_obj = PyString_FromString(chan->mmap.path);
+
+			if (mmap_obj == NULL)
+				goto error_clean_up;
+		} else {
+			mmap_obj = Py_None;
+		}
+
+		if (PyDict_SetItemString(dict, "mmap", mmap_obj)) {
+			Py_DECREF(mmap_obj);
+			goto error_clean_up;
+		}
+
+		if (mmap_obj != Py_None)
+			mmap_obj = frag->temp_mmap ? Py_True : Py_False;
+
+		if (PyDict_SetItemString(dict, "mmap_temp", mmap_obj))
+			goto error_clean_up;
+	}
+
+	return list;
+
+error_clean_up:
+	Py_DECREF(list);
+	return PyErr_NoMemory();
+}
+
 PyDoc_STRVAR(name_doc, "Get and set the fragment name.");
 
 static PyObject *Fragment_get_name(Fragment *self, void *_)
@@ -756,6 +826,7 @@ static PyGetSetDef Fragment_getsetters[] = {
 	{ "rate", (getter)Fragment_get_rate, NULL, rate_doc },
 	{ "duration", (getter)Fragment_get_duration, NULL, duration_doc },
 	{ "channels", (getter)Fragment_get_channels, NULL, channels_doc },
+	{ "info", (getter)Fragment_get_info, NULL, info_doc },
 	{ "name", (getter)Fragment_get_name, (setter)Fragment_set_name,
 	  name_doc },
 	{ NULL }
