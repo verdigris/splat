@@ -538,19 +538,43 @@ static void Fragment_dealloc(Fragment *self)
 	self->ob_type->tp_free((PyObject *)self);
 }
 
+static int splat_frag_mmap(struct splat_fragment *frag, unsigned n_channels,
+			   unsigned rate, size_t length, const char *name,
+			   PyObject *obj)
+{
+	const char *new_path;
+
+	if (obj == Py_True) {
+		new_path = NULL;
+	} else if ((obj != NULL) && PyString_Check(obj)) {
+		new_path = PyString_AsString(obj);
+	} else {
+		PyErr_SetString(PyExc_ValueError,
+				"invalid mmap argument");
+		return -1;
+	}
+
+	return splat_frag_init_mmap(frag, n_channels, rate, length, name,
+				    new_path);
+}
+
 static int Fragment_init(Fragment *self, PyObject *args, PyObject *kw)
 {
 	static char *kwlist[] = {
-		"channels", "rate", "duration", "length", "name", NULL };
+		"channels", "rate", "duration", "length", "name", "mmap",
+		NULL };
 	unsigned n_channels = 2;
 	unsigned rate = 48000;
 	double duration = 0.0;
 	unsigned long length = 0;
 	const char *name = NULL;
+	PyObject *mmap_obj = NULL;
 
-	if (!PyArg_ParseTupleAndKeywords(args, kw, "|IIdkz", kwlist,
+	int ret;
+
+	if (!PyArg_ParseTupleAndKeywords(args, kw, "|IIdkzO", kwlist,
 					 &n_channels, &rate, &duration,
-					 &length, &name))
+					 &length, &name, &mmap_obj))
 		return -1;
 
 	if (n_channels > SPLAT_MAX_CHANNELS) {
@@ -577,7 +601,14 @@ static int Fragment_init(Fragment *self, PyObject *args, PyObject *kw)
 		return -1;
 	}
 
-	if (splat_frag_init(&self->frag, n_channels, rate, length, name))
+	if (mmap_obj == NULL)
+		ret = splat_frag_init(&self->frag, n_channels, rate, length,
+				      name);
+	else
+		ret = splat_frag_mmap(&self->frag, n_channels, rate, length,
+				      name, mmap_obj);
+
+	if (ret)
 		return -1;
 
 	self->init = 1;

@@ -211,6 +211,10 @@ class Fragment(_splat.Fragment):
     rate is 48000.  If no duration is specified, the fragment will be empty.
     Otherwise, the samples are initialised to 0 (silence).
 
+    The fragment can also be allocated using ``mmap``.  If set to ``True``, the
+    fragment will be backed with a temporary mmap file.  It can also be a
+    string used as a path prefix to create persistent mmap files.
+
     All Splat sound data is contained in :py:class:`splat.data.Fragment`
     objects.  They are accessible as a mutable sequence of tuples of floating
     point values to represent the samples across all the audio channels.  The

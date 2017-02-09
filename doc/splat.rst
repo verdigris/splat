@@ -30,7 +30,7 @@ Fragment objects
 
 .. automodule:: splat.data
 
-.. autoclass:: splat.data.Fragment(channels, rate, duration=0.0, length=0)
+.. autoclass:: splat.data.Fragment(channels, rate, duration=0.0, length=0, name=None, mmap=None)
    :members:
 
    .. automethod:: splat.data.Fragment.mix
