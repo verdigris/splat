@@ -35,15 +35,23 @@ The following names are used to choose the audio file format in
 
 ``saf``
   The Splat Audio Fragment file format is primarily made to export and import
-  Fragment objects without loosing any of the original samples precision.  By
-  default, they contain floating point samples with the native sample width.
-  It's also possible to explicitely specify the sample width which may result
-  in a conversion between 32-bit and 64-bit types with potential loss of
-  precision.  The ``saf`` format is useful when building complex splats to
+  fragment objects without losing any of the original precision.  By default,
+  they contain floating point samples with the native sample width.  It's also
+  possible to explicitely specify the sample width which may result in a
+  conversion between 32-bit and 64-bit types with a potential loss of
+  information.  The ``saf`` format is useful when building complex splats to
   avoid having to regenerate everything from scratch each time the code is run,
-  or to share some data across other splats.  There is currently no known
-  programme to play these files directly, although it's quite easy to import
-  one into a Fragment and export it again as WAV.
+  or to share some data between different splats.  There is currently no known
+  program to play these files directly, although it's quite easy to import one
+  into a fragment and directly export it again as WAV.
+
+  When using fragments allocated with mmap and backed by persistent files, a
+  variant of the ``saf`` format is used.  It will contain the meta-data
+  including the names of separate mmap files for each channel of the fragment.
+  This is entirely transparent from a user point of view, only that the
+  individual mmap files must not be renamed and need to be kept in the same
+  directory as the meta-data ``saf`` file.  The meta-data and mmap files can be
+  moved together.
 
 ``wav``
   This is for standard WAV audio files.  It uses the standard ``wave`` Python
