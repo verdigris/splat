@@ -155,14 +155,13 @@ static int splat_frag_init_common(struct splat_fragment *frag,
 				  unsigned n_channels, unsigned rate,
 				  size_t length, const char *name)
 {
-	if (name == NULL)
-		frag->name = NULL;
-	else if (splat_frag_set_name(frag, name))
-		return -1;
-
 	frag->n_channels = n_channels;
 	frag->rate = rate;
 	frag->length = length;
+	frag->name = NULL;
+
+	if (splat_frag_set_name(frag, name))
+		return -1;
 
 	return 0;
 }
@@ -269,6 +268,11 @@ int splat_frag_set_name(struct splat_fragment *frag, const char *name)
 {
 	if (frag->name != NULL)
 		free(frag->name);
+
+	if (name == NULL) {
+		frag->name = NULL;
+		return 0;
+	}
 
 	frag->name = strdup(name);
 
