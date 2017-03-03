@@ -186,7 +186,7 @@ extern int splat_frag_init(struct splat_fragment *frag, unsigned n_channels,
 extern int splat_frag_init_mmap(struct splat_fragment *frag,
 				unsigned n_channels, unsigned rate,
 				size_t length, const char *name,
-				const char *new_path);
+				const char *new_path, const char **open_paths);
 extern void splat_frag_free(struct splat_fragment *frag);
 extern int splat_frag_set_name(struct splat_fragment *frag, const char *name);
 extern int splat_frag_resize(struct splat_fragment *frag, size_t length);

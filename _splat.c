@@ -543,11 +543,36 @@ static int splat_frag_mmap(struct splat_fragment *frag, unsigned n_channels,
 			   PyObject *obj)
 {
 	const char *new_path;
+	const char *open_paths[SPLAT_MAX_CHANNELS];
 
 	if (obj == Py_True) {
 		new_path = NULL;
+		open_paths[0] = NULL;
 	} else if ((obj != NULL) && PyString_Check(obj)) {
 		new_path = PyString_AsString(obj);
+		open_paths[0] = NULL;
+	} else if ((obj != NULL) && PyList_Check(obj)) {
+		unsigned c;
+
+		if (PyList_Size(obj) != n_channels) {
+			PyErr_SetString(PyExc_ValueError,
+			  "mmap list length doesn't match number of channels");
+			return -1;
+		}
+
+		for (c = 0; c < n_channels; ++c) {
+			PyObject *str = PyList_GetItem(obj, c);
+
+			if ((str == NULL) || !PyString_Check(str)) {
+				PyErr_SetString(PyExc_ValueError,
+						"invalid mmap paths list");
+				return -1;
+			}
+
+			open_paths[c] = PyString_AsString(str);
+		}
+
+		new_path = NULL;
 	} else {
 		PyErr_SetString(PyExc_ValueError,
 				"invalid mmap argument");
@@ -555,7 +580,7 @@ static int splat_frag_mmap(struct splat_fragment *frag, unsigned n_channels,
 	}
 
 	return splat_frag_init_mmap(frag, n_channels, rate, length, name,
-				    new_path);
+				    new_path, open_paths);
 }
 
 static int Fragment_init(Fragment *self, PyObject *args, PyObject *kw)

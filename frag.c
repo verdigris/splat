@@ -189,7 +189,7 @@ int splat_frag_init(struct splat_fragment *frag, unsigned n_channels,
 
 int splat_frag_init_mmap(struct splat_fragment *frag, unsigned n_channels,
 			 unsigned rate, size_t length, const char *name,
-			 const char *new_path)
+			 const char *new_path, const char **open_paths)
 {
 	char tmp_path[L_tmpnam];
 	char *mmap_chan_path;
@@ -199,43 +199,56 @@ int splat_frag_init_mmap(struct splat_fragment *frag, unsigned n_channels,
 	frag->uses_mmap = 1;
 	frag->temp_mmap = 0;
 
-	if (new_path == NULL) {
-		/* ToDo: use mkstemp instead */
-		if (tmpnam_r(tmp_path) == NULL) {
-			PyErr_SetString(PyExc_SystemError,
-					"failed to create temp file");
+	if ((open_paths == NULL) || (open_paths[0] == NULL)) {
+		if (new_path == NULL) {
+			/* ToDo: use mkstemp instead */
+			if (tmpnam_r(tmp_path) == NULL) {
+				PyErr_SetString(PyExc_SystemError,
+						"failed to create temp file");
+				return -1;
+			}
+			new_path = tmp_path;
+			frag->temp_mmap = 1;
+		}
+
+		mmap_chan_path_len = strlen(new_path) + 8;
+		mmap_chan_path = PyMem_Malloc(mmap_chan_path_len);
+
+		if (mmap_chan_path == NULL) {
+			PyErr_NoMemory();
 			return -1;
 		}
-		new_path = tmp_path;
-		frag->temp_mmap = 1;
-	}
-
-	mmap_chan_path_len = strlen(new_path) + 8;
-	mmap_chan_path = PyMem_Malloc(mmap_chan_path_len);
-
-	if (mmap_chan_path == NULL) {
-		PyErr_NoMemory();
-		return -1;
+	} else {
+		mmap_chan_path = NULL;
 	}
 
 	for (c = 0; c < n_channels; ++c) {
-		int ret;
+		const char *path;
 
-		ret = snprintf(mmap_chan_path, mmap_chan_path_len,
-			       "%s.mmap%u", new_path, c);
+		if (mmap_chan_path != NULL) {
+			int ret;
 
-		if (ret == mmap_chan_path_len) {
-			PyErr_SetString(PyExc_SystemError,
-					"failed to create mmap path");
-			return -1;
+			ret = snprintf(mmap_chan_path, mmap_chan_path_len,
+				       "%s.mmap%u", new_path, c);
+
+			if (ret == mmap_chan_path_len) {
+				PyErr_SetString(PyExc_SystemError,
+						"failed to create mmap path");
+				return -1;
+			}
+
+			path = mmap_chan_path;
+		} else {
+			path = open_paths[c];
 		}
 
-		if (splat_channel_init_mmap(&frag->channels[c], length,
-					    mmap_chan_path, frag->temp_mmap))
+		if (splat_channel_init_mmap(&frag->channels[c], length, path,
+					    frag->temp_mmap))
 			return -1;
 	}
 
-	PyMem_Free(mmap_chan_path);
+	if (mmap_chan_path != NULL)
+		PyMem_Free(mmap_chan_path);
 
 	return splat_frag_init_common(frag, n_channels, rate, length, name);
 }

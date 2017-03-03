@@ -213,7 +213,11 @@ class Fragment(_splat.Fragment):
 
     The fragment can also be allocated using ``mmap``.  If set to ``True``, the
     fragment will be backed with a temporary mmap file.  It can also be a
-    string used as a path prefix to create persistent mmap files.
+    string used as a path prefix to create persistent mmap files, or a list of
+    paths with existing files to reuse.  In this case, there must be the same
+    number of paths as of ``channels`` and the ``length`` should be set to
+    match the mmap file sizes as new fragments are always resized to the given
+    length.
 
     All Splat sound data is contained in :py:class:`splat.data.Fragment`
     objects.  They are accessible as a mutable sequence of tuples of floating
