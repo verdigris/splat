@@ -304,6 +304,17 @@ class FragmentTest(SplatTest):
                             run_resample_test(src, d, ratio, f, rate, thr)
 
 
+class FragmentTest_mmap(FragmentTest):
+
+    def setUp(self):
+        super(FragmentTest_mmap, self).setUp()
+        splat.use_mmap(True)
+
+    def tearDown(self):
+        super(FragmentTest_mmap, self).tearDown()
+        splat.use_mmap(False)
+
+
 class InterpolTest(SplatTest):
 
     def test_polynomial(self):
