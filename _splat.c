@@ -78,6 +78,9 @@ static PyObject *splat_zero;
 /* A Python float with the value of 1.0 */
 static PyObject *splat_one;
 
+/* A boolean flag to use mmap by default in new Fragment objects */
+static PyObject *splat_use_mmap;
+
 /* Page utilities */
 size_t splat_page_size;
 const void *splat_zero_page;
@@ -593,7 +596,7 @@ static int Fragment_init(Fragment *self, PyObject *args, PyObject *kw)
 	double duration = 0.0;
 	unsigned long length = 0;
 	const char *name = NULL;
-	PyObject *mmap_obj = NULL;
+	PyObject *mmap_obj = splat_use_mmap;
 
 	int ret;
 
@@ -626,7 +629,7 @@ static int Fragment_init(Fragment *self, PyObject *args, PyObject *kw)
 		return -1;
 	}
 
-	if (mmap_obj == NULL)
+	if (mmap_obj == Py_False)
 		ret = splat_frag_init(&self->frag, n_channels, rate, length,
 				      name);
 	else
@@ -2194,6 +2197,31 @@ static PyObject *splat_spline_value(PyObject *self, PyObject *args)
 	return PyFloat_FromDouble(splat_spline_tuple_value(poly, x, db));
 }
 
+PyDoc_STRVAR(splat_use_mmap_doc,
+"use_mmap(use_mmap)\n"
+"\n"
+"Enable mmap by default on all new Fragment objects when use_mmap is True.\n"
+"Return the current value when no use_mmap argument is passed.\n");
+
+static PyObject *splat_set_use_mmap(PyObject *self, PyObject *args)
+{
+	PyObject *use_mmap = NULL;
+
+	if (!PyArg_ParseTuple(args, "|O!", &PyBool_Type, &use_mmap))
+		return NULL;
+
+	if (use_mmap == NULL) {
+		Py_INCREF(splat_use_mmap);
+		return splat_use_mmap;
+	}
+
+	Py_DECREF(splat_use_mmap);
+	splat_use_mmap = use_mmap;
+	Py_INCREF(splat_use_mmap);
+
+	Py_RETURN_NONE;
+}
+
 static PyMethodDef splat_methods[] = {
 	{ "lin2dB", splat_lin2dB, METH_VARARGS,
 	  splat_lin2dB_doc },
@@ -2217,6 +2245,8 @@ static PyMethodDef splat_methods[] = {
 	  splat_reverb_doc },
 	{ "poly_value", splat_poly_value, METH_VARARGS, NULL },
 	{ "spline_value", splat_spline_value, METH_VARARGS, NULL },
+	{ "use_mmap", splat_set_use_mmap, METH_VARARGS,
+	  splat_use_mmap_doc },
 	{ NULL, NULL, 0, NULL }
 };
 
@@ -2294,6 +2324,8 @@ PyMODINIT_FUNC init_splat(void)
 	splat_one = PyFloat_FromDouble(1.0);
 	PyModule_AddObject(m, "_one", splat_one);
 	splat_init_sample_types(m, "sample_types", splat_sample_types);
+	splat_use_mmap = Py_False;
+	Py_INCREF(splat_use_mmap);
 	splat_init_page_size(m);
 
 	PyModule_AddStringConstant(m, "SAMPLE_TYPE", SPLAT_NATIVE_SAMPLE_TYPE);

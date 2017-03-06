@@ -18,6 +18,7 @@
 import _splat
 from _splat import lin2dB, dB2lin
 from _splat import sample_types, SAMPLE_TYPE, SAMPLE_WIDTH
+from _splat import use_mmap
 
 dB = dB2lin
 
