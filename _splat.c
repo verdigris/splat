@@ -1521,10 +1521,6 @@ static PyObject *Fragment_resample(Fragment *self, PyObject *args, PyObject *kw)
 	unsigned rate = frag->rate;
 	PyObject *ratio = splat_one;
 
-	struct splat_fragment old_frag;
-	unsigned c;
-	int res;
-
 	if (self->frag.uses_mmap) {
 		PyErr_SetString(PyExc_ValueError,
 				"resample not supported with mmap yet");
@@ -1545,23 +1541,10 @@ static PyObject *Fragment_resample(Fragment *self, PyObject *args, PyObject *kw)
 		return NULL;
 	}
 
-	if (splat_frag_init(&old_frag, frag->n_channels, frag->rate,
-			    frag->length, NULL))
+	if (splat_frag_resample(frag, rate, ratio)) {
+		PyErr_SetString(PyExc_SystemError, "failed to resample");
 		return NULL;
-
-	for (c = 0; c < frag->n_channels; ++c) {
-		sample_t *mv;
-
-		mv = old_frag.channels[c].data;
-		old_frag.channels[c].data = frag->channels[c].data;
-		frag->channels[c].data = mv;
 	}
-
-	res = splat_frag_resample(frag, &old_frag, rate, ratio);
-	splat_frag_free(&old_frag);
-
-	if (res)
-		return NULL;
 
 	Py_RETURN_NONE;
 }

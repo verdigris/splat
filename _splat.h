@@ -210,9 +210,8 @@ extern void splat_frag_lin2dB(struct splat_fragment *frag);
 extern void splat_frag_dB2lin(struct splat_fragment *frag);
 extern int splat_frag_offset(struct splat_fragment *frag, PyObject *offset_obj,
 			     double start);
-extern int splat_frag_resample(struct splat_fragment *frag,
-			       const struct splat_fragment *old_frag,
-			       unsigned rate, PyObject *time_ratio);
+extern int splat_frag_resample(struct splat_fragment *frag, unsigned rate,
+			       PyObject *ratio);
 
 /* ----------------------------------------------------------------------------
  * Signal & vector

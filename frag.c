@@ -876,13 +876,32 @@ error_free_sig:
 	return -1;
 }
 
-int splat_frag_resample(struct splat_fragment *frag,
-                        const struct splat_fragment *old_frag,
-                        unsigned rate, PyObject *ratio)
+int splat_frag_resample(struct splat_fragment *frag, unsigned rate,
+			PyObject *ratio)
 {
+	struct splat_fragment old_frag;
+	unsigned c;
+	int res;
+
+	if (splat_frag_init(&old_frag, frag->n_channels, frag->rate,
+			    frag->length, NULL))
+		return -1;
+
+	for (c = 0; c < frag->n_channels; ++c) {
+		sample_t *mv;
+
+		mv = old_frag.channels[c].data;
+		old_frag.channels[c].data = frag->channels[c].data;
+		frag->channels[c].data = mv;
+	}
+
 	if (PyFloat_Check(ratio))
-		return splat_frag_resample_float(frag, old_frag, rate,
-						 PyFloat_AsDouble(ratio));
+		res = splat_frag_resample_float(frag, &old_frag, rate,
+						PyFloat_AsDouble(ratio));
 	else
-		return splat_frag_resample_signals(frag, old_frag, rate,ratio);
+		res = splat_frag_resample_signals(frag, &old_frag, rate, ratio);
+
+	splat_frag_free(&old_frag);
+
+	return res;
 }
