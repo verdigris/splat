@@ -1521,12 +1521,6 @@ static PyObject *Fragment_resample(Fragment *self, PyObject *args, PyObject *kw)
 	unsigned rate = frag->rate;
 	PyObject *ratio = splat_one;
 
-	if (self->frag.uses_mmap) {
-		PyErr_SetString(PyExc_ValueError,
-				"resample not supported with mmap yet");
-		return NULL;
-	}
-
 	if (!PyArg_ParseTupleAndKeywords(args, kw, "|IO", kwlist,
 					 &rate, &ratio))
 		return NULL;
