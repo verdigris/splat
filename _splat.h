@@ -148,6 +148,8 @@ struct splat_mmap {
 extern int splat_mmap_init(struct splat_mmap *m, const char *path);
 extern void splat_mmap_free(struct splat_mmap *m);
 extern int splat_mmap_remap(struct splat_mmap *m, size_t length);
+extern int splat_mmap_set_temp_px(const char *px);
+extern PyObject *splat_mmap_get_temp_px(void);
 
 /* ----------------------------------------------------------------------------
  * Fragment

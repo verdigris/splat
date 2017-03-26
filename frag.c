@@ -190,8 +190,7 @@ int splat_frag_init_mmap(struct splat_fragment *frag, unsigned n_channels,
 			 unsigned rate, size_t length, const char *name,
 			 const char *new_path, const char **open_paths)
 {
-	char tmp_path[L_tmpnam];
-	char *mmap_chan_path;
+	char *mmap_chan_path = NULL;
 	size_t mmap_chan_path_len;
 	unsigned c;
 
@@ -200,25 +199,16 @@ int splat_frag_init_mmap(struct splat_fragment *frag, unsigned n_channels,
 
 	if ((open_paths == NULL) || (open_paths[0] == NULL)) {
 		if (new_path == NULL) {
-			/* ToDo: use mkstemp instead */
-			if (tmpnam_r(tmp_path) == NULL) {
-				PyErr_SetString(PyExc_SystemError,
-						"failed to create temp file");
+			frag->temp_mmap = 1;
+		} else {
+			mmap_chan_path_len = strlen(new_path) + 8;
+			mmap_chan_path = PyMem_Malloc(mmap_chan_path_len);
+
+			if (mmap_chan_path == NULL) {
+				PyErr_NoMemory();
 				return -1;
 			}
-			new_path = tmp_path;
-			frag->temp_mmap = 1;
 		}
-
-		mmap_chan_path_len = strlen(new_path) + 8;
-		mmap_chan_path = PyMem_Malloc(mmap_chan_path_len);
-
-		if (mmap_chan_path == NULL) {
-			PyErr_NoMemory();
-			return -1;
-		}
-	} else {
-		mmap_chan_path = NULL;
 	}
 
 	for (c = 0; c < n_channels; ++c) {
@@ -237,6 +227,8 @@ int splat_frag_init_mmap(struct splat_fragment *frag, unsigned n_channels,
 			}
 
 			path = mmap_chan_path;
+		} else if (frag->temp_mmap) {
+			path = NULL;
 		} else {
 			path = open_paths[c];
 		}

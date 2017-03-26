@@ -23,6 +23,9 @@
 #include <sys/stat.h>
 #include "_splat.h"
 
+static const char SPLAT_MMAP_TEMP_PX_DEFAULT[] = "/tmp/splat-mmap-";
+static const char *splat_mmap_temp_px = SPLAT_MMAP_TEMP_PX_DEFAULT;
+
 static int splat_mmap(struct splat_mmap *m, size_t sz)
 {
 	m->ptr = mmap(NULL, sz, PROT_READ | PROT_WRITE, MAP_SHARED, m->fd, 0);
@@ -53,6 +56,33 @@ static size_t splat_mmap_n_pages(size_t size)
 	return n_pages;
 }
 
+static int splat_mmap_init_temp(struct splat_mmap *m)
+{
+	static const char XX[] = "XXXXXX";
+	const size_t px_len = strlen(splat_mmap_temp_px);
+	const size_t xx_len = strlen(XX);
+	const size_t path_len = px_len + xx_len + 1;
+
+	m->path = malloc(path_len);
+
+	if (m->path == NULL)
+		return -1;
+
+	memcpy(m->path, splat_mmap_temp_px, px_len);
+	memcpy(m->path + px_len, XX, xx_len);
+	m->path[path_len - 1] = '\0';
+	m->fd = mkstemp(m->path);
+
+	if (m->fd < 0)
+		goto err_free_path;
+
+	return 0;
+
+err_free_path:
+	free(m->path);
+	return -1;
+}
+
 int splat_mmap_init(struct splat_mmap *m, const char *path)
 {
 	static const mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
@@ -62,6 +92,9 @@ int splat_mmap_init(struct splat_mmap *m, const char *path)
 	m->ptr = NULL;
 	m->size = 0;
 	m->persist = 0;
+
+	if (path == NULL)
+		return splat_mmap_init_temp(m);
 
 	if ((stat(path, &s) < 0) && (errno == ENOENT))
 		flags |= O_CREAT;
@@ -165,4 +198,22 @@ int splat_mmap_remap(struct splat_mmap *m, size_t length)
 	}
 
 	return stat;
+}
+
+int splat_mmap_set_temp_px(const char *px)
+{
+	if (splat_mmap_temp_px != SPLAT_MMAP_TEMP_PX_DEFAULT)
+		free((char *)splat_mmap_temp_px);
+
+	if (px == NULL)
+		splat_mmap_temp_px = SPLAT_MMAP_TEMP_PX_DEFAULT;
+	else
+		splat_mmap_temp_px = strdup(px);
+
+	return (splat_mmap_temp_px == NULL) ? -1 : 0;
+}
+
+PyObject *splat_mmap_get_temp_px(void)
+{
+	return PyString_FromString(splat_mmap_temp_px);
 }
