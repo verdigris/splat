@@ -213,7 +213,7 @@ int splat_mmap_set_temp_px(const char *px)
 	return (splat_mmap_temp_px == NULL) ? -1 : 0;
 }
 
-PyObject *splat_mmap_get_temp_px(void)
+const char *splat_mmap_get_temp_px(void)
 {
-	return PyString_FromString(splat_mmap_temp_px);
+	return splat_mmap_temp_px;
 }

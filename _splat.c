@@ -2222,6 +2222,37 @@ static PyObject *splat_set_use_mmap(PyObject *self, PyObject *args)
 	Py_RETURN_NONE;
 }
 
+PyDoc_STRVAR(splat_get_mmap_temp_px_doc,
+"get_mmap_temp_px(px)\n"
+"\n"
+"Get the path prefix used to create temporary mmap files.\n");
+static PyObject *splat_get_mmap_temp_px(PyObject *self, PyObject *args)
+{
+	return PyString_FromString(splat_mmap_get_temp_px());
+}
+
+PyDoc_STRVAR(splat_set_mmap_temp_px_doc,
+"set_mmap_temp_px(px)\n"
+"\n"
+"Set the path prefix used to create temporary mmap files, by default "
+"'/tmp/splat-mmap-'.  If ``px`` is not provided, reset it to the default.\n");
+
+static PyObject *splat_set_mmap_temp_px(PyObject *self, PyObject *args)
+{
+	char *temp_px = NULL;
+
+	if (!PyArg_ParseTuple(args, "|z", &temp_px))
+		return NULL;
+
+	if (splat_mmap_set_temp_px(temp_px)) {
+		PyErr_SetString(PyExc_ValueError,
+				"failed to set mmap temp file prefix");
+		return NULL;
+	}
+
+	Py_RETURN_NONE;
+}
+
 static PyMethodDef splat_methods[] = {
 	{ "lin2dB", splat_lin2dB, METH_VARARGS,
 	  splat_lin2dB_doc },
@@ -2247,6 +2278,10 @@ static PyMethodDef splat_methods[] = {
 	{ "spline_value", splat_spline_value, METH_VARARGS, NULL },
 	{ "use_mmap", splat_set_use_mmap, METH_VARARGS,
 	  splat_use_mmap_doc },
+	{ "get_mmap_temp_px", splat_get_mmap_temp_px, METH_NOARGS,
+	  splat_get_mmap_temp_px_doc },
+	{ "set_mmap_temp_px", splat_set_mmap_temp_px, METH_VARARGS,
+	  splat_set_mmap_temp_px_doc },
 	{ NULL, NULL, 0, NULL }
 };
 

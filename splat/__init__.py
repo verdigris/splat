@@ -18,7 +18,7 @@
 import _splat
 from _splat import lin2dB, dB2lin
 from _splat import sample_types, SAMPLE_TYPE, SAMPLE_WIDTH
-from _splat import use_mmap
+from _splat import use_mmap, get_mmap_temp_px, set_mmap_temp_px
 
 dB = dB2lin
 
@@ -34,6 +34,7 @@ def check_version(ver):
     if ver != VERSION:
         raise Exception("Version mismatch: {0}, required: {1}".format(
                 VERSION, ver))
+
 
 class Signal(_splat.Signal):
     """A general purpose signal.
