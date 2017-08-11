@@ -900,13 +900,9 @@ static float32x4_t splat_fast_sine(float32x4_t x)
 	a = vcvtq_f32_u32(vcvtq_u32_f32(a));
 	a = vmlsq_f32(x, a, pi);
 
-	/* if a < 0 then a += M_PI */
-	neg = vcltq_f32(a, vdupq_n_f32(0.0));
-	neg = vandq_u32(neg, (uint32x4_t)pi);
-	a = vaddq_f32(a, (float32x4_t)neg);
-
-	/* m = int(a * table_len / M_PI) */
-	m = vcvtq_u32_f32(vmulq_f32(a, splat_fast_sine_step));
+	/* m = int(x * table_len / M_PI) & table_mask */
+	m = vcvtq_u32_f32(vmulq_f32(x, splat_fast_sine_step));
+	m = vandq_u32(m, splat_fast_sine_mask);
 
 	/* polyq1..4 = transpose(table[m]) */
 	/* y = p0 + (x * p1) + (x^2 * p2) + (x^3 * p3) */
