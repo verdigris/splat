@@ -906,7 +906,7 @@ static float32x4_t splat_fast_sine(float32x4_t x)
 	a = vaddq_f32(a, (float32x4_t)neg);
 
 	/* m = int(a * table_len / M_PI) */
-	m = vcvtq_u32_f32(vmulq_f32(a, splat_sine_step));
+	m = vcvtq_u32_f32(vmulq_f32(a, splat_fast_sine_step));
 
 	/* polyq1..4 = transpose(table[m]) */
 	/* y = p0 + (x * p1) + (x^2 * p2) + (x^3 * p3) */
@@ -972,7 +972,7 @@ static __m128 splat_fast_sine(__m128 x)
 	a = _mm_sub_ps(a, neg);
 
 	/* m = int(a * table_len / M_PI) */
-	m = _mm_cvttps_epi32(_mm_mul_ps(a, splat_sine_step));
+	m = _mm_cvttps_epi32(_mm_mul_ps(a, splat_fast_sine_step));
 
 	/* poly1..4 = transpose(table[m]) */
 	y = _mm_load_ps(splat_sine_table[mf[0]].coef);

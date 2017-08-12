@@ -392,3 +392,4 @@ __attribute__ ((aligned (16))) = {
 
 const struct splat_sine_poly *splat_sine_table = _sine_table;
 const size_t splat_sine_table_len = 64;
+const size_t splat_sine_table_mask = 0x3f;
