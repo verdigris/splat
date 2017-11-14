@@ -180,7 +180,7 @@ indexed.
 Typical Splat
 -------------
 
-Your Splat programme will most likely do some or all of the following things:
+Your Splat program will most likely do some or all of the following things:
 
 #. Create a :py:class:`splat.gen.Genarator` which contains a fragment and a
    sound source.
