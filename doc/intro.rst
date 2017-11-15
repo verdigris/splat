@@ -204,7 +204,13 @@ Your Splat program will most likely do some or all of the following things:
 #. Run any filters or edit the fragments.
 #. Finally mix all the fragments together and save the result into a file.
 
-.. rubric:: And now, in stereo (see `example.py on Github <https://github.com/verdigris/splat/blob/master/example.py>`_):
+.. raw:: latex
+
+   \newpage
+
+.. rubric:: And now, in stereo
+
+Below is a more advanced example, also this `example.py on Github <https://github.com/verdigris/splat/blob/master/example.py>`_:
 
 .. literalinclude:: ../example.py
    :language: python
