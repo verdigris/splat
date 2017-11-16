@@ -26,7 +26,7 @@
 
 /* Enable for speed using SIMD and 32-bit samples instead of 64-bit */
 #ifdef SPLAT_FAST
-#if defined(__ARM_NEON__)
+#if defined(__ARM_NEON__) || defined(__ARM_NEON)
 #include <arm_neon.h>
 #define SPLAT_NEON
 typedef float32x4_t sf_float_t;
