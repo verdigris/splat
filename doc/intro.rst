@@ -39,9 +39,8 @@ code, only on the standard Python library.
 Beep
 ----
 
-As a first concrete example, here's a very small splat which creates a
-440Hz sound for 1 second, with short fade-in and fade-out, and saves
-it in a file:
+As a first concrete example, here's a very small splat which creates a 440 Hz
+sound for 1 second, with fade-in and fade-out, and saves it in a file:
 
 .. code-block:: python
 

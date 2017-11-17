@@ -29,8 +29,8 @@ player.
 Beep
 ----
 
-Here's a very small **Splat** example which creates a 440Hz sound for 1 second,
-with fade-in and fade-out:
+Here's a very small **Splat** example which creates a 440 Hz sound for 1
+second, with fade-in and fade-out, and saves it in a file:
 
 .. code-block:: python
 
@@ -40,7 +40,7 @@ with fade-in and fade-out:
     gen = splat.gen.SineGenerator()
     gen.filters = [splat.filters.linear_fade]
     gen.run(0.0, 1.0, 440.0)
-    gen.frag.save("A440.wav")
+    gen.frag.save("440-Hz.wav")
 
 
 `verdigris.mu <http://verdigris.mu>`_
