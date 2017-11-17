@@ -4,6 +4,8 @@ Splat!
 Quick intro
 -----------
 
+THIS IS A HACK
+
 **Splat is a programme** to generate some audio data which you may call music.
 It's written in Python to make it easy to use, and all the crucial processing
 parts are implemented in C for fast number crunching.  It's distributed under
