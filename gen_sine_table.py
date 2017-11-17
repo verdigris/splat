@@ -23,6 +23,7 @@ def gen_table(pols, out=print):
     out()
     out("const struct splat_sine_poly *splat_sine_table = _sine_table;")
     out("const size_t splat_sine_table_len = {};".format(len(pols)))
+    out("const size_t splat_sine_table_mask = 0x{:x};".format(len(pols) - 1))
 
 def main(argv):
     ranges = {
@@ -34,6 +35,10 @@ def main(argv):
     parser.add_argument('--range', default='half', choices=ranges,
                         help="Range of the points relative to 2 * PI")
     args = parser.parse_args(argv[1:])
+
+    if math.log(args.n, 2) % 1.0:
+        print("The number of points needs to be a power of 2")
+        return False
 
     spline = make_spline(args.n, args.m)
     print("/* Automatically generated file - read the manual */")

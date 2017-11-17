@@ -39,8 +39,9 @@ code, only on the standard Python library.
 Beep
 ----
 
-As a first concrete exemple, here's a very small splat which creates a 440Hz
-sound for 1 second, with short fade-in and fade-out, and saves it in a file:
+As a first concrete example, here's a very small splat which creates a
+440Hz sound for 1 second, with short fade-in and fade-out, and saves
+it in a file:
 
 .. code-block:: python
 
@@ -50,7 +51,19 @@ sound for 1 second, with short fade-in and fade-out, and saves it in a file:
     gen = splat.gen.SineGenerator()
     gen.filters = [splat.filters.linear_fade]
     gen.run(0.0, 1.0, 440.0)
-    gen.frag.save("A440.wav")
+    gen.frag.save("440-Hz.wav")
+
+Skipping the import statements, this first creates the sound generator
+object: a :py:class:`splat.gen.SineGenerator` to generate sine waves.
+Then it sets a :py:func:`splat.filters.linear_fade` filter which will
+run on the generator output to progressively ramp up and down (fade in
+and out) the volume at the beginning and end of the generated audio.
+Then the generator is being run, starting at time 0 for 1 second and
+at a frequency of 440 Hz (standard concert pitch for the A note...).
+Generators have a piece of memory associated with them to keep the
+data they produce, so that's where the sine wave went.  Finally the
+audio is saved in a file which you can play any time and share with
+your friends.
 
 
 Principles
@@ -180,7 +193,7 @@ indexed.
 Typical Splat
 -------------
 
-Your Splat programme will most likely do some or all of the following things:
+Your Splat program will most likely do some or all of the following things:
 
 #. Create a :py:class:`splat.gen.Genarator` which contains a fragment and a
    sound source.
@@ -191,7 +204,13 @@ Your Splat programme will most likely do some or all of the following things:
 #. Run any filters or edit the fragments.
 #. Finally mix all the fragments together and save the result into a file.
 
-.. rubric:: And now, in stereo (see `example.py on Github <https://github.com/verdigris/splat/blob/master/example.py>`_):
+.. raw:: latex
+
+   \newpage
+
+.. rubric:: And now, in stereo
+
+Below is a more advanced example, also this `example.py on Github <https://github.com/verdigris/splat/blob/master/example.py>`_:
 
 .. literalinclude:: ../example.py
    :language: python

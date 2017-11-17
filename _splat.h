@@ -26,7 +26,7 @@
 
 /* Enable for speed using SIMD and 32-bit samples instead of 64-bit */
 #ifdef SPLAT_FAST
-#if defined(__ARM_NEON__)
+#if defined(__ARM_NEON__) || defined(__ARM_NEON)
 #include <arm_neon.h>
 #define SPLAT_NEON
 typedef float32x4_t sf_float_t;
@@ -113,10 +113,12 @@ struct splat_sine_poly {
 
 extern const struct splat_sine_poly *splat_sine_table;
 extern const size_t splat_sine_table_len;
+extern const size_t splat_sine_table_mask;
 
 #ifdef SPLAT_FAST
 #define SPLAT_QUAD(_x) { (_x), (_x), (_x), (_x) }
-extern sf_float_t splat_sine_step;
+extern sf_float_t splat_fast_sine_step;
+extern sf_mask_t splat_fast_sine_mask;
 extern const sf_float_t splat_fast_inc;
 #endif
 

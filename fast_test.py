@@ -23,7 +23,7 @@ import splat.gen
 import splat.data
 import splat
 from splat import dB2lin as dB
-import compare
+import splat.tools.compare
 
 def run_tests(freq=123.45, duration=30.0, phase=23.456, pts=None,
               overtones=None, verbose=False):
@@ -165,7 +165,7 @@ def compare_all(cases, thr_dB=-40.0):
     ret = True
     for c in cases:
         f1, f2 = ('-'.join([c, str(w)]) + '.wav' for w in (64, 32))
-        delta_dB = compare.file_peak_delta_dB(f1, f2)
+        delta_dB = splat.tools.compare.file_peak_delta_dB(f1, f2)
         if delta_dB < thr_dB:
             res = 'OK'
         else:

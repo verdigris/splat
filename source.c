@@ -111,6 +111,9 @@ static void _splat_sine_signals(struct splat_fragment *frag,
 			aq[c] = (sf_float_t *)
 				sig->vectors[SIG_SINE_AMP + c].data;
 
+		for (; c < SPLAT_MAX_CHANNELS; ++c)
+			aq[c] = NULL;
+
 		for (j = 0; j < sig->len; i += 4, j += 4) {
 			sf_float_t x;
 			sf_float_t f;
@@ -538,6 +541,9 @@ static void _splat_overtones_mixed(struct splat_fragment *frag,
 			amq[c] = (sf_float_t *)
 				sig->vectors[SIG_OT_AMP + c].data;
 
+		for (; c < SPLAT_MAX_CHANNELS; ++c)
+			amq[c] = NULL;
+
 		for (j = 0; j < sig->len; i += 4, j += 4) {
 			const struct splat_overtone *ot;
 			const sf_float_t f = *fq++;
@@ -555,6 +561,11 @@ static void _splat_overtones_mixed(struct splat_fragment *frag,
 
 			for (c = 0; c < frag->n_channels; ++c) {
 				aq[c] = *amq[c]++;
+				y[c] = sf_zero();
+			}
+
+			for (; c < SPLAT_MAX_CHANNELS; ++c) {
+				aq[c] = sf_zero();
 				y[c] = sf_zero();
 			}
 
@@ -700,6 +711,9 @@ static void _splat_overtones_signal(struct splat_fragment *frag,
 			amq[c] = (sf_float_t *)
 				sig->vectors[SIG_OT_AMP + c].data;
 
+		for (; c < SPLAT_MAX_CHANNELS; ++c)
+			amq[c] = NULL;
+
 		for (j = 0; j < sig->len; i += 4, j += 4) {
 			const struct splat_vector *otv = &sig->vectors[sig_ot];
 			const struct splat_overtone *ot;
@@ -719,6 +733,11 @@ static void _splat_overtones_signal(struct splat_fragment *frag,
 
 			for (c = 0; c < frag->n_channels; ++c) {
 				aq[c] = *amq[c]++;
+				y[c] = sf_zero();
+			}
+
+			for (; c < SPLAT_MAX_CHANNELS; ++c) {
+				aq[c] = sf_zero();
 				y[c] = sf_zero();
 			}
 
@@ -881,13 +900,9 @@ static float32x4_t splat_fast_sine(float32x4_t x)
 	a = vcvtq_f32_u32(vcvtq_u32_f32(a));
 	a = vmlsq_f32(x, a, pi);
 
-	/* if a < 0 then a += M_PI */
-	neg = vcltq_f32(a, vdupq_n_f32(0.0));
-	neg = vandq_u32(neg, (uint32x4_t)pi);
-	a = vaddq_f32(a, (float32x4_t)neg);
-
-	/* m = int(a * table_len / M_PI) */
-	m = vcvtq_u32_f32(vmulq_f32(a, splat_sine_step));
+	/* m = int(x * table_len / M_PI) & table_mask */
+	m = vcvtq_u32_f32(vmulq_f32(x, splat_fast_sine_step));
+	m = vandq_u32(m, splat_fast_sine_mask);
 
 	/* polyq1..4 = transpose(table[m]) */
 	/* y = p0 + (x * p1) + (x^2 * p2) + (x^3 * p3) */
@@ -953,7 +968,7 @@ static __m128 splat_fast_sine(__m128 x)
 	a = _mm_sub_ps(a, neg);
 
 	/* m = int(a * table_len / M_PI) */
-	m = _mm_cvttps_epi32(_mm_mul_ps(a, splat_sine_step));
+	m = _mm_cvttps_epi32(_mm_mul_ps(a, splat_fast_sine_step));
 
 	/* poly1..4 = transpose(table[m]) */
 	y = _mm_load_ps(splat_sine_table[mf[0]].coef);
