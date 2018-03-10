@@ -1,7 +1,7 @@
 /*
-    Splat - _splat.h.c
+    Splat - _splat.h
 
-    Copyright (C) 2015
+    Copyright (C) 2015, 2016, 2017
     Guillaume Tucker <guillaume@mangoz.org>
 
     This program is free software; you can redistribute it and/or modify it
@@ -92,6 +92,10 @@ typedef double sample_t;
 #define ARRAY_SIZE(_array) (sizeof(_array) / sizeof(_array[0]))
 #endif
 
+/* Page utilities */
+extern size_t splat_page_size;
+extern const void *splat_zero_page;
+
 /* Convert any number type to a double or return -1 */
 extern int splat_obj2double(PyObject *obj, double *out);
 
@@ -132,15 +136,43 @@ extern const __m128 splat_sse_inc;
 #endif
 
 /* ----------------------------------------------------------------------------
+ * mmap
+ */
+
+struct splat_mmap {
+	char *path;
+	int fd;
+	void *ptr;
+	size_t size;
+	int persist;
+};
+
+extern int splat_mmap_init(struct splat_mmap *m, const char *path);
+extern void splat_mmap_free(struct splat_mmap *m);
+extern int splat_mmap_remap(struct splat_mmap *m, size_t length);
+extern int splat_mmap_set_temp_px(const char *px);
+extern const char *splat_mmap_get_temp_px(void);
+
+/* ----------------------------------------------------------------------------
  * Fragment
  */
 
-struct splat_fragment {
-	unsigned n_channels;
-	unsigned rate;
+struct splat_channel {
+	sample_t *data;
 	size_t length;
-	sample_t *data[SPLAT_MAX_CHANNELS];
+	struct splat_mmap mmap;
+	void (*free)(struct splat_channel *chan);
+	int (*resize)(struct splat_channel *chan, size_t length);
+};
+
+struct splat_fragment {
+	size_t length;
+	unsigned rate;
+	struct splat_channel channels[SPLAT_MAX_CHANNELS];
+	unsigned n_channels;
 	char *name;
+	int uses_mmap;
+	int temp_mmap;
 };
 
 struct splat_peak {
@@ -155,6 +187,10 @@ struct splat_levels;
 extern struct splat_fragment *splat_frag_from_obj(PyObject *obj);
 extern int splat_frag_init(struct splat_fragment *frag, unsigned n_channels,
 			   unsigned rate, size_t length, const char *name);
+extern int splat_frag_init_mmap(struct splat_fragment *frag,
+				unsigned n_channels, unsigned rate,
+				size_t length, const char *name,
+				const char *new_path, const char **open_paths);
 extern void splat_frag_free(struct splat_fragment *frag);
 extern int splat_frag_set_name(struct splat_fragment *frag, const char *name);
 extern int splat_frag_resize(struct splat_fragment *frag, size_t length);
@@ -178,9 +214,8 @@ extern void splat_frag_lin2dB(struct splat_fragment *frag);
 extern void splat_frag_dB2lin(struct splat_fragment *frag);
 extern int splat_frag_offset(struct splat_fragment *frag, PyObject *offset_obj,
 			     double start);
-extern int splat_frag_resample(struct splat_fragment *frag,
-			       const struct splat_fragment *old_frag,
-			       unsigned rate, PyObject *time_ratio);
+extern int splat_frag_resample(struct splat_fragment *frag, unsigned rate,
+			       PyObject *ratio);
 
 /* ----------------------------------------------------------------------------
  * Signal & vector

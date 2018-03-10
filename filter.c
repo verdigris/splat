@@ -1,7 +1,7 @@
 /*
     Splat - filter.c
 
-    Copyright (C) 2015
+    Copyright (C) 2015, 2017
     Guillaume Tucker <guillaume@mangoz.org>
 
     This program is free software; you can redistribute it and/or modify it
@@ -29,7 +29,7 @@ void splat_filter_dec_envelope(struct splat_fragment *frag, double k, double p)
 
 		for (i = 0; i < frag->length; ++i) {
 			const double m = pow(1.0 + ((double)i / k), p);
-			frag->data[c][i] /= m;
+			frag->channels[c].data[i] /= m;
 		}
 	}
 }
@@ -43,10 +43,10 @@ void splat_filter_reverse(struct splat_fragment *frag)
 		size_t j;
 
 		for (i = 0, j = (frag->length - 1); i < j; ++i, --j) {
-			const sample_t s = frag->data[c][i];
+			const sample_t s = frag->channels[c].data[i];
 
-			frag->data[c][i] = frag->data[c][j];
-			frag->data[c][j] = s;
+			frag->channels[c].data[i] = frag->channels[c].data[j];
+			frag->channels[c].data[j] = s;
 		}
 	}
 }
@@ -62,7 +62,8 @@ void splat_filter_reverb(struct splat_fragment *frag,
 
 	for (c = 0; c < frag->n_channels; ++c) {
 		const struct splat_delay *del = delays[c];
-		sf_float_t *c_data = (sf_float_t *)&frag->data[c][indexq];
+		sf_float_t *c_data =
+			(sf_float_t *)&frag->channels[c].data[indexq];
 		size_t i = n_loops;
 
 		while (i--) {
@@ -96,7 +97,7 @@ void splat_filter_reverb(struct splat_fragment *frag,
 
 	for (c = 0; c < frag->n_channels; ++c) {
 		const struct splat_delay *c_delay = delays[c];
-		sample_t *c_data = frag->data[c];
+		sample_t *c_data = frag->channels[c].data;
 		size_t i = max_index;
 
 		do {

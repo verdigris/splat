@@ -46,6 +46,14 @@ The following names are used to choose the audio file format in
   play these files directly, although it's quite easy to import one
   into a Fragment and export it again as WAV.
 
+  When using fragments allocated with mmap and backed by persistent files, a
+  variant of the ``saf`` format is used.  It will contain the meta-data
+  including the names of separate mmap files for each channel of the fragment.
+  This is entirely transparent from a user point of view, only that the
+  individual mmap files must not be renamed and need to be kept in the same
+  directory as the meta-data ``saf`` file.  The meta-data and mmap files can be
+  moved together.
+
 ``wav``
   This is for standard WAV audio files.  It uses the standard ``wave``
   Python module.  Any sample width value supported by the library can

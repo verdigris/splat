@@ -17,6 +17,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import os
+import os.path
 import struct
 import wave
 import md5
@@ -30,12 +31,17 @@ try:
         from StringIO import StringIO
 except ImportError:
     has_audiotools = False
+try:
+    import cPickle as pickle
+except ImportError:
+    import pickle
 import _splat
 import splat
 
 # Used in Splat Audio Fragment files (.saf)
 SAF_MAGIC = 'Splat!'
-SAF_FORMAT = 1
+SAF_FORMAT_FLAT = 1
+SAF_FORMAT_MMAP = 2
 
 # -----------------------------------------------------------------------------
 # Utilities
@@ -83,20 +89,41 @@ def open_saf(saf_file, fmt=None):
     if _get_fmt(saf_file, fmt) != 'saf':
         return None
 
-    is_str = isinstance(saf_file, str)
+    is_str = isinstance(saf_file, basestring)
     f = open(saf_file, 'rb') if is_str else saf_file
     if f.readline().strip('\n') != SAF_MAGIC:
         return None
+
+    def open_saf_flat(f, attr, rate, channels, length, precision, **kw):
+        frag = Fragment(rate=rate, channels=channels, length=length)
+        frame_size = channels * precision / 8
+        _read_chunks(frag, (lambda x: f.read(x * frame_size)), frame_size,
+                     sample_type='float{:d}'.format(precision))
+        return frag
+
+    def open_saf_mmap(f, attr, rate, channels, length, **kw):
+        info = pickle.load(f)
+        rel = os.path.dirname(f.name)
+        mmap_names = (i['mmap'] for i in info)
+        mmap_paths = list(os.path.join(rel, m) for m in mmap_names)
+        return Fragment(rate=rate, channels=channels, length=length,
+                        mmap=mmap_paths)
+
     attr_str = f.readline().strip('\n')
     attr = {k: v for k, v in (kv.split('=') for kv in attr_str.split(' '))}
     opts = ['rate', 'channels', 'length', 'precision', 'format']
-    rate, channels, length, precision, fmt = (int(attr[x]) for x in opts)
-    if fmt > SAF_FORMAT:
-        raise Exception("Format is more recent than this version of Splat")
-    frag = Fragment(rate=rate, channels=channels, length=length)
-    frame_size = channels * precision / 8
-    _read_chunks(frag, (lambda x: f.read(x * frame_size)), frame_size,
-                 sample_type='float{:d}'.format(precision))
+    kwargs = { k: v for k, v in zip(opts, (int(attr[x]) for x in opts)) }
+    saf_openers = {
+        SAF_FORMAT_FLAT: open_saf_flat,
+        SAF_FORMAT_MMAP: open_saf_mmap,
+    }
+
+    try:
+        saf_opener = saf_openers[kwargs.pop('format')]
+    except KeyError:
+        raise Exception("Format not supported in this version of Splat")
+    frag = saf_opener(f, attr, **kwargs)
+
     if is_str:
         f.close()
     if frag.md5() != attr['md5']:
@@ -151,24 +178,59 @@ def save_wav(wav_file, frag, start, end, sample_type='int16'):
 def save_saf(saf_file, frag, start, end):
     is_str = isinstance(saf_file, str)
     f = open(saf_file, 'w') if is_str else saf_file
-    raw_bytes = frag.export_bytes(start=start, end=end)
-    frame_size = frag.channels * splat.SAMPLE_WIDTH / 8
-    length = len(raw_bytes) / frame_size
-    md5sum = md5.new(raw_bytes).hexdigest()
+
+    def write_saf_header(f, attrs):
+        h = ' '.join('='.join(str(x) for x in kv) for kv in attrs.iteritems())
+        f.write(SAF_MAGIC + '\n')
+        f.write(h + '\n')
+
+    def save_saf_flat(f, frag, attrs):
+        raw_bytes = frag.export_bytes(start=start, end=end)
+        frame_size = frag.channels * splat.SAMPLE_WIDTH / 8
+        length = len(raw_bytes) / frame_size
+        md5sum = md5.new(raw_bytes).hexdigest()
+        attrs.update({
+            'format': SAF_FORMAT_FLAT,
+            'md5': md5sum,
+            'length': length,
+        })
+        write_saf_header(f, attrs)
+        f.write(buffer(raw_bytes))
+
+    def save_saf_mmap(f, frag, attrs):
+        attrs.update({
+            'format': SAF_FORMAT_MMAP,
+            'md5': frag.md5(),
+            'length': len(frag),
+        })
+        write_saf_header(f, attrs)
+        info = frag.info
+        for chan in info:
+            chan['mmap'] = os.path.basename(chan['mmap'])
+        pickle.dump(info, f)
+
+    chan_info = frag.info
+    if chan_info[0]['mmap_temp'] is False:
+        saf_saver = save_saf_mmap
+    else:
+        saf_saver = save_saf_flat
+
+    for c in chan_info[1:]:
+        if ((c['mmap'] is None and chan_info[0]['mmap'] is not None) or
+            (c['mmap'] is not None and chan_info[0]['mmap'] is None) or
+            (c['mmap_temp'] != chan_info[0]['mmap_temp'])):
+            raise Exception("Inconsistent use of mmap across channels")
+
     attrs = {
         'version': splat.VERSION_STR,
         'build': splat.BUILD,
-        'format': SAF_FORMAT,
         'channels': frag.channels,
         'rate': frag.rate,
         'precision': splat.SAMPLE_WIDTH,
-        'length': length,
-        'md5': md5sum,
         }
-    h = ' '.join('='.join(str(x) for x in kv) for kv in attrs.iteritems())
-    f.write(SAF_MAGIC + '\n')
-    f.write(h + '\n')
-    f.write(buffer(raw_bytes))
+
+    saf_saver(f, frag, attrs)
+
     if is_str:
         f.close()
 
@@ -216,6 +278,14 @@ class Fragment(_splat.Fragment):
     application code.  This is also used in :py:class:`splat.seq.SampleSet` to
     refer to named samples.  It can be accessed later with
     :py:attr:`splat.data.Fragment.name`.
+
+    The fragment can also be allocated using ``mmap``.  If set to ``True``, the
+    fragment will be backed with a temporary mmap file.  It can also be a
+    string used as a path prefix to create persistent mmap files, or a list of
+    paths with existing files to reuse.  In this case, there must be the same
+    number of paths as of ``channels`` and the ``length`` should be set to
+    match the mmap file sizes as new fragments are always resized to the given
+    length.
 
     All Splat sound data is contained in :py:class:`splat.data.Fragment`
     objects.  They are accessible as a mutable sequence of tuples of floating

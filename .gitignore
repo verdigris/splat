@@ -2,6 +2,7 @@
 *.pyo
 *.pye
 *.saf
+*.mmap*
 *.wav
 *.mp3
 *.flac

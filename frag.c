@@ -1,7 +1,7 @@
 /*
     Splat - frag.c
 
-    Copyright (C) 2015
+    Copyright (C) 2015, 2017
     Guillaume Tucker <guillaume@mangoz.org>
 
     This program is free software; you can redistribute it and/or modify it
@@ -20,7 +20,8 @@
 
 #include "_splat.h"
 
-static void *splat_frag_realloc(void *data, size_t cur_size, size_t new_size)
+static void *splat_channel_realloc(void *data, size_t cur_size,
+				   size_t new_size)
 {
 	void *new_data;
 
@@ -42,62 +43,214 @@ static void *splat_frag_realloc(void *data, size_t cur_size, size_t new_size)
 	return new_data;
 }
 
-int splat_frag_init(struct splat_fragment *frag, unsigned n_channels,
-		    unsigned rate, size_t length, const char *name)
+static int splat_channel_resize_mem(struct splat_channel *chan, size_t length)
 {
-	size_t data_size;
-	unsigned c;
+	const size_t start = chan->length * sizeof(sample_t);
+	const size_t size = length * sizeof(sample_t);
+	const ssize_t extra = size - start;
 
-#ifdef SPLAT_FAST
-	length = splat_round4(length);
-#endif
-	data_size = length * sizeof(sample_t);
+	chan->data = splat_channel_realloc(chan->data, start, size);
 
-	for (c = 0; c < n_channels; ++c) {
-		if (!length) {
-			frag->data[c] = NULL;
-		} else {
-#ifdef SPLAT_FAST
-			void *data;
-
-			if (posix_memalign(&data, 16, data_size))
-				frag->data[c] = NULL;
-			else
-				frag->data[c] = data;
-#else
-			frag->data[c] = PyMem_Malloc(data_size);
-#endif
-			if (frag->data[c] == NULL) {
-				PyErr_NoMemory();
-				return -1;
-			}
-
-			memset(frag->data[c], 0, data_size);
-		}
+	if (chan->data == NULL) {
+		PyErr_NoMemory();
+		return -1;
 	}
 
-	if (name == NULL)
-		frag->name = NULL;
-	else if (splat_frag_set_name(frag, name))
+	if (extra > 0)
+		memset(&chan->data[chan->length], 0, extra);
+
+	chan->length = length;
+
+	return 0;
+}
+
+static void splat_channel_free_mem(struct splat_channel *chan)
+{
+#ifdef SPLAT_FAST
+	free(chan->data);
+#else
+	PyMem_Free(chan->data);
+#endif
+}
+
+static int splat_channel_init_mem(struct splat_channel *chan, size_t length)
+{
+	size_t data_size;
+#ifdef SPLAT_FAST
+	void *data;
+#endif
+
+	chan->length = length;
+	chan->free = splat_channel_free_mem;
+	chan->resize = splat_channel_resize_mem;
+	chan->mmap.ptr = NULL;
+
+	if (!length) {
+		chan->data = NULL;
+		return 0;
+	}
+
+	data_size = length * sizeof(sample_t);
+
+#ifdef SPLAT_FAST
+	if (posix_memalign(&data, 16, data_size))
+		chan->data = NULL;
+	else
+		chan->data = data;
+#else
+	chan->data = PyMem_Malloc(data_size);
+#endif
+
+	if (chan->data == NULL) {
+		PyErr_NoMemory();
+		return -1;
+	}
+
+	memset(chan->data, 0, data_size);
+
+	return 0;
+}
+
+static int splat_channel_resize_mmap(struct splat_channel *chan, size_t length)
+{
+	const size_t size = length * sizeof(sample_t);
+
+	if (splat_mmap_remap(&chan->mmap, size)) {
+		PyErr_SetString(PyExc_SystemError, "mmap failed");
+		return -1;
+	}
+
+	chan->data = chan->mmap.ptr;
+	chan->length = length;
+
+	return 0;
+}
+
+static void splat_channel_free_mmap(struct splat_channel *chan)
+{
+	splat_mmap_free(&chan->mmap);
+}
+
+static int splat_channel_init_mmap(struct splat_channel *chan, size_t length,
+				   const char *mmap_path, int temp_mmap)
+{
+	chan->free = splat_channel_free_mmap;
+	chan->resize = splat_channel_resize_mmap;
+
+	if (splat_mmap_init(&chan->mmap, mmap_path)) {
+		PyErr_SetString(PyExc_SystemError, "mmap init error");
+		return -1;
+	}
+
+	if (chan->resize(chan, length))
 		return -1;
 
+	chan->mmap.persist = temp_mmap ? 0 : 1;
+	chan->data = chan->mmap.ptr;
+
+	return 0;
+}
+
+static int splat_frag_init_common(struct splat_fragment *frag,
+				  unsigned n_channels, unsigned rate,
+				  size_t length, const char *name)
+{
 	frag->n_channels = n_channels;
 	frag->rate = rate;
 	frag->length = length;
+	frag->name = NULL;
+
+	if (splat_frag_set_name(frag, name))
+		return -1;
 
 	return 0;
+}
+
+int splat_frag_init(struct splat_fragment *frag, unsigned n_channels,
+		    unsigned rate, size_t length, const char *name)
+{
+	unsigned c;
+
+#if SPLAT_FAST
+	length = splat_round4(length);
+#endif
+
+	for (c = 0; c < n_channels; ++c) {
+
+		if (splat_channel_init_mem(&frag->channels[c], length))
+			return -1;
+	}
+
+	frag->uses_mmap = 0;
+
+	return splat_frag_init_common(frag, n_channels, rate, length, name);
+}
+
+int splat_frag_init_mmap(struct splat_fragment *frag, unsigned n_channels,
+			 unsigned rate, size_t length, const char *name,
+			 const char *new_path, const char **open_paths)
+{
+	char *mmap_chan_path = NULL;
+	size_t mmap_chan_path_len;
+	unsigned c;
+
+	frag->uses_mmap = 1;
+	frag->temp_mmap = 0;
+
+	if ((open_paths == NULL) || (open_paths[0] == NULL)) {
+		if (new_path == NULL) {
+			frag->temp_mmap = 1;
+		} else {
+			mmap_chan_path_len = strlen(new_path) + 8;
+			mmap_chan_path = PyMem_Malloc(mmap_chan_path_len);
+
+			if (mmap_chan_path == NULL) {
+				PyErr_NoMemory();
+				return -1;
+			}
+		}
+	}
+
+	for (c = 0; c < n_channels; ++c) {
+		const char *path;
+
+		if (mmap_chan_path != NULL) {
+			int ret;
+
+			ret = snprintf(mmap_chan_path, mmap_chan_path_len,
+				       "%s.mmap%u", new_path, c);
+
+			if (ret == mmap_chan_path_len) {
+				PyErr_SetString(PyExc_SystemError,
+						"failed to create mmap path");
+				return -1;
+			}
+
+			path = mmap_chan_path;
+		} else if (frag->temp_mmap) {
+			path = NULL;
+		} else {
+			path = open_paths[c];
+		}
+
+		if (splat_channel_init_mmap(&frag->channels[c], length, path,
+					    frag->temp_mmap))
+			return -1;
+	}
+
+	if (mmap_chan_path != NULL)
+		PyMem_Free(mmap_chan_path);
+
+	return splat_frag_init_common(frag, n_channels, rate, length, name);
 }
 
 void splat_frag_free(struct splat_fragment *frag)
 {
 	unsigned c;
+	struct splat_channel *chan;
 
-	for (c = 0; c < frag->n_channels; ++c)
-#ifdef SPLAT_FAST
-		free(frag->data[c]);
-#else
-		PyMem_Free(frag->data[c]);
-#endif
+	for (c = 0, chan = frag->channels; c < frag->n_channels; ++c, ++chan)
+		chan->free(chan);
 
 	if (frag->name != NULL)
 		free(frag->name);
@@ -107,6 +260,11 @@ int splat_frag_set_name(struct splat_fragment *frag, const char *name)
 {
 	if (frag->name != NULL)
 		free(frag->name);
+
+	if (name == NULL) {
+		frag->name = NULL;
+		return 0;
+	}
 
 	frag->name = strdup(name);
 
@@ -120,32 +278,19 @@ int splat_frag_set_name(struct splat_fragment *frag, const char *name)
 
 int splat_frag_resize(struct splat_fragment *frag, size_t length)
 {
-	size_t start = frag->length * sizeof(sample_t);
-	size_t size;
-	ssize_t extra;
 	unsigned c;
+	struct splat_channel *chan;
 
 	if (length == frag->length)
 		return 0;
 
-	start = frag->length * sizeof(sample_t);
 #if SPLAT_FAST
 	length = splat_round4(length);
 #endif
-	size = length * sizeof(sample_t);
-	extra = size - start;
 
-	for (c = 0; c < frag->n_channels; ++c) {
-		frag->data[c] = splat_frag_realloc(frag->data[c], start, size);
-
-		if (frag->data[c] == NULL) {
-			PyErr_NoMemory();
+	for (c = 0, chan = frag->channels; c < frag->n_channels; ++c, ++chan)
+		if (chan->resize(chan, length))
 			return -1;
-		}
-
-		if (extra > 0)
-			memset(&frag->data[c][frag->length], 0, extra);
-	}
 
 	frag->length = length;
 
@@ -165,8 +310,10 @@ static void splat_frag_mix_floats(struct splat_fragment *frag,
 	length /= 4;
 
 	for (c = 0; c < frag->n_channels; ++c) {
-		const sf_float_t *src = (sf_float_t *)&in->data[c][start];
-		sf_float_t *dst = (sf_float_t *)&frag->data[c][offset];
+		const sf_float_t *src =
+			(sf_float_t *)&in->channels[c].data[start];
+		sf_float_t *dst =
+			(sf_float_t *)&frag->channels[c].data[offset];
 		size_t i = length;
 
 		if (zero_dB) {
@@ -200,8 +347,8 @@ static void splat_frag_mix_floats(struct splat_fragment *frag,
 	unsigned c;
 
 	for (c = 0; c < frag->n_channels; ++c) {
-		const sample_t *src = &incoming->data[c][start];
-		sample_t *dst =  &frag->data[c][offset];
+		const sample_t *src = &incoming->channels[c].data[start];
+		sample_t *dst =  &frag->channels[c].data[offset];
 		size_t i = length;
 
 		if (zero_dB) {
@@ -245,7 +392,8 @@ static int splat_frag_mix_signals(struct splat_fragment *frag,
 			for (c = 0; c < incoming->n_channels; ++c) {
 				double a = sig.vectors[c].data[j];
 
-				frag->data[c][i] += incoming->data[c][in] * a;
+				frag->channels[c].data[i] +=
+					incoming->channels[c].data[in] * a;
 			}
 		}
 	}
@@ -314,7 +462,7 @@ void splat_frag_get_peak(const struct splat_fragment *frag,
 	frag_peak->peak = 0.0;
 
 	for (c = 0; c < frag->n_channels; ++c) {
-		sample_t * const chan_data = frag->data[c];
+		sample_t * const chan_data = frag->channels[c].data;
 		const sample_t * const end = &chan_data[frag->length];
 		const sample_t *it;
 		double avg = 0.0;
@@ -395,7 +543,7 @@ void splat_frag_normalize(struct splat_fragment *frag, double level_dB,
 
 	for (c = 0; c < frag->n_channels; ++c) {
 		const double chan_avg = chan_peak[c].avg;
-		sample_t * const chan_data = frag->data[c];
+		sample_t * const chan_data = frag->channels[c].data;
 		const sample_t * const end = &chan_data[frag->length];
 		sample_t *it;
 
@@ -419,7 +567,7 @@ static void splat_frag_amp_floats(struct splat_fragment *frag,
 			continue;
 
 		for (i = 0; i < frag->length; ++i)
-			frag->data[c][i] *= g;
+			frag->channels[c].data[i] *= g;
 	}
 }
 
@@ -447,7 +595,8 @@ static int splat_frag_amp_signals(struct splat_fragment *frag,
 
 		for (j = 0; j < sig.len; ++i, ++j, ++in)
 			for (c = 0; c < frag->n_channels; ++c)
-				frag->data[c][i] *= sig.vectors[c].data[j];
+				frag->channels[c].data[i] *=
+					sig.vectors[c].data[j];
 	}
 
 	splat_signal_free(&sig);
@@ -473,7 +622,8 @@ void splat_frag_lin2dB(struct splat_fragment *frag)
 		size_t i;
 
 		for (i = 0; i < frag->length; ++i)
-			frag->data[c][i] = lin2dB(frag->data[c][i]);
+			frag->channels[c].data[i] =
+				lin2dB(frag->channels[c].data[i]);
 	}
 }
 
@@ -485,7 +635,8 @@ void splat_frag_dB2lin(struct splat_fragment *frag)
 		size_t i;
 
 		for (i = 0; i < frag->length; ++i)
-			frag->data[c][i] = dB2lin(frag->data[c][i]);
+			frag->channels[c].data[i] =
+				dB2lin(frag->channels[c].data[i]);
 	}
 }
 
@@ -500,7 +651,7 @@ int splat_frag_offset(struct splat_fragment *frag, PyObject *offset_obj,
 
 		for (c = 0; c < frag->n_channels; ++c) {
 			for (i = 0; i < frag->length; ++i)
-				frag->data[c][i] += offset_float;
+				frag->channels[c].data[i] += offset_float;
 		}
 	} else {
 		struct splat_signal sig;
@@ -518,7 +669,7 @@ int splat_frag_offset(struct splat_fragment *frag, PyObject *offset_obj,
 				const double value = sig.vectors[0].data[j];
 
 				for (c = 0; c < frag->n_channels; ++c)
-					frag->data[c][i] += value;
+					frag->channels[c].data[i] += value;
 			}
 		}
 
@@ -629,15 +780,16 @@ int splat_frag_resample_float(struct splat_fragment *frag,
 		return 0;
 
 	for (c = 0; c < frag->n_channels; ++c) {
-		sample_t *to = frag->data[c];
+		sample_t *to = frag->channels[c].data;
 		size_t i;
 
-		*to++ = old_frag->data[c][0];
+		*to++ = old_frag->channels[c].data[0];
 
 		for (i = 1; i < frag->length; ++i) {
 			const double x = i / ratio;
 			const size_t x0 = minmax(x + 0.5, 1, max_x0);
-			const sample_t *y = &old_frag->data[c][x0 - 1];
+			const sample_t *y =
+				&old_frag->channels[c].data[x0 - 1];
 
 			*to++ = splat_resample_quad(x0, y, x);
 		}
@@ -667,7 +819,7 @@ static int splat_frag_resample_signals(struct splat_fragment *frag,
 	stop = 0;
 
 	for (c = 0; c < frag->n_channels; ++c)
-		frag->data[c][0] = old_frag->data[c][0];
+		frag->channels[c].data[0] = old_frag->channels[c].data[0];
 
 	i = 1;
 	x = 0.0;
@@ -694,9 +846,10 @@ static int splat_frag_resample_signals(struct splat_fragment *frag,
 			x0 = minmax(x, 1, max_x0);
 
 			for (c = 0; c < frag->n_channels; ++c) {
-				const sample_t *y = &old_frag->data[c][x0 - 1];
+				const sample_t *y =
+					&old_frag->channels[c].data[x0 - 1];
 
-				frag->data[c][i] =
+				frag->channels[c].data[i] =
 					splat_resample_quad(x0, y, x);
 			}
 
@@ -719,13 +872,161 @@ error_free_sig:
 	return -1;
 }
 
-int splat_frag_resample(struct splat_fragment *frag,
-                        const struct splat_fragment *old_frag,
-                        unsigned rate, PyObject *ratio)
+static int splat_frag_copy_file_pages(const char *path_from,
+				      const char *path_to)
 {
+	FILE *from;
+	FILE *to;
+	void *buf;
+	int res = -1;
+
+	from = fopen(path_from, "rb");
+
+	if (from == NULL)
+		goto out;
+
+	to = fopen(path_to, "wb");
+
+	if (to == NULL)
+		goto out_close_from;
+
+	buf = malloc(splat_page_size);
+
+	if (buf == NULL)
+		goto out_close_to;
+
+	while (fread(buf, splat_page_size, 1, from) == 1)
+		if (fwrite(buf, splat_page_size, 1, to) != 1)
+			goto out_free_buf;
+
+	res = 0;
+
+out_free_buf:
+	free(buf);
+out_close_to:
+	fclose(to);
+out_close_from:
+	fclose(from);
+out:
+	return res;
+}
+
+static int splat_frag_resample_mmap_named(struct splat_fragment *frag,
+					  struct splat_fragment *tmp_frag)
+{
+	const char *paths[SPLAT_MAX_CHANNELS];
+	int persist[SPLAT_MAX_CHANNELS];
+	unsigned c;
+	int res = -1;
+
+	for (c = 0; c < frag->n_channels; ++c)
+		paths[c] = NULL;
+
+	for (c = 0; c < frag->n_channels; ++c) {
+		persist[c] = frag->channels[c].mmap.persist;
+		frag->channels[c].mmap.persist = 1;
+		paths[c] = strdup(frag->channels[c].mmap.path);
+
+		if (paths[c] == NULL)
+			goto out;
+	}
+
+	splat_frag_free(frag);
+
+	for (c = 0; c < tmp_frag->n_channels; ++c) {
+		res = unlink(paths[c]);
+
+		if (res)
+			goto out;
+
+		res = link(tmp_frag->channels[c].mmap.path, paths[c]);
+
+		if (res && (errno == EXDEV))
+			res = splat_frag_copy_file_pages(
+				tmp_frag->channels[c].mmap.path, paths[c]);
+
+		if (res)
+			goto out;
+	}
+
+	res = splat_frag_init_mmap(frag, tmp_frag->n_channels, tmp_frag->rate,
+				   tmp_frag->length, tmp_frag->name,
+				   NULL, paths);
+
+	if (!res)
+		for (c = 0; c < frag->n_channels; ++c)
+			frag->channels[c].mmap.persist = persist[c];
+
+out:
+	splat_frag_free(tmp_frag);
+
+	for (c = 0; c < frag->n_channels; ++c)
+		if (paths[c] != NULL)
+			free((char *)paths[c]);
+
+	return res;
+}
+
+static int splat_frag_resample_mmap(struct splat_fragment *frag, unsigned rate,
+				    PyObject *ratio)
+{
+	struct splat_fragment tmp_frag;
+	int res;
+
+	res = splat_frag_init_mmap(&tmp_frag, frag->n_channels, frag->rate,
+				   frag->length, frag->name, NULL, NULL);
+
+	if (res)
+		return -1;
+
 	if (PyFloat_Check(ratio))
-		return splat_frag_resample_float(frag, old_frag, rate,
-						 PyFloat_AsDouble(ratio));
+		res = splat_frag_resample_float(&tmp_frag, frag, rate,
+						PyFloat_AsDouble(ratio));
 	else
-		return splat_frag_resample_signals(frag, old_frag, rate,ratio);
+		res = splat_frag_resample_signals(&tmp_frag, frag, rate, ratio);
+
+	if (res)
+		return -1;
+
+	if (frag->temp_mmap) {
+		splat_frag_free(frag);
+		memcpy(frag, &tmp_frag, sizeof(struct splat_fragment));
+	} else {
+		res = splat_frag_resample_mmap_named(frag, &tmp_frag);
+	}
+
+	return res;
+}
+
+int splat_frag_resample(struct splat_fragment *frag, unsigned rate,
+			PyObject *ratio)
+{
+	struct splat_fragment old_frag;
+	unsigned c;
+	int res;
+
+	if (frag->uses_mmap)
+		return splat_frag_resample_mmap(frag, rate, ratio);
+
+	if (splat_frag_init(&old_frag, frag->n_channels, frag->rate,
+			    frag->length, NULL))
+		return -1;
+
+	for (c = 0; c < frag->n_channels; ++c) {
+		sample_t *mv;
+
+		mv = old_frag.channels[c].data;
+		old_frag.channels[c].data = frag->channels[c].data;
+		frag->channels[c].data = mv;
+	}
+
+	if (PyFloat_Check(ratio))
+		res = splat_frag_resample_float(frag, &old_frag, rate,
+						PyFloat_AsDouble(ratio));
+	else
+		res = splat_frag_resample_signals(frag, &old_frag, rate, ratio);
+
+	splat_frag_free(&old_frag);
+
+	return res;
 }

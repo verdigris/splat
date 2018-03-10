@@ -1,7 +1,7 @@
 /*
     Splat - _splat.c
 
-    Copyright (C) 2012, 2013, 2014, 2015
+    Copyright (C) 2012, 2013, 2014, 2015, 2016, 2017
     Guillaume Tucker <guillaume@mangoz.org>
 
     This program is free software; you can redistribute it and/or modify it
@@ -77,6 +77,13 @@ static PyObject *splat_zero;
 
 /* A Python float with the value of 1.0 */
 static PyObject *splat_one;
+
+/* A boolean flag to use mmap by default in new Fragment objects */
+static PyObject *splat_use_mmap;
+
+/* Page utilities */
+size_t splat_page_size;
+const void *splat_zero_page;
 
 #ifdef SPLAT_FAST
 sf_float_t splat_fast_sine_step;
@@ -538,19 +545,68 @@ static void Fragment_dealloc(Fragment *self)
 	self->ob_type->tp_free((PyObject *)self);
 }
 
+static int splat_frag_mmap(struct splat_fragment *frag, unsigned n_channels,
+			   unsigned rate, size_t length, const char *name,
+			   PyObject *obj)
+{
+	const char *new_path;
+	const char *open_paths[SPLAT_MAX_CHANNELS];
+
+	if (obj == Py_True) {
+		new_path = NULL;
+		open_paths[0] = NULL;
+	} else if ((obj != NULL) && PyString_Check(obj)) {
+		new_path = PyString_AsString(obj);
+		open_paths[0] = NULL;
+	} else if ((obj != NULL) && PyList_Check(obj)) {
+		unsigned c;
+
+		if (PyList_Size(obj) != n_channels) {
+			PyErr_SetString(PyExc_ValueError,
+			  "mmap list length doesn't match number of channels");
+			return -1;
+		}
+
+		for (c = 0; c < n_channels; ++c) {
+			PyObject *str = PyList_GetItem(obj, c);
+
+			if ((str == NULL) || !PyString_Check(str)) {
+				PyErr_SetString(PyExc_ValueError,
+						"invalid mmap paths list");
+				return -1;
+			}
+
+			open_paths[c] = PyString_AsString(str);
+		}
+
+		new_path = NULL;
+	} else {
+		PyErr_SetString(PyExc_ValueError,
+				"invalid mmap argument");
+		return -1;
+	}
+
+	return splat_frag_init_mmap(frag, n_channels, rate, length, name,
+				    new_path, open_paths);
+}
+
 static int Fragment_init(Fragment *self, PyObject *args, PyObject *kw)
 {
 	static char *kwlist[] = {
-		"channels", "rate", "duration", "length", "name", NULL };
+		"channels", "rate", "duration", "length", "name", "mmap",
+		NULL };
 	unsigned n_channels = 2;
 	unsigned rate = 48000;
 	double duration = 0.0;
 	unsigned long length = 0;
 	const char *name = NULL;
+	PyObject *mmap_obj = splat_use_mmap;
 
-	if (!PyArg_ParseTupleAndKeywords(args, kw, "|IIdkz", kwlist,
+	int ret;
+
+	if (!PyArg_ParseTupleAndKeywords(args, kw, "|IIdkzO", kwlist,
 					 &n_channels, &rate, &duration,
-					 &length, &name))
+					 &length, &name, &mmap_obj))
 		return -1;
 
 	if (n_channels > SPLAT_MAX_CHANNELS) {
@@ -577,7 +633,14 @@ static int Fragment_init(Fragment *self, PyObject *args, PyObject *kw)
 		return -1;
 	}
 
-	if (splat_frag_init(&self->frag, n_channels, rate, length, name))
+	if (mmap_obj == Py_False)
+		ret = splat_frag_init(&self->frag, n_channels, rate, length,
+				      name);
+	else
+		ret = splat_frag_mmap(&self->frag, n_channels, rate, length,
+				      name, mmap_obj);
+
+	if (ret)
 		return -1;
 
 	self->init = 1;
@@ -622,7 +685,7 @@ static PyObject *Fragment_sq_item(Fragment *self, Py_ssize_t i)
 		return NULL;
 
 	for (c = 0; c < self->frag.n_channels; ++c) {
-		const sample_t s = self->frag.data[c][i];
+		const sample_t s = self->frag.channels[c].data[i];
 		PyTuple_SET_ITEM(sample, c, PyFloat_FromDouble(s));
 	}
 
@@ -657,7 +720,8 @@ static int Fragment_sq_ass_item(Fragment *self, Py_ssize_t i, PyObject *v)
 			return -1;
 		}
 
-		self->frag.data[c][i] = (sample_t)PyFloat_AS_DOUBLE(s);
+		self->frag.channels[c].data[i] =
+			(sample_t)PyFloat_AS_DOUBLE(s);
 	}
 
 	return 0;
@@ -699,6 +763,76 @@ static PyObject *Fragment_get_channels(Fragment *self, void *_)
 	return Py_BuildValue("I", self->frag.n_channels);
 }
 
+PyDoc_STRVAR(info_doc,
+"Get a list of dictionaries with information specific to each channel.\n"
+"\n"
+"The dictionary for each channel contains the following keys:\n"
+"\n"
+" ``length``\n"
+"   The number of samples in the channel.\n"
+"\n"
+" ``mmap``\n"
+"   ``None`` if not using mmap or the path to the file being used\n"
+"\n"
+" ``mmap_temp``\n"
+"   ``True`` if the mmap file is temporary, ``False`` if the file is "
+"   persistent or ``None`` if mmap is not being used.\n");
+
+static PyObject *Fragment_get_info(Fragment *self, void *_)
+{
+	struct splat_fragment *frag = &self->frag;
+	PyObject *list = PyList_New(frag->n_channels);
+	struct splat_channel *chan;
+	unsigned c;
+
+	if (list == NULL)
+		return PyErr_NoMemory();
+
+	for (c = 0, chan = frag->channels; c < frag->n_channels; ++c, ++chan) {
+		PyObject *dict = PyDict_New();
+		PyObject *mmap_obj;
+
+		if (dict == NULL)
+			goto error_clean_up;
+
+		if (PyList_SetItem(list, c, dict)) {
+			Py_DECREF(dict);
+			goto error_clean_up;
+		}
+
+		if (PyDict_SetItemString(dict, "length",
+					 PyInt_FromSize_t(chan->length))) {
+			goto error_clean_up;
+		}
+
+		if (frag->uses_mmap) {
+			mmap_obj = PyString_FromString(chan->mmap.path);
+
+			if (mmap_obj == NULL)
+				goto error_clean_up;
+		} else {
+			mmap_obj = Py_None;
+		}
+
+		if (PyDict_SetItemString(dict, "mmap", mmap_obj)) {
+			Py_DECREF(mmap_obj);
+			goto error_clean_up;
+		}
+
+		if (mmap_obj != Py_None)
+			mmap_obj = frag->temp_mmap ? Py_True : Py_False;
+
+		if (PyDict_SetItemString(dict, "mmap_temp", mmap_obj))
+			goto error_clean_up;
+	}
+
+	return list;
+
+error_clean_up:
+	Py_DECREF(list);
+	return PyErr_NoMemory();
+}
+
 PyDoc_STRVAR(name_doc, "Get and set the fragment name.");
 
 static PyObject *Fragment_get_name(Fragment *self, void *_)
@@ -724,6 +858,7 @@ static PyGetSetDef Fragment_getsetters[] = {
 	{ "rate", (getter)Fragment_get_rate, NULL, rate_doc },
 	{ "duration", (getter)Fragment_get_duration, NULL, duration_doc },
 	{ "channels", (getter)Fragment_get_channels, NULL, channels_doc },
+	{ "info", (getter)Fragment_get_info, NULL, info_doc },
 	{ "name", (getter)Fragment_get_name, (setter)Fragment_set_name,
 	  name_doc },
 	{ NULL }
@@ -1013,7 +1148,7 @@ static PyObject *Fragment_import_bytes(Fragment *self, PyObject *args,
 	for (c = 0; c < self->frag.n_channels; ++c) {
 		const char *in =
 			bytes + (start * frame_size) + (c * sample_size);
-		sample_t *out = &self->frag.data[c][offset];
+		sample_t *out = &self->frag.channels[c].data[offset];
 
 		io->import(out, in, length, frame_size);
 	}
@@ -1087,7 +1222,7 @@ static PyObject *Fragment_export_bytes(Fragment *self, PyObject *args,
 	out = PyByteArray_AS_STRING(bytes_obj);
 
 	for (c = 0; c < frag->n_channels; ++c)
-		in[c] = &frag->data[c][start];
+		in[c] = &frag->channels[c].data[start];
 
 	io->export(out, in, frag->n_channels, length);
 
@@ -1393,10 +1528,6 @@ static PyObject *Fragment_resample(Fragment *self, PyObject *args, PyObject *kw)
 	unsigned rate = frag->rate;
 	PyObject *ratio = splat_one;
 
-	struct splat_fragment old_frag;
-	unsigned c;
-	int res;
-
 	if (!PyArg_ParseTupleAndKeywords(args, kw, "|IO", kwlist,
 					 &rate, &ratio))
 		return NULL;
@@ -1411,23 +1542,10 @@ static PyObject *Fragment_resample(Fragment *self, PyObject *args, PyObject *kw)
 		return NULL;
 	}
 
-	if (splat_frag_init(&old_frag, frag->n_channels, frag->rate,
-			    frag->length, NULL))
+	if (splat_frag_resample(frag, rate, ratio)) {
+		PyErr_SetString(PyExc_SystemError, "failed to resample");
 		return NULL;
-
-	for (c = 0; c < frag->n_channels; ++c) {
-		sample_t *mv;
-
-		mv = old_frag.data[c];
-		old_frag.data[c] = frag->data[c];
-		frag->data[c] = mv;
 	}
-
-	res = splat_frag_resample(frag, &old_frag, rate, ratio);
-	splat_frag_free(&old_frag);
-
-	if (res)
-		return NULL;
 
 	Py_RETURN_NONE;
 }
@@ -1565,7 +1683,7 @@ static PyObject *splat_gen_ref(PyObject *self, PyObject *args)
 		return NULL;
 	}
 
-	data = frag->data[0];
+	data = frag->channels[0].data;
 	n = frag->length;
 
 	while (n--)
@@ -2083,6 +2201,62 @@ static PyObject *splat_spline_value(PyObject *self, PyObject *args)
 	return PyFloat_FromDouble(splat_spline_tuple_value(poly, x, db));
 }
 
+PyDoc_STRVAR(splat_use_mmap_doc,
+"use_mmap(use_mmap)\n"
+"\n"
+"Enable mmap by default on all new Fragment objects when use_mmap is True.\n"
+"Return the current value when no use_mmap argument is passed.\n");
+
+static PyObject *splat_set_use_mmap(PyObject *self, PyObject *args)
+{
+	PyObject *use_mmap = NULL;
+
+	if (!PyArg_ParseTuple(args, "|O!", &PyBool_Type, &use_mmap))
+		return NULL;
+
+	if (use_mmap == NULL) {
+		Py_INCREF(splat_use_mmap);
+		return splat_use_mmap;
+	}
+
+	Py_DECREF(splat_use_mmap);
+	splat_use_mmap = use_mmap;
+	Py_INCREF(splat_use_mmap);
+
+	Py_RETURN_NONE;
+}
+
+PyDoc_STRVAR(splat_get_mmap_temp_px_doc,
+"get_mmap_temp_px(px)\n"
+"\n"
+"Get the path prefix used to create temporary mmap files.\n");
+static PyObject *splat_get_mmap_temp_px(PyObject *self, PyObject *args)
+{
+	return PyString_FromString(splat_mmap_get_temp_px());
+}
+
+PyDoc_STRVAR(splat_set_mmap_temp_px_doc,
+"set_mmap_temp_px(px)\n"
+"\n"
+"Set the path prefix used to create temporary mmap files, by default "
+"'/tmp/splat-mmap-'.  If ``px`` is not provided, reset it to the default.\n");
+
+static PyObject *splat_set_mmap_temp_px(PyObject *self, PyObject *args)
+{
+	char *temp_px = NULL;
+
+	if (!PyArg_ParseTuple(args, "|z", &temp_px))
+		return NULL;
+
+	if (splat_mmap_set_temp_px(temp_px)) {
+		PyErr_SetString(PyExc_ValueError,
+				"failed to set mmap temp file prefix");
+		return NULL;
+	}
+
+	Py_RETURN_NONE;
+}
+
 static PyMethodDef splat_methods[] = {
 	{ "lin2dB", splat_lin2dB, METH_VARARGS,
 	  splat_lin2dB_doc },
@@ -2106,6 +2280,12 @@ static PyMethodDef splat_methods[] = {
 	  splat_reverb_doc },
 	{ "poly_value", splat_poly_value, METH_VARARGS, NULL },
 	{ "spline_value", splat_spline_value, METH_VARARGS, NULL },
+	{ "use_mmap", splat_set_use_mmap, METH_VARARGS,
+	  splat_use_mmap_doc },
+	{ "get_mmap_temp_px", splat_get_mmap_temp_px, METH_NOARGS,
+	  splat_get_mmap_temp_px_doc },
+	{ "set_mmap_temp_px", splat_set_mmap_temp_px, METH_VARARGS,
+	  splat_set_mmap_temp_px_doc },
 	{ NULL, NULL, 0, NULL }
 };
 
@@ -2124,6 +2304,26 @@ static void splat_init_sample_types(PyObject *m, const char *name,
 	}
 
 	PyModule_AddObject(m, name, obj);
+}
+
+static void splat_init_page_size(PyObject *m)
+{
+	Fragment *zero_frag;
+
+	zero_frag = (Fragment *)Fragment_new(&splat_FragmentType, NULL, NULL);
+
+	if (zero_frag == NULL) {
+		PyErr_NoMemory();
+		return;
+	}
+
+	splat_page_size = sysconf(_SC_PAGESIZE);
+	if (splat_frag_init(&zero_frag->frag, 1, 8000,
+			    splat_page_size / sizeof(sample_t), NULL))
+		return;
+
+	splat_zero_page = zero_frag->frag.channels[0].data;
+	PyModule_AddObject(m, "_zero_page_frag", (PyObject *)zero_frag);
 }
 
 PyMODINIT_FUNC init_splat(void)
@@ -2163,6 +2363,9 @@ PyMODINIT_FUNC init_splat(void)
 	splat_one = PyFloat_FromDouble(1.0);
 	PyModule_AddObject(m, "_one", splat_one);
 	splat_init_sample_types(m, "sample_types", splat_sample_types);
+	splat_use_mmap = Py_False;
+	Py_INCREF(splat_use_mmap);
+	splat_init_page_size(m);
 
 	PyModule_AddStringConstant(m, "SAMPLE_TYPE", SPLAT_NATIVE_SAMPLE_TYPE);
 	PyModule_AddIntConstant(m, "SAMPLE_WIDTH", SPLAT_NATIVE_SAMPLE_WIDTH);
