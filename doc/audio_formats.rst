@@ -34,16 +34,17 @@ The following names are used to choose the audio file format in
 :py:meth:`splat.data.Fragment.open` and :py:meth:`splat.data.Fragment.save`:
 
 ``saf``
-  The Splat Audio Fragment file format is primarily made to export and import
-  fragment objects without losing any of the original precision.  By default,
-  they contain floating point samples with the native sample width.  It's also
-  possible to explicitely specify the sample width which may result in a
-  conversion between 32-bit and 64-bit types with a potential loss of
-  information.  The ``saf`` format is useful when building complex splats to
-  avoid having to regenerate everything from scratch each time the code is run,
-  or to share some data between different splats.  There is currently no known
-  program to play these files directly, although it's quite easy to import one
-  into a fragment and directly export it again as WAV.
+  The Splat Audio Fragment file format is primarily made to export and
+  import Fragment objects without loosing any of the original samples
+  precision.  By default, they contain floating point samples with the
+  native sample width.  It's also possible to explicitely specify the
+  sample width which may result in a conversion between 32-bit and
+  64-bit types with potential loss of precision.  The ``saf`` format
+  is useful when building complex splats to avoid having to regenerate
+  everything from scratch each time the code is run, or to share some
+  data across other splats.  There is currently no known program to
+  play these files directly, although it's quite easy to import one
+  into a Fragment and export it again as WAV.
 
   When using fragments allocated with mmap and backed by persistent files, a
   variant of the ``saf`` format is used.  It will contain the meta-data
@@ -54,10 +55,10 @@ The following names are used to choose the audio file format in
   moved together.
 
 ``wav``
-  This is for standard WAV audio files.  It uses the standard ``wave`` Python
-  module.  Any sample width value supported by the library can be used when
-  saving into a WAV file, but only 8-bit and 16-bit integer samples can be used
-  when opening a WAV file in Splat.
+  This is for standard WAV audio files.  It uses the standard ``wave``
+  Python module.  Any sample width value supported by the library can
+  be used when saving into a WAV file, but only 8-bit and 16-bit
+  integer samples can be used when opening a WAV file in Splat.
 
 
 Extra file formats with ``audiotools``

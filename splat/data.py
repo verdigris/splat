@@ -1,6 +1,7 @@
 # Splat - splat/data.py
 #
-# Copyright (C) 2012, 2013, 2014, 2015 Guillaume Tucker <guillaume@mangoz.org>
+# Copyright (C) 2012, 2013, 2014, 2015, 2017, 2018
+#    Guillaume Tucker <guillaume@mangoz.org>
 #
 # This program is free software; you can redistribute it and/or modify it under
 # the terms of the GNU Lesser General Public License as published by the Free
@@ -272,6 +273,11 @@ class Fragment(_splat.Fragment):
     minimum is 1 and the maximum is currently fixed at 16.  The default sample
     rate is 48000.  If no duration is specified, the fragment will be empty.
     Otherwise, the samples are initialised to 0 (silence).
+
+    An optional ``name`` can be given to the fragment to identify it later in
+    application code.  This is also used in :py:class:`splat.seq.SampleSet` to
+    refer to named samples.  It can be accessed later with
+    :py:attr:`splat.data.Fragment.name`.
 
     The fragment can also be allocated using ``mmap``.  If set to ``True``, the
     fragment will be backed with a temporary mmap file.  It can also be a

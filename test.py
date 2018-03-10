@@ -31,7 +31,7 @@ import splat.interpol
 import splat.scales
 import splat.seq
 from splat import dB2lin as dB
-import compare
+import splat.tools.compare
 
 splat.check_version((1, 6))
 
@@ -290,7 +290,7 @@ class FragmentTest(SplatTest):
                 ref = splat.data.Fragment(length=len(frag2), channels=1,
                                           rate=rate)
                 source(ref, 1.0, (freq / ratio))
-                delta = compare.frag_delta(ref, frag2)
+                delta = splat.tools.compare.frag_delta(ref, frag2)
                 err = splat.lin2dB(delta.get_peak()[0]['peak'])
                 self.assertLess(err, thr,
                                 "Interpolation error: {:.1f} dB".format(err))

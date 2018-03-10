@@ -86,8 +86,12 @@ size_t splat_page_size;
 const void *splat_zero_page;
 
 #ifdef SPLAT_FAST
-sf_float_t splat_sine_step;
+sf_float_t splat_fast_sine_step;
 const sf_float_t splat_fast_inc = { 0.0, 1.0, 2.0, 3.0 };
+#endif
+
+#if defined(SPLAT_NEON)
+sf_mask_t splat_fast_sine_mask;
 #endif
 
 #if defined(SPLAT_SSE)
@@ -2367,6 +2371,9 @@ PyMODINIT_FUNC init_splat(void)
 	PyModule_AddIntConstant(m, "SAMPLE_WIDTH", SPLAT_NATIVE_SAMPLE_WIDTH);
 
 #ifdef SPLAT_FAST
-	splat_sine_step = sf_set((float)splat_sine_table_len / M_PI);
+	splat_fast_sine_step = sf_set((float)splat_sine_table_len / M_PI);
+#endif
+#if defined(SPLAT_NEON)
+	splat_fast_sine_mask = vdupq_n_u32(splat_sine_table_mask);
 #endif
 }

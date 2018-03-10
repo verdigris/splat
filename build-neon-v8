@@ -1,0 +1,1 @@
+CFLAGS="-DSPLAT_FAST -mtune=cortex-a57 -O3" python setup.py build
