@@ -25,9 +25,13 @@
 
        import splat
 
-       gen = splat.SineGenerator(splat.Fragment(), [splat.filters.linear_fade])
-       gen.run(440.0, 0.0, 1.0)
-       gen.frag.save("440-Hz.wav")
+       import splat.gen
+       import splat.filters
+
+       gen = splat.gen.SineGenerator()
+       gen.filters = [splat.filters.linear_fade]
+       gen.run(0.0, 1.0, 440.0)
+       gen.frag.save("A440.wav")
 
 
 Splat manual

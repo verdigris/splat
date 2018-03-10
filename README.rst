@@ -4,13 +4,13 @@ Splat!
 Quick intro
 -----------
 
-**Splat is a programme** to generate some audio data which you may call music.
+**Splat is a program** to generate some audio data which you may call music.
 It's written in Python to make it easy to use, and all the crucial processing
-parts are implemented in C for fast number crunching.  It's distributed under
+parts are implemented in C for fast number crunshing.  It's distributed under
 the terms of the **GNU LGPL v3** so you remain a free individual when you use
 it.
 
-**Splat is not a programme** to generate **live** audio in real time, at least
+**Splat is not a program** to generate **live** audio in real time, at least
 not at the moment.  So it's better suited to the studio than to the stage.
 
 To install it, clone the repository or download and extract a source archive,
