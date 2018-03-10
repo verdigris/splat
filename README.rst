@@ -16,7 +16,8 @@ not at the moment.  So it's better suited to the studio than to the stage.
 To install it, clone the repository or download and extract a source archive,
 then run::
 
-    python setup.py install
+    CFLAGS="-O3" python setup.py build
+    sudo python setup.py install
 
 Then to generate the included piece called "Dew Drop"::
 
