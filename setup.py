@@ -57,7 +57,7 @@ setup(name='verdigris.mu-splat', version='1.6',
       packages=['splat', 'splat.tools'],
       scripts=['tools/splat'],
       data_files=_data_files,
-      long_description=open('README.rst', 'rb').read(),
+      long_description=open('README.rst', 'rb').read().decode('utf8'),
       classifiers=[
         'Development Status :: 3 - Alpha',
         'Environment :: Console',
