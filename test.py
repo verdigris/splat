@@ -108,12 +108,12 @@ class FragmentTest(SplatTest):
         self.assertEqual(len(frag), 0)
         frag.resize(duration=duration)
         self.assertEqual(len(frag), length)
-        frag.grow(length=(length / 2))
+        frag.grow(length=int(length / 2))
         self.assertEqual(len(frag), length)
-        frag.resize(length=(length / 2))
+        frag.resize(length=int(length / 2))
         self.assertEqual(len(frag), length / 2)
         frag.grow(duration=(duration * 1.5))
-        self.assertEqual(len(frag), (length * 1.5))
+        self.assertEqual(len(frag), int(length * 1.5))
 
     def test_frag_normalize(self):
         """Fragment.normalize"""
@@ -122,7 +122,7 @@ class FragmentTest(SplatTest):
         small_places = 2
         frag = splat.data.Fragment(channels=1)
         splat.gen.SineGenerator(frag=frag).run(0.0, 1.0, 123.4, levels=levels)
-        sample_n = (len(frag) / 2)
+        sample_n = int(len(frag) / 2)
         x = frag[sample_n][0]
         frag_peak = frag.get_peak()[0]
         peak, avg = (frag_peak[item] for item in ['peak', 'avg'])
@@ -452,8 +452,8 @@ class GeneratorTest(SplatTest):
         freq = 123.45
         duration = 1.0
         for levels in [-3.0, -3, int(-3),
-                        long(-3), (-3.0, -3.0),
-                        (int(-3), int(-3)), (long(-3), long(-3))]:
+                        int(-3), (-3.0, -3.0),
+                        (int(-3), int(-3)), (int(-3), -3)]:
             frag = splat.data.Fragment(duration=duration)
             splat.sources.sine(frag, levels, freq)
             gen = splat.gen.SineGenerator()
