@@ -87,9 +87,10 @@ def linear_fade(frag, duration=0.01):
 
 def reverb_delays(level=-6.0, length=2.0, dec=0.25, rate=400):
     n2 = int(length * rate)
-    n1 = n2 / 80
+    n1 = int(n2 / 80)
+    n3 = int(n1 / 2)
     r2 = rate
     r1 = r2 / 2
-    d = [((float(t) / r1), level - float(t * 2) * dec) for t in range(n1 / 2)]
-    d += [((float(t) / r2), level - float(t) * dec) for t in range(n1, n2)]
+    d = [((t / r1), level - (t * 2 * dec)) for t in range(n3)]
+    d += [((t / r2), level - (t * dec)) for t in range(n1, n2)]
     return d

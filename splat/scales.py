@@ -159,8 +159,8 @@ class HarmonicScale(Scale):
         # f = math.pow(k, n)
         # f = math.pow(self.base, math.log(f, self.base) % 1)
         coefs = list()
-        m = self._steps / 2
-        n = self._steps - m
+        m = int(self._steps / 2)
+        n = int(self._steps - m)
         for i in range(m):
             r = math.pow(k, i)
             while r > self.base:
