@@ -1,6 +1,6 @@
 # Splat - setup.py
 #
-# Copyright (C) 2012, 2013, 2014, 2015, 2016, 2017
+# Copyright (C) 2012, 2013, 2014, 2015, 2016, 2017, 2018
 #   Guillaume Tucker <guillaume@mangoz.org>
 #
 # This program is free software; you can redistribute it and/or modify it under
@@ -27,11 +27,23 @@ from setuptools import setup, Extension
 # The manual needs to be generated with Sphinx but is only required when
 # running the sdist command.
 if os.path.exists('Splat.pdf'):
-    data_files = [('.', ['Splat.pdf',]),]
+    _data_files = [('.', ['Splat.pdf',]),]
 elif len(sys.argv) > 1 and sys.argv[1] == 'sdist':
     raise Exception('Splat.pdf is missing')
 else:
-    data_files = []
+    _data_files = []
+
+_src = [
+    '_splat.c',
+    'filter.c',
+    'frag.c',
+    'mmap.c',
+    'signal.c',
+    'sine_table.c',
+    'spline.c',
+    'source.c',
+]
+_sources = list(os.path.join('src', s) for s in _src)
 
 setup(name='verdigris.mu-splat', version='1.6',
       description="Sound generator, synthesizer and editor",
@@ -40,13 +52,11 @@ setup(name='verdigris.mu-splat', version='1.6',
       url="https://github.com/verdigris/splat",
       py_modules=['test', 'example', 'dew_drop'],
       ext_modules=[Extension('_splat',
-                             sources=['_splat.c', 'signal.c', 'spline.c',
-                                      'frag.c', 'source.c', 'filter.c',
-                                      'sine_table.c', 'mmap.c'],
-                             depends=['_splat.h'])],
+                             sources=_sources,
+                             depends=['src/_splat.h'])],
       packages=['splat', 'splat.tools'],
       scripts=['tools/splat'],
-      data_files=data_files,
+      data_files=_data_files,
       long_description=open('README.rst', 'rb').read(),
       classifiers=[
         'Development Status :: 3 - Alpha',
