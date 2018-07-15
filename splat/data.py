@@ -20,15 +20,12 @@ import os
 import os.path
 import struct
 import wave
-import md5
+import hashlib
 try:
     # For extra standard audio formats
     import audiotools
     has_audiotools = True
-    try:
-        from cStringIO import StringIO
-    except ImportError:
-        from StringIO import StringIO
+    from io import StringIO
 except ImportError:
     has_audiotools = False
 try:
@@ -57,7 +54,7 @@ def _get_fmt(f, fmt):
 def _read_chunks(frag, read_frames, frame_size, sample_type):
     rem = len(frag)
     cur = 0
-    chunk_size = 65536 / frame_size # read in blocks of 64K
+    chunk_size = int(65536 / frame_size)  # read in blocks of 64K
 
     while rem > 0:
         n = min(chunk_size, rem)
@@ -89,14 +86,14 @@ def open_saf(saf_file, fmt=None):
     if _get_fmt(saf_file, fmt) != 'saf':
         return None
 
-    is_str = isinstance(saf_file, basestring)
+    is_str = isinstance(saf_file, str)
     f = open(saf_file, 'rb') if is_str else saf_file
-    if f.readline().strip('\n') != SAF_MAGIC:
+    if f.readline().decode().strip('\n') != SAF_MAGIC:
         return None
 
     def open_saf_flat(f, attr, rate, channels, length, precision, **kw):
         frag = Fragment(rate=rate, channels=channels, length=length)
-        frame_size = channels * precision / 8
+        frame_size = int(channels * precision / 8)
         _read_chunks(frag, (lambda x: f.read(x * frame_size)), frame_size,
                      sample_type='float{:d}'.format(precision))
         return frag
@@ -109,7 +106,7 @@ def open_saf(saf_file, fmt=None):
         return Fragment(rate=rate, channels=channels, length=length,
                         mmap=mmap_paths)
 
-    attr_str = f.readline().strip('\n')
+    attr_str = f.readline().decode().strip('\n')
     attr = {k: v for k, v in (kv.split('=') for kv in attr_str.split(' '))}
     opts = ['rate', 'channels', 'length', 'precision', 'format']
     kwargs = { k: v for k, v in zip(opts, (int(attr[x]) for x in opts)) }
@@ -166,13 +163,13 @@ if has_audiotools is True:
 
 def save_wav(wav_file, frag, start, end, sample_type='int16'):
     sample_width = splat.sample_types[sample_type]
-    w = wave.open(wav_file, 'w')
+    w = wave.open(wav_file, 'wb')
     w.setnchannels(frag.channels)
-    w.setsampwidth(sample_width / 8)
+    w.setsampwidth(int(sample_width / 8))
     w.setframerate(frag.rate)
     w.setnframes(len(frag))
     raw_bytes = frag.export_bytes(sample_type, start, end)
-    w.writeframes(buffer(raw_bytes))
+    w.writeframes(bytearray(raw_bytes))
     w.close()
 
 def save_saf(saf_file, frag, start, end):
@@ -180,22 +177,21 @@ def save_saf(saf_file, frag, start, end):
     f = open(saf_file, 'w') if is_str else saf_file
 
     def write_saf_header(f, attrs):
-        h = ' '.join('='.join(str(x) for x in kv) for kv in attrs.iteritems())
-        f.write(SAF_MAGIC + '\n')
-        f.write(h + '\n')
+        h = ' '.join('='.join(str(x) for x in kv) for kv in attrs.items())
+        f.write('{}\n{}\n'.format(SAF_MAGIC, h).encode())
 
     def save_saf_flat(f, frag, attrs):
         raw_bytes = frag.export_bytes(start=start, end=end)
         frame_size = frag.channels * splat.SAMPLE_WIDTH / 8
-        length = len(raw_bytes) / frame_size
-        md5sum = md5.new(raw_bytes).hexdigest()
+        length = int(len(raw_bytes) / frame_size)
+        md5sum = hashlib.md5(raw_bytes).hexdigest()
         attrs.update({
             'format': SAF_FORMAT_FLAT,
             'md5': md5sum,
             'length': length,
         })
         write_saf_header(f, attrs)
-        f.write(buffer(raw_bytes))
+        f.write(raw_bytes)
 
     def save_saf_mmap(f, frag, attrs):
         attrs.update({
@@ -258,7 +254,7 @@ if has_audiotools is True:
         'flac': audiotools.FlacAudio,
         'mp3': audiotools.MP3Audio,
         }
-    for fmt, cls in fmt_cls.iteritems():
+    for fmt, cls in fmt_cls.items():
         audio_file_savers[fmt] = lambda *a, **k: save_audiotools(cls, *a, **k)
 
 # -----------------------------------------------------------------------------
@@ -379,7 +375,7 @@ class Fragment(_splat.Fragment):
         and ``sample_width`` in bytes.  Then the MD5 checksum is returned as a
         string unless ``as_md5_obj`` is set to True in which case an ``md5``
         object is returned instead."""
-        md5sum = md5.new(self.export_bytes(sample_type))
+        md5sum = hashlib.md5(self.export_bytes(sample_type))
         return md5sum if as_md5_obj is True else md5sum.hexdigest()
 
     def n2s(self, n):

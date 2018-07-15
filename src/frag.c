@@ -438,13 +438,13 @@ int splat_frag_sample_number(size_t *val, long min_val, long max_val,
 {
 	long tmp_val;
 
-	if (!PyInt_Check(obj)) {
+	if (!PyLong_Check(obj)) {
 		PyErr_SetString(PyExc_TypeError,
 				"sample number must be an integer");
 		return -1;
 	}
 
-	tmp_val = min(PyInt_AS_LONG(obj), max_val);
+	tmp_val = min(PyLong_AS_LONG(obj), max_val);
 	*val = max(tmp_val, min_val);
 
 	return 0;

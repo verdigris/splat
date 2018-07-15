@@ -16,13 +16,10 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import sys
-import md5
+import hashlib
 import math
 import unittest
-try:
-    from cStringIO import StringIO
-except ImportError:
-    from StringIO import StringIO
+import io
 import splat
 import splat.data
 import splat.gen
@@ -54,7 +51,7 @@ class SplatTest(unittest.TestCase):
     def assert_samples(self, frag, samples, places=None):
         if places is None:
             places = self._places
-        for n, s in samples.iteritems():
+        for n, s in samples.items():
             for c, d in zip(frag[n], s):
                 self.assertAlmostEqual(
                     c, d, places,
@@ -77,8 +74,8 @@ class FragmentTest(SplatTest):
         """Fragment.md5"""
         frag = splat.data.Fragment()
         splat.gen.SineGenerator(frag=frag).run(0.0, 0.345, 123.0)
-        for sample_type in splat.sample_types.iterkeys():
-            md5sum = md5.new(frag.export_bytes(sample_type)).hexdigest()
+        for sample_type in splat.sample_types.keys():
+            md5sum = hashlib.md5(frag.export_bytes(sample_type)).hexdigest()
             self.assertEqual(md5sum, frag.md5(sample_type))
 
     def test_frag_offset(self):
@@ -111,12 +108,12 @@ class FragmentTest(SplatTest):
         self.assertEqual(len(frag), 0)
         frag.resize(duration=duration)
         self.assertEqual(len(frag), length)
-        frag.grow(length=(length / 2))
+        frag.grow(length=int(length / 2))
         self.assertEqual(len(frag), length)
-        frag.resize(length=(length / 2))
+        frag.resize(length=int(length / 2))
         self.assertEqual(len(frag), length / 2)
         frag.grow(duration=(duration * 1.5))
-        self.assertEqual(len(frag), (length * 1.5))
+        self.assertEqual(len(frag), int(length * 1.5))
 
     def test_frag_normalize(self):
         """Fragment.normalize"""
@@ -125,7 +122,7 @@ class FragmentTest(SplatTest):
         small_places = 2
         frag = splat.data.Fragment(channels=1)
         splat.gen.SineGenerator(frag=frag).run(0.0, 1.0, 123.4, levels=levels)
-        sample_n = (len(frag) / 2)
+        sample_n = int(len(frag) / 2)
         x = frag[sample_n][0]
         frag_peak = frag.get_peak()[0]
         peak, avg = (frag_peak[item] for item in ['peak', 'avg'])
@@ -184,13 +181,13 @@ class FragmentTest(SplatTest):
         """Fragment.import_bytes"""
         frag = splat.data.Fragment()
         splat.gen.SineGenerator(frag).run(0.1, 2.7, 3456.7)
-        for sample_type, sample_width in splat.sample_types.iteritems():
+        for sample_type, sample_width in splat.sample_types.items():
             ref_bytes = frag.export_bytes(sample_type)
-            ref_md5 = md5.new(ref_bytes).hexdigest()
+            ref_md5 = hashlib.md5(ref_bytes).hexdigest()
             imp = splat.data.Fragment()
             imp.import_bytes(ref_bytes, frag.rate, frag.channels, sample_type)
             exp_bytes = imp.export_bytes(sample_type)
-            exp_md5 = md5.new(exp_bytes).hexdigest()
+            exp_md5 = hashlib.md5(exp_bytes).hexdigest()
             self.assertEqual(ref_md5, exp_md5,
                              "Import/export MD5 mismatch (type={}, width={})"
                              .format(sample_type, sample_width))
@@ -253,9 +250,9 @@ class FragmentTest(SplatTest):
         for i in range(length):
             frag[i] = (float(i) * 0.9 / length,)
         for fmt in ['wav', 'saf']:
-            f = StringIO()
+            f = io.BytesIO()
             frag.save(f, fmt)
-            f.reset()
+            f.seek(0)
             frag2 = splat.data.Fragment.open(f, fmt)
             if fmt == 'saf':
                 self.assertEqual(frag.md5(), frag2.md5())
@@ -455,8 +452,8 @@ class GeneratorTest(SplatTest):
         freq = 123.45
         duration = 1.0
         for levels in [-3.0, -3, int(-3),
-                        long(-3), (-3.0, -3.0),
-                        (int(-3), int(-3)), (long(-3), long(-3))]:
+                        int(-3), (-3.0, -3.0),
+                        (int(-3), int(-3)), (int(-3), -3)]:
             frag = splat.data.Fragment(duration=duration)
             splat.sources.sine(frag, levels, freq)
             gen = splat.gen.SineGenerator()

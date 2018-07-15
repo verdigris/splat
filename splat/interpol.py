@@ -259,7 +259,7 @@ class PolyList(object):
         x0 = None
         s1 = bool(y1 < y0)
         for i in range(1, int((xmax - xmin) / xstep)):
-            x = xmin + float(i) * xstep
+            x = xmin + i * xstep
             y = self.value(x)
             if y is None:
                 break
@@ -290,7 +290,7 @@ def spline(pts, scale=1.0, n=2, dB2lin=False):
     passed to :py:class:`splat.interpol.PolyList` and can be used to
     interpolate in dB scale but return linear values.
     """
-    pts = list(tuple(float(x) for x in pt) for pt in sorted(pts))
+    pts = list(tuple(x for x in pt) for pt in sorted(pts))
     m = PolyMatrix(pts[:(n + 1)])
     dpol = m.poly.derivative()
     pols = []

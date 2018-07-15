@@ -30,11 +30,11 @@ fi
 
 rm -rf build
 ./build-std
-python test.py
-python fast_test.py
+python3 test.py
+python3 fast_test.py
 
 rm -rf build
 ./build-"$simd"
-python fast_test.py --compare
+python3 fast_test.py --compare
 
 exit 0
