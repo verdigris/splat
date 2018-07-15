@@ -1,8 +1,9 @@
-image: python:3.5
+image: verdigrix/splat:python3.5-dev
 
 stages:
   - build
   - test
+  - doc
 
 build:
   stage: build
@@ -11,11 +12,6 @@ build:
       - build/lib*
       - build/scripts*
       - _splat.so
-      - build-fast/lib*
-      - build-fast/scripts*
-      - _splat.so.fast
-  before_script:
-    - apt update -qq && apt install -y python3-dev python3-setuptools
   script:
     - python3 setup.py build
     - ln -s $(find build -name "_splat.cpython*.so") _splat.so
@@ -27,8 +23,6 @@ build_fast:
       - build-fast/lib*
       - build-fast/scripts*
       - _splat.so.fast
-  before_script:
-    - apt update -qq && apt install -y python3-dev python3-setuptools
   script:
     - CFLAGS="$CFLAGS -DSPLAT_FAST -msse2 -O3" python3 setup.py build --build-base=build-fast
     - ln -s $(find build-fast -name "_splat.cpython*.so") _splat.so.fast
@@ -46,3 +40,13 @@ test_fast:
     - python3 fast_test.py
     - mv _splat.so _splat.so.std; ln -s _splat.so.fast _splat.so
     - python3 fast_test.py --compare
+
+manual:
+  stage: doc
+  dependencies: [build]
+  artifacts:
+    paths:
+      - doc/_build/latex/Splat.pdf
+  script:
+    - python3 setup.py install
+    - make -C doc latexpdf
