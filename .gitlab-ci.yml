@@ -11,9 +11,6 @@ build:
       - build/lib*
       - build/scripts*
       - _splat.so
-      - build-fast/lib*
-      - build-fast/scripts*
-      - _splat.so.fast
   before_script:
     - apt update -qq && apt install -y python3-dev python3-setuptools
   script:
