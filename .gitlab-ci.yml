@@ -3,6 +3,7 @@ image: verdigrix/splat:python3.5-dev
 stages:
   - build
   - test
+  - doc
 
 build:
   stage: build
@@ -39,3 +40,13 @@ test_fast:
     - python3 fast_test.py
     - mv _splat.so _splat.so.std; ln -s _splat.so.fast _splat.so
     - python3 fast_test.py --compare
+
+manual:
+  stage: doc
+  dependencies: [build]
+  artifacts:
+    paths:
+      - doc/_build/latex/Splat.pdf
+  script:
+    - python3 setup.py install
+    - make -C doc latexpdf
