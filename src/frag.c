@@ -220,7 +220,7 @@ int splat_frag_init_mmap(struct splat_fragment *frag, unsigned n_channels,
 			ret = snprintf(mmap_chan_path, mmap_chan_path_len,
 				       "%s.mmap%u", new_path, c);
 
-			if (ret == mmap_chan_path_len) {
+			if ((ret < 0) || ((size_t)ret == mmap_chan_path_len)) {
 				PyErr_SetString(PyExc_SystemError,
 						"failed to create mmap path");
 				return -1;

@@ -198,7 +198,7 @@ void splat_square_floats(struct splat_fragment *frag, const double *fl_pos,
 	const double k = freq / frag->rate;
 	double fl_neg[SPLAT_MAX_CHANNELS];
 	unsigned c;
-	Py_ssize_t i;
+	size_t i;
 
 	ratio = min(ratio, 1.0);
 	ratio = max(ratio, 0.0);
@@ -290,7 +290,7 @@ void splat_triangle_floats(struct splat_fragment *frag, const double *lvls,
 	double a2[SPLAT_MAX_CHANNELS], b2[SPLAT_MAX_CHANNELS];
 	const double *a, *b;
 	unsigned c;
-	Py_ssize_t i;
+	size_t i;
 
 	ratio = min(ratio, 1.0);
 	ratio = max(ratio, 0.0);

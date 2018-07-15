@@ -136,8 +136,9 @@ static int splat_mmap_remap_new(struct splat_mmap *m, size_t sz, size_t pages)
 		return -1;
 
 	while (pages--) {
-		if (write(m->fd, splat_zero_page, splat_page_size)
-		    != splat_page_size)
+		ssize_t n = write(m->fd, splat_zero_page, splat_page_size);
+
+		if ((n < 0) || ((size_t)n != splat_page_size))
 			return -1;
 	}
 
@@ -148,18 +149,22 @@ static int splat_mmap_remap_grow(struct splat_mmap *m, size_t sz, size_t pages)
 {
 	const size_t current_pages = m->size / splat_page_size;
 	size_t extra_pages = pages - current_pages;
+	off_t offset;
 
 	if (!extra_pages)
 		return 0;
 
 	splat_unmap(m);
 
-	if (lseek(m->fd, 0, SEEK_END) != m->size)
+	offset = lseek(m->fd, 0, SEEK_END);
+
+	if ((offset < 0) || ((size_t)offset != m->size))
 		return -1;
 
 	while (extra_pages--) {
-		if (write(m->fd, splat_zero_page, splat_page_size)
-		    != splat_page_size)
+		ssize_t n = write(m->fd, splat_zero_page, splat_page_size);
+
+		if ((n < 0) || ((size_t)n != splat_page_size))
 			return -1;
 	}
 

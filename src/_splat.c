@@ -694,7 +694,7 @@ static PyObject *Fragment_sq_item(Fragment *self, Py_ssize_t i)
 	PyObject *sample;
 	unsigned c;
 
-	if ((i < 0) || (i >= self->frag.length)) {
+	if ((i < 0) || ((size_t)i >= self->frag.length)) {
 		PyErr_SetString(PyExc_IndexError, "index out of range");
 		return NULL;
 	}
@@ -726,7 +726,7 @@ static int Fragment_sq_ass_item(Fragment *self, Py_ssize_t i, PyObject *v)
 		return -1;
 	}
 
-	if ((i < 0) || (i >= self->frag.length)) {
+	if ((i < 0) || ((size_t)i >= self->frag.length)) {
 		PyErr_SetString(PyExc_IndexError, "set index error");
 		return -1;
 	}
@@ -2096,7 +2096,7 @@ static PyObject *splat_reverb(PyObject *self, PyObject *args)
 
 	struct splat_fragment *frag;
 	struct splat_delay *delays[SPLAT_MAX_CHANNELS];
-	Py_ssize_t n_delays;
+	size_t n_delays;
 	size_t delays_size;
 	size_t max_delay;
 	size_t max_index;
@@ -2114,7 +2114,7 @@ static PyObject *splat_reverb(PyObject *self, PyObject *args)
 	srand(seed);
 
 	frag = &frag_obj->frag;
-	n_delays = PyList_GET_SIZE(delays_list);
+	n_delays = (size_t)PyList_GET_SIZE(delays_list);
 	delays_size = n_delays * sizeof(struct splat_delay);
 
 	for (c = 0; c < frag->n_channels; ++c) {
