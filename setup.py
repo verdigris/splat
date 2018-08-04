@@ -45,7 +45,7 @@ _src = [
 ]
 _sources = list(os.path.join('src', s) for s in _src)
 
-setup(name='verdigris.mu-splat', version='1.6',
+setup(name='verdigris.mu-splat', version='1.7',
       description="Sound generator, synthesizer and editor",
       author="Guillaume Tucker",
       author_email="guillaume@mangoz.org",

@@ -30,7 +30,7 @@ import splat.seq
 from splat import dB2lin as dB
 import splat.tools.compare
 
-splat.check_version((1, 6))
+splat.check_version((1, 7))
 
 # -----------------------------------------------------------------------------
 # Splat test base class
