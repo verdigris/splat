@@ -1,1 +1,0 @@
-CFLAGS="-DSPLAT_FAST -mfpu=neon -mtune=cortex-a15 -O3" python3 setup.py build
