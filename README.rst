@@ -16,12 +16,12 @@ not at the moment.  So it's better suited to the studio than to the stage.
 To install it, clone the repository or download and extract a source archive,
 then run::
 
-    CFLAGS="-O3" python setup.py build
-    sudo python setup.py install
+    CFLAGS="-O3" python3 setup.py build
+    sudo python3 setup.py install
 
 Then to generate the included piece called "Dew Drop"::
 
-    python dew_drop.py
+    python3 dew_drop.py
 
 This creates ``dew_drop.wav`` which you can now play with your favourite
 player.
