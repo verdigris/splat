@@ -174,11 +174,11 @@ def save_wav(wav_file, frag, start, end, sample_type='int16'):
 
 def save_saf(saf_file, frag, start, end):
     is_str = isinstance(saf_file, str)
-    f = open(saf_file, 'w') if is_str else saf_file
+    f = open(saf_file, 'wb') if is_str else saf_file
 
     def write_saf_header(f, attrs):
         h = ' '.join('='.join(str(x) for x in kv) for kv in attrs.items())
-        f.write('{}\n{}\n'.format(SAF_MAGIC, h).encode())
+        f.write('{}\n{}\n'.format(SAF_MAGIC, h).encode('utf-8'))
 
     def save_saf_flat(f, frag, attrs):
         raw_bytes = frag.export_bytes(start=start, end=end)
