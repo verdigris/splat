@@ -23,18 +23,20 @@ if [ -z "$simd" ]; then
     esac
 fi
 
-[ -x build-"$simd" ] || {
+fast_cmd=scripts/build-"$simd"
+
+[ -x "$fast_cmd" ] || {
     echo "Unsupported SIMD mode: $simd"
     exit 1
 }
 
 rm -rf build
-./build-std
+./scripts/build-std
 python3 test.py
 python3 fast_test.py
 
 rm -rf build
-./build-"$simd"
+"$fast_cmd"
 python3 fast_test.py --compare
 
 exit 0

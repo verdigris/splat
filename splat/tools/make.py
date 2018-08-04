@@ -183,7 +183,7 @@ def build_dep_tree(mod, name, dep_tree, clean_list):
 
 def makefile(main, fmt):
     mk = """\
-ver_check := $(shell python -c 'import splat; splat.check_version(({}, {}))' \\
+ver_check := $(shell python3 -c 'import splat; splat.check_version(({}, {}))' \\
 	|| echo ERROR)
 
 ifeq ($(ver_check),ERROR)
@@ -195,11 +195,11 @@ endif
     mk += """\
 %.saf: %.py
 	@echo "  GEN     " $@
-	@python $< $@
+	@python3 $< $@
 
 %.{}: %.py
 	@echo "  MIX     " $@
-	@python $< $@
+	@python3 $< $@
 """.format(fmt)
 
     main_mix = "{}.{}".format(main, fmt)
@@ -232,7 +232,7 @@ def run_make(mk, opts=None):
     if opts:
         args += opts
     p = subprocess.Popen(args, stdin=subprocess.PIPE)
-    p.communicate(input=mk)
+    p.communicate(input=mk.encode('utf-8'))
     return p.returncode
 
 def main(argv):
